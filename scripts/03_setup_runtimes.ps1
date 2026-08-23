@@ -64,7 +64,7 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
 }
 
 # --- 4. tealdeer (tldr) ---
-Write-Host "`n>> [4/4] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
+Write-Host "`n>> [4/5] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
 if (Get-Command tldr -ErrorAction SilentlyContinue) {
     try {
         tldr --update
@@ -74,6 +74,28 @@ if (Get-Command tldr -ErrorAction SilentlyContinue) {
     }
 } else {
     Write-Host "[SKIP] tldr is not in PATH yet." -ForegroundColor Yellow
+}
+
+# --- 5. Hunk (TUI Diff Reviewer for AI Agents) ---
+Write-Host "`n>> [5/5] Installing Hunk (hunkdiff)..." -ForegroundColor Cyan
+try {
+    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        Write-Host "   Installing hunkdiff via pnpm..." -ForegroundColor Gray
+        pnpm add -g hunkdiff
+        Write-Host "[OK] hunkdiff installed via pnpm." -ForegroundColor Green
+    } elseif (Get-Command bun -ErrorAction SilentlyContinue) {
+        Write-Host "   Installing hunkdiff via bun..." -ForegroundColor Gray
+        bun add -g hunkdiff
+        Write-Host "[OK] hunkdiff installed via bun." -ForegroundColor Green
+    } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+        Write-Host "   Installing hunkdiff via npm..." -ForegroundColor Gray
+        npm install -g hunkdiff
+        Write-Host "[OK] hunkdiff installed via npm." -ForegroundColor Green
+    } else {
+        Write-Host "[SKIP] Node/Bun package manager not in PATH yet. Run 'pnpm add -g hunkdiff' after restarting terminal." -ForegroundColor Yellow
+    }
+} catch {
+    Write-Warning "[WARN] Failed to install hunkdiff: $_"
 }
 
 Write-Host "`n[DONE] Runtime setup step finished." -ForegroundColor Green

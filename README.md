@@ -69,6 +69,8 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
   - `eza` (モダンls) / `bat` (ハイライト付きcat)
   - `ripgrep` (高速grep) / `fd` (高速find)
   - `lazygit` + `delta` (TUI Git + 美麗差分)
+  - `hunk` (AIエージェント向けTUI diffレビュー)
+  - `herdr` (AI TUIマルチプレクサ)
   - `bottom` (TUIモニタ) / `dust` (容量可視化) / `duf` (ディスク一覧)
   - `tealdeer` (高速tldr) / `just` (make代替)
 - **Editor / Formatter**:

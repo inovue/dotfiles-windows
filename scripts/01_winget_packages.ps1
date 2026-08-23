@@ -36,6 +36,7 @@ $packageGroups = [ordered]@{
         @{ Id = "muesli.duf";                Name = "duf (ディスク使用量一覧表示)" }
         @{ Id = "dbrgn.tealdeer";            Name = "tealdeer (高速tldr/チートシート)" }
         @{ Id = "sharkdp.hyperfine";         Name = "hyperfine (CLIベンチマークツール)" }
+        @{ Id = "hdosys.herdr-win";          Name = "Herdr (AI TUIマルチプレクサ)" }
         @{ Id = "Microsoft.Coreutils";       Name = "uutils coreutils (Rust製GNUコア)" }
     )
 

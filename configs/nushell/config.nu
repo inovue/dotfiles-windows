@@ -38,3 +38,4 @@ alias grep = rg
 alias find = fd
 alias df = duf
 alias du = dust
+alias hk = hunk

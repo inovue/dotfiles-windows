@@ -19,12 +19,23 @@ Write-Host "==========================================" -ForegroundColor Magenta
 $rootDir = Split-Path -Parent $PSScriptRoot
 $configsDir = Join-Path $rootDir "configs"
 
+# Windows Terminal の設定配置先を検出
+$wtPaths = @(
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+)
+$wtDest = $wtPaths | Where-Object { Test-Path (Split-Path -Parent $_) } | Select-Object -First 1
+if (-not $wtDest) {
+    $wtDest = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+}
+
 # 配備マッピング [設定元 相対パス -> 配備先 絶対パス]
 $deployTargets = @(
     @{
-        Name = "WezTerm (.wezterm.lua)"
-        Src  = Join-Path $configsDir "wezterm\wezterm.lua"
-        Dest = Join-Path $env:USERPROFILE ".wezterm.lua"
+        Name = "Windows Terminal (settings.json)"
+        Src  = Join-Path $configsDir "windows-terminal\settings.json"
+        Dest = $wtDest
     },
     @{
         Name = "Helix (config.toml)"

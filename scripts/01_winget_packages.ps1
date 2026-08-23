@@ -16,9 +16,8 @@ $ErrorActionPreference = "Continue"
 # --- パッケージ定義（カテゴリ別） ---
 $packageGroups = [ordered]@{
     "Terminal" = @(
-        @{ Id = "Nushell.Nushell";           Name = "Nushell (モダン構造化シェル)" }
-        @{ Id = "wez.wezterm";               Name = "WezTerm (GPU加速ターミナル)" }
         @{ Id = "Microsoft.WindowsTerminal"; Name = "Windows Terminal" }
+        @{ Id = "Nushell.Nushell";           Name = "Nushell (モダン構造化シェル)" }
     )
 
     "CLI_Tools" = @(
@@ -71,7 +70,6 @@ $packageGroups = [ordered]@{
     )
 
     "Apps" = @(
-        @{ Id = "Brave.Brave";               Name = "Brave Browser" }
         @{ Id = "Discord.Discord";           Name = "Discord" }
         @{ Id = "SlackTechnologies.Slack";   Name = "Slack" }
         @{ Id = "Spotify.Spotify";           Name = "Spotify" }

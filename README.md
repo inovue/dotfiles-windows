@@ -1,6 +1,6 @@
 # dotfiles-windows
 
-Nushell、Helix、WezTerm、および Rust/Go 製の高速モダン CLI ツールを中心とした Windows ネイティブ開発環境のセットアップ＆設定管理リポジトリです。
+Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI ツールを中心とした Windows ネイティブ開発環境のセットアップ＆設定管理リポジトリです。
 
 ---
 
@@ -14,9 +14,10 @@ dotfiles-windows/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
 │   ├── 02_install_fonts.ps1        # 2. HackGen_NF (日本語 + Nerd Fonts) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm(Node) / uv(Python) / Rust の初期化
-│   └── 04_setup_configs.ps1        # 4. WezTerm/Helix/Nushell/Starship 設定配備
+│   └── 04_setup_configs.ps1        # 4. Windows Terminal/Helix/Nushell/Starship 設定配備
 └── configs/
-    ├── wezterm/wezterm.lua         # WezTerm 設定 (HackGen Console NF, Catppuccin, Nushell起動)
+    ├── windows-terminal/           # Windows Terminal 設定 (HackGen Console NF, Catppuccin, Nushell既定)
+    │   └── settings.json
     ├── helix/                      # Helix 設定 (相対行番号, IME対策, Biome/Rust LSP連携)
     │   ├── config.toml
     │   └── languages.toml
@@ -61,7 +62,7 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 
 ## 🛠 主な同梱ツール一覧
 
-- **Shell / Terminal**: Nushell, WezTerm, Windows Terminal
+- **Shell / Terminal**: Nushell, Windows Terminal
 - **Font**: HackGen Console NF (Hack + 源柔ゴシック + Nerd Fonts)
 - **CLI Utilities (Rust/Go)**:
   - `Starship` (プロンプト) / `zoxide` (スマートcd)

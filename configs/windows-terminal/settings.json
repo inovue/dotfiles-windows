@@ -1,0 +1,109 @@
+{
+    "$schema": "https://aka.ms/terminal-profiles-schema",
+    "defaultProfile": "{a5b8f673-9821-4a57-b248-73b320875e53}",
+    "initialCols": 130,
+    "initialRows": 36,
+    "theme": "dark",
+    "copyFormatting": "none",
+    "copyOnSelect": false,
+    "wordDelimiters": " /\\()\"'-:,.;<>~!@#$%^&*|+=[]{}~?\u2502",
+    "profiles": {
+        "defaults": {
+            "font": {
+                "face": "HackGen Console NF",
+                "size": 11.0
+            },
+            "colorScheme": "Catppuccin Mocha",
+            "opacity": 92,
+            "useAcrylic": true,
+            "cursorShape": "bar",
+            "bellStyle": "none",
+            "historySize": 10000,
+            "padding": "10, 8, 10, 8",
+            "adjustIndistinguishableColors": "indexed"
+        },
+        "list": [
+            {
+                "guid": "{a5b8f673-9821-4a57-b248-73b320875e53}",
+                "name": "Nushell",
+                "commandline": "nu.exe",
+                "hidden": false
+            },
+            {
+                "guid": "{61c54bbd-c2c6-5271-96e7-009a87167f79}",
+                "name": "PowerShell 7",
+                "commandline": "pwsh.exe",
+                "hidden": false
+            },
+            {
+                "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+                "name": "Windows PowerShell",
+                "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                "hidden": false
+            },
+            {
+                "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+                "name": "Command Prompt",
+                "commandline": "%SystemRoot%\\System32\\cmd.exe",
+                "hidden": false
+            }
+        ]
+    },
+    "schemes": [
+        {
+            "name": "Catppuccin Mocha",
+            "background": "#1E1E2E",
+            "foreground": "#CDD6F4",
+            "black": "#45475A",
+            "red": "#F38BA8",
+            "green": "#A6E3A1",
+            "yellow": "#F9E2AF",
+            "blue": "#89B4FA",
+            "purple": "#F5C2E7",
+            "cyan": "#94E2D5",
+            "white": "#BAC2DE",
+            "brightBlack": "#585B70",
+            "brightRed": "#F38BA8",
+            "brightGreen": "#A6E3A1",
+            "brightYellow": "#F9E2AF",
+            "brightBlue": "#89B4FA",
+            "brightPurple": "#F5C2E7",
+            "brightCyan": "#94E2D5",
+            "brightWhite": "#A6ADC8",
+            "cursorColor": "#F5E0DC",
+            "selectionBackground": "#585B70"
+        },
+        {
+            "name": "Tokyo Night",
+            "background": "#1A1B26",
+            "foreground": "#A9B1D6",
+            "black": "#32344A",
+            "red": "#F7768E",
+            "green": "#9ECE6A",
+            "yellow": "#E0AF68",
+            "blue": "#7AA2F7",
+            "purple": "#AD8EE6",
+            "cyan": "#444B6A",
+            "white": "#787C99",
+            "brightBlack": "#444B6A",
+            "brightRed": "#FF7A93",
+            "brightGreen": "#B9F27C",
+            "brightYellow": "#FF9E64",
+            "brightBlue": "#7DA6FF",
+            "brightPurple": "#BB9AF7",
+            "brightCyan": "#0DB9D7",
+            "brightWhite": "#ACB0D0",
+            "cursorColor": "#C0CAF5",
+            "selectionBackground": "#283457"
+        }
+    ],
+    "actions": [
+        { "command": "find", "keys": "ctrl+shift+f" },
+        { "command": { "action": "splitPane", "split": "auto", "splitMode": "duplicate" }, "keys": "alt+shift+d" },
+        { "command": { "action": "splitPane", "split": "down" }, "keys": "alt+shift+minus" },
+        { "command": { "action": "splitPane", "split": "right" }, "keys": "alt+shift+plus" },
+        { "command": "newTab", "keys": "ctrl+shift+t" },
+        { "command": "closeTab", "keys": "ctrl+shift+w" },
+        { "command": "commandPalette", "keys": "ctrl+shift+p" }
+    ]
+}

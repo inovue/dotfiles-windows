@@ -1,0 +1,42 @@
+# Helix Language Server & Formatter Configurations
+
+# --- JavaScript / TypeScript (Biome) ---
+[[language]]
+name = "typescript"
+language-servers = ["biome", "typescript-language-server"]
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "file.ts"] }
+auto-format = true
+
+[[language]]
+name = "javascript"
+language-servers = ["biome", "typescript-language-server"]
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "file.js"] }
+auto-format = true
+
+[[language]]
+name = "json"
+language-servers = ["biome", "vscode-json-language-server"]
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "file.json"] }
+auto-format = true
+
+# --- Rust ---
+[[language]]
+name = "rust"
+language-servers = ["rust-analyzer"]
+auto-format = true
+
+# --- TOML (Taplo) ---
+[[language]]
+name = "toml"
+language-servers = ["taplo"]
+formatter = { command = "taplo", args = ["format", "-"] }
+auto-format = true
+
+# --- Language Servers Definitions ---
+[language-server.biome]
+command = "biome"
+args = ["lsp-proxy"]
+
+[language-server.taplo]
+command = "taplo"
+args = ["lsp", "stdio"]

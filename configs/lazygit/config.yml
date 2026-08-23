@@ -1,0 +1,16 @@
+# Lazygit Configuration with Delta pager integration
+gui:
+  showIcons: true
+  nerdFontsVersion: "3"
+  theme:
+    activeBorderColor:
+      - "#a6e3a1"
+      - "bold"
+    inactiveBorderColor:
+      - "#a6adc8"
+    selectedLineBgColor:
+      - "#313244"
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never

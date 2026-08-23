@@ -31,7 +31,7 @@ function Test-IsAdmin {
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Windows Modern Dev Environment Setup                  " -ForegroundColor Cyan
-Write-Host "   (Nushell + Helix + Rust/Go CLI + HackGen_NF)          " -ForegroundColor Cyan
+Write-Host "   (Nushell + Helix + Rust/Go CLI + UDEV Gothic NF)      " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 if (-not (Test-IsAdmin)) {
@@ -68,4 +68,4 @@ foreach ($s in $stepsToRun) {
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host "   Setup Completed!                                       " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "推奨: ターミナル (WezTerm または Windows Terminal) を再起動してください。" -ForegroundColor Yellow
+Write-Host "推奨: ターミナル (Windows Terminal) を再起動してください。" -ForegroundColor Yellow

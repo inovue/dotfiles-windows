@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    yuru7/HackGen リポジトリから最新の HackGen_NF (Nerd Fonts 対応日本語フォント) を自動取得・インストールします。
+    yuru7/udev-gothic リポジトリから最新の UDEV Gothic NF (UDEV Gothic 35NF / Nerd Fonts 対応) を自動取得・インストールします。
 .DESCRIPTION
-    GitHub API を使用して最新リリース ZIP をダウンロード・解凍し、
+    GitHub API を使用して最新リリース ZIP (UDEVGothic_NF_v*.zip) をダウンロード・解凍し、
     Windows のフォント管理システムに自動登録します。
 #>
 [CmdletBinding()]
@@ -12,28 +12,28 @@ param()
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================" -ForegroundColor Magenta
-Write-Host "  Step 2: Japanese Font (HackGen_NF) Setup" -ForegroundColor Magenta
+Write-Host "  Step 2: Japanese Font (UDEV Gothic NF)  " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
 
 $repoOwner = "yuru7"
-$repoName = "HackGen"
+$repoName = "udev-gothic"
 $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
 
 try {
     Write-Host "`n>> Fetching latest release info from GitHub ($repoOwner/$repoName)..." -ForegroundColor Cyan
     $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "PowerShell-SetupScript" }
     
-    # HackGen_NF_v*.zip を対象にする
-    $asset = $release.assets | Where-Object { $_.name -match "^HackGen_NF_v.*\.zip$" } | Select-Object -First 1
+    # UDEVGothic_NF_v*.zip を対象にする
+    $asset = $release.assets | Where-Object { $_.name -match "^UDEVGothic_NF_v.*\.zip$" } | Select-Object -First 1
 
     if (-not $asset) {
-        throw "HackGen_NF の ZIP アセットが見つかりませんでした。"
+        throw "UDEVGothic_NF の ZIP アセットが見つかりませんでした。"
     }
 
     $downloadUrl = $asset.browser_download_url
     $zipFileName = $asset.name
     $tempZipPath = Join-Path $env:TEMP $zipFileName
-    $tempExtractDir = Join-Path $env:TEMP "HackGen_NF_Extracted"
+    $tempExtractDir = Join-Path $env:TEMP "UDEVGothic_NF_Extracted"
 
     Write-Host ">> Downloading $($asset.name)..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZipPath
@@ -67,9 +67,9 @@ try {
     Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue
     Remove-Item $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
 
-    Write-Host "`n[OK] HackGen_NF (HackGen Console NF) installed successfully!" -ForegroundColor Green
+    Write-Host "`n[OK] UDEV Gothic NF (UDEV Gothic 35NF) installed successfully!" -ForegroundColor Green
 }
 catch {
-    Write-Error "[FAIL] Failed to install HackGen_NF: $_"
+    Write-Error "[FAIL] Failed to install UDEV Gothic NF: $_"
     exit 1
 }

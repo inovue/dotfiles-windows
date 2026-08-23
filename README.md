@@ -12,11 +12,11 @@ dotfiles-windows/
 ├── README.md                       # 本ドキュメント
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
-│   ├── 02_install_fonts.ps1        # 2. HackGen_NF (日本語 + Nerd Fonts) 自動取得・登録
+│   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (日本語 + Nerd Fonts) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm(Node) / uv(Python) / Rust の初期化
 │   └── 04_setup_configs.ps1        # 4. Windows Terminal/Helix/Nushell/Starship 設定配備
 └── configs/
-    ├── windows-terminal/           # Windows Terminal 設定 (HackGen Console NF, Catppuccin, Nushell既定)
+    ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic 35NF, Catppuccin, Nushell既定)
     │   └── settings.json
     ├── helix/                      # Helix 設定 (相対行番号, IME対策, Biome/Rust LSP連携)
     │   ├── config.toml
@@ -54,7 +54,7 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 | コマンド | 実行内容 |
 | :--- | :--- |
 | `.\install.ps1 -Step 1` | `winget` パッケージの一括インストール |
-| `.\install.ps1 -Step 2` | `HackGen_NF` フォントの自動ダウンロード・登録 |
+| `.\install.ps1 -Step 2` | `UDEV Gothic NF` (35NF) フォントの自動ダウンロード・登録 |
 | `.\install.ps1 -Step 3` | `fnm` (Node LTS) / `uv` (Python) / `Rust` / `tldr` の初期化 |
 | `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）のユーザーディレクトリへの配備 |
 
@@ -63,7 +63,7 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 ## 🛠 主な同梱ツール一覧
 
 - **Shell / Terminal**: Nushell, Windows Terminal
-- **Font**: HackGen Console NF (Hack + 源柔ゴシック + Nerd Fonts)
+- **Font**: UDEV Gothic 35NF (JetBrains Mono + BIZ UDゴシック + Nerd Fonts)
 - **CLI Utilities (Rust/Go)**:
   - `Starship` (プロンプト) / `zoxide` (スマートcd)
   - `eza` (モダンls) / `bat` (ハイライト付きcat)

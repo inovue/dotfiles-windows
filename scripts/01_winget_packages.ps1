@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     winget を使用してモダン開発環境のツール・ランタイム・アプリケーションを一括インストールします。

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     yuru7/udev-gothic リポジトリから最新の UDEV Gothic NF (UDEV Gothic 35NF / Nerd Fonts 対応) を自動取得・インストールします。

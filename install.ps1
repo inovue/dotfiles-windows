@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Windows モダン開発環境 (Nushell, Helix, Rust/Go CLI) 統合セットアップスクリプト

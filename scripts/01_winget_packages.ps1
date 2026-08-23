@@ -88,12 +88,22 @@ function Install-WingetPackage {
     Write-Host "`n>> [winget] Installing $Name ($Id)..." -ForegroundColor Cyan
     $result = winget install --id $Id -e --silent --accept-source-agreements --accept-package-agreements 2>&1
 
+    $alreadyInstalledCodes = @(
+        -1978335189, # 0x8A15002B: WINGET_INSTALLED_PACKAGE_ALREADY_INSTALLED
+        -1978335212, # 0x8A150014: WINGET_INSTALLED_PACKAGE_NOT_APPLICABLE
+        -1978335188, # 0x8A15002C: WINGET_INSTALL_UPGRADE_NOT_APPLICABLE
+        -1978335216  # 0x8A150010: WINGET_SOURCE_NO_UPDATE
+    )
+
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] $Name installed successfully." -ForegroundColor Green
-    } elseif ($LASTEXITCODE -eq -1978335189) { # 既にインストールされている場合
-        Write-Host "[SKIP] $Name is already installed." -ForegroundColor Yellow
+    } elseif ($alreadyInstalledCodes -contains $LASTEXITCODE) {
+        Write-Host "[SKIP] $Name is already installed / up to date." -ForegroundColor Yellow
     } else {
-        Write-Warning "[WARN] Failed or already up to date for $Name ($Id). Exit code: $LASTEXITCODE"
+        Write-Warning "[WARN] $Name ($Id) returned exit code: $LASTEXITCODE"
+        if ($result) {
+            $result | ForEach-Object { Write-Host "       $_" -ForegroundColor DarkGray }
+        }
     }
 }
 

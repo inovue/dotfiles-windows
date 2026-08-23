@@ -54,14 +54,54 @@ try {
 
     Write-Host ">> Installing $($fontFiles.Count) font files to Windows..." -ForegroundColor Cyan
 
-    # Shell.Application を使って Fonts フォルダ (0x14) にコピー登録
-    $shellApp = New-Object -ComObject Shell.Application
-    $fontsFolder = $shellApp.NameSpace(0x14)
+    function Test-IsAdmin {
+        $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+        return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+
+    $isAdmin = Test-IsAdmin
+    if ($isAdmin) {
+        $targetFontDir = "$env:SystemRoot\Fonts"
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    } else {
+        $targetFontDir = "$env:LOCALAPPDATA\Microsoft\Windows\Fonts"
+        $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    }
+
+    if (-not (Test-Path $targetFontDir)) {
+        New-Item -Path $targetFontDir -ItemType Directory -Force | Out-Null
+    }
+
+    if (-not ([System.Management.Automation.PSTypeName]'FontNativeHelper').Type) {
+        Add-Type -TypeDefinition @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class FontNativeHelper {
+            [DllImport("gdi32.dll", EntryPoint="AddFontResourceW", SetLastError=true)]
+            public static extern int AddFontResource([MarshalAs(UnmanagedType.LPWStr)] string lpFileName);
+            [DllImport("user32.dll")]
+            public static extern int SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        }
+"@
+    }
 
     foreach ($file in $fontFiles) {
+        $destFile = Join-Path $targetFontDir $file.Name
         Write-Host "   Installing: $($file.Name)" -ForegroundColor Gray
-        $fontsFolder.CopyHere($file.FullName, 16) # 16 = "Yes to All" (上書き確認ダイアログのスキップ)
+        try {
+            Copy-Item -Path $file.FullName -Destination $destFile -Force -ErrorAction Stop
+        } catch [System.IO.IOException] {
+            Write-Host "   [IN-USE] $($file.Name) is in use by a running application (skipped copy)." -ForegroundColor Yellow
+        }
+
+        $fontName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        $regValue = if ($isAdmin) { $file.Name } else { $destFile }
+        Set-ItemProperty -Path $regPath -Name "$fontName (TrueType)" -Value $regValue -Force | Out-Null
+
+        [FontNativeHelper]::AddFontResource($destFile) | Out-Null
     }
+
+    [FontNativeHelper]::SendMessage([IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 
     # 一時ファイルの削除
     Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue

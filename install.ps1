@@ -17,6 +17,8 @@ param(
     [ValidateSet("All", "1", "2", "3", "4")]
     [string]$Step = "All",
 
+    [switch]$All,
+
     [switch]$UseSymlinks
 )
 
@@ -28,7 +30,7 @@ function Test-IsAdmin {
     return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-Clear-Host
+try { Clear-Host } catch {}
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Windows Modern Dev Environment Setup                  " -ForegroundColor Cyan
 Write-Host "   (Nushell + Helix + Rust/Go CLI + UDEV Gothic NF)      " -ForegroundColor Cyan
@@ -40,13 +42,20 @@ if (-not (Test-IsAdmin)) {
 }
 
 $stepsToRun = @()
-if ($Step -eq "All") {
+if ($All -or $Step -eq "All") {
     $stepsToRun = @("1", "2", "3", "4")
 } else {
     $stepsToRun = @($Step)
 }
 
+function Update-SessionEnvironment {
+    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
 foreach ($s in $stepsToRun) {
+    Update-SessionEnvironment
     switch ($s) {
         "1" {
             & (Join-Path $scriptsDir "01_winget_packages.ps1")

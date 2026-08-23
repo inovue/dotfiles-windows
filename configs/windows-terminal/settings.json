@@ -1,6 +1,6 @@
 {
     "$schema": "https://aka.ms/terminal-profiles-schema",
-    "defaultProfile": "{a5b8f673-9821-4a57-b248-73b320875e53}",
+    "defaultProfile": "{47302f9c-1ac4-566c-aa3e-8cf29889d6ab}",
     "initialCols": 130,
     "initialRows": 36,
     "theme": "dark",
@@ -24,19 +24,19 @@
         },
         "list": [
             {
-                "guid": "{a5b8f673-9821-4a57-b248-73b320875e53}",
+                "guid": "{47302f9c-1ac4-566c-aa3e-8cf29889d6ab}",
                 "name": "Nushell",
-                "commandline": "nu.exe",
-                "hidden": false
-            },
-            {
-                "guid": "{61c54bbd-c2c6-5271-96e7-009a87167f79}",
-                "name": "PowerShell 7",
-                "commandline": "pwsh.exe",
+                "source": "nu",
                 "hidden": false
             },
             {
                 "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+                "name": "PowerShell 7",
+                "source": "Windows.Terminal.PowershellCore",
+                "hidden": false
+            },
+            {
+                "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
                 "name": "Windows PowerShell",
                 "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
                 "hidden": false

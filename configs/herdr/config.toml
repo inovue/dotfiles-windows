@@ -1,4 +1,5 @@
-﻿# Herdr Configuration (AI TUI Multiplexer)
+# Herdr Configuration (AI TUI Multiplexer)
+# Single Source of Truth: configs/herdr/config.toml
 
 onboarding = false
 
@@ -12,3 +13,10 @@ default_shell = "nu"
 [experimental]
 # Windows IME friendly: switch input source during prefix mode
 switch_ascii_input_source_in_prefix = true
+# Save recent pane screen history across server restarts
+pane_history = false
+
+# --- Herdr Plugins ---
+# herdr-sidebar (VS Code-style sidebar: File Explorer + Source Control panel)
+# Installed via: herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar
+

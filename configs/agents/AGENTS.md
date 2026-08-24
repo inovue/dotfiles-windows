@@ -47,7 +47,10 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 - ❌ **NEVER** pipe `Get-Content` into `Select-String` (e.g. `Get-Content file.txt | Select-String "foo"`). This loads the entire file into .NET objects in memory. Always use `rg "foo" file.txt`.
 - ❌ **NEVER** use `Get-ChildItem -Recurse -Filter *.ext`. Always use `fd -e ext`.
-- ❌ **NEVER** run commands that wait for user confirmation without an automatic yes flag (e.g., use `winget install --silent --accept-package-agreements`, `npm init -y`, `rm -Force`).
+- ❌ **NEVER** use `read_url_content` on GitHub repository web pages (e.g. `https://github.com/user/repo`). This returns 300KB+ of heavy HTML/JS/CSS, wastes tokens, and truncates the README. Use `gh repo view` or `git clone --depth 1` instead.
+- ❌ **NEVER** re-read (`view_file`) the same file multiple times across turns when the content is already in your conversation context. Reuse existing context or pinpoint lines with `rg -n`.
+- ❌ **NEVER** manually edit mirrored documentation files (`CLAUDE.md`, `.cursorrules`, etc.) individually. Always edit the master SSOT (`configs/agents/AGENTS.md`) and run `just sync-rules`.
+- ❌ **NEVER** run commands that wait for user confirmation without an automatic yes flag (e.g., use `winget install --silent --accept-package-agreements`, `npm init -y`, `rm -Force`, `herdr plugin install ... --yes`).
 - ❌ **NEVER** leave pagers enabled on `git diff` or `git log`. Always use `git --no-pager diff` or set `GIT_PAGER=cat`.
 - ❌ **NEVER** use interactive editors (`vi`, `vim`, `nano`, `helix`) in automated agent subshells.
 
@@ -69,8 +72,9 @@ Use the following modern tools for file system inspection, searching, refactorin
    - Modern Rust/Go CLI utilities (`rg`, `fd`, `sd`, `ast-grep`, `bat`, `jaq`, `jq`, `xh`, `difft`) fully support standard forward slashes `/` on Windows (e.g. `rg "fn main" src/main.rs`).
    - Use standard forward slashes `/` or double-quoted paths for paths containing spaces.
 
-3. **Shell Independence**:
-   - Keep command lines compatible across PowerShell, Git Bash, and Nushell by invoking native CLI binaries directly rather than relying on shell-specific internal scripting functions.
+3. **Shell Independence & OS Purity**:
+   - Keep command lines strictly Windows-native (PowerShell 7 / Nushell / compiled native `.exe`).
+   - Do not invoke or deliberate over Linux/macOS bash scripts when inspecting cross-platform configurations.
 
 ---
 
@@ -88,11 +92,47 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 ---
 
-## ⚡ 6. Agent Execution & Anti-Hang Guidelines (Zero-Freeze Policy)
+## ⚡ 6. Agent Execution, Investigation & Zero-Waste Protocol
 
-1. **Always Use `-NoProfile` for PowerShell Invocations**:
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Ultra-Fast Agent Execution Protocol                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 1. Zero-Hang Execution: Use `WaitMsBeforeAsync: 10000` & `-NoProfile`       │
+│ 2. One-Shot Remote Recon: Use `gh repo view` or shallow git clone           │
+│ 3. Context Reuse: Never re-read files already present in context            │
+│ 4. Atomic SSOT Edit: Edit configs/ master files -> run `just deploy/sync`   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Fast Remote Repository Investigation**:
+   - When given a GitHub URL (e.g. `https://github.com/owner/repo`):
+     - **Inspect metadata/README**: Run `gh repo view owner/repo` (or fetch raw README via `https://raw.githubusercontent.com/owner/repo/HEAD/README.md`).
+     - **Deep codebase inspection**: Clone shallowly to scratch space: `git clone --depth 1 https://github.com/owner/repo.git ./scratch/repo_inspect` and search locally via `fd` / `rg`. This is 10x faster and more reliable than multiple GitHub API calls.
+
+2. **Eliminate Duplicate Reads (Context Reuse)**:
+   - Do NOT issue `view_file` on a file you have already inspected in the conversation.
+   - If exact line numbers are needed for `replace_file_content`, run a 1-line `rg -n "anchor"` command rather than loading the entire file again.
+
+3. **Atomic Modification & SSOT-First Workflow**:
+   - Combine multiple related edits in a single pass rather than making fragmented, repetitive tool calls to the same file.
+   - Modify the single master source in `configs/` and immediately run `just deploy` or `just sync-rules` rather than manually editing mirrored target files.
+
+4. **Always Use `-NoProfile` for PowerShell Invocations**:
    - When running PowerShell scripts or inline commands, always supply `-NoProfile -NonInteractive -ExecutionPolicy Bypass` (e.g. `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ...` or `pwsh -NoProfile ...`). This prevents module loading and telemetry delays that cause CLI timeouts.
-2. **Synchronous Execution Guarantee**:
-   - For CLI commands expected to finish quickly (< 10 seconds), always allocate the full synchronous wait limit (`WaitMsBeforeAsync: 10000`) to avoid unnecessary background task switches and turn drops.
-3. **Prefer Native Binaries over Heavy Subshells**:
-   - Use compiled utilities (`fd`, `rg`, `sd`, `difft`, `python -c`) directly instead of wrapping operations in nested `powershell -Command "..."` subshells.
+
+5. **Synchronous Execution & Active Hang Recovery**:
+   - For CLI commands expected to finish quickly (< 10 seconds), always allocate the full synchronous wait limit (`WaitMsBeforeAsync: 10000`).
+   - If a background command unexpectedly hangs (e.g. network/API stall), immediately terminate it with `manage_task kill` and switch to a deterministic native alternative.
+
+---
+
+## 🤖 7. Autonomous Agent CLI Quick Reference
+
+| Agent CLI | Command | Common Execution Flags |
+| :--- | :--- | :--- |
+| **Cursor Agent CLI** | `agent` / `cursor-agent` | `agent "prompt"` (Interactive session)<br>`agent -p "prompt"` (Script / Non-interactive print)<br>`agent --mode plan "prompt"` (Plan-only / Read-only)<br>`agent --yolo` / `agent -f` (Auto-execute without confirmations)<br>`agent login` (Browser OAuth login)<br>`agent models` (List available models) |
+| **Claude Code** | `claude` | `claude` (Interactive session)<br>`claude -p "prompt"` (Non-interactive print) |
+| **Antigravity CLI** | `agy` | `agy` (Interactive chat & workspace session) |
+
+

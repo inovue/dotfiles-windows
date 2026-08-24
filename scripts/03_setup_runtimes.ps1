@@ -7,6 +7,10 @@
     - uv による Python ランタイムの自動導入
     - rustup の初期設定
     - tealdeer (tldr) のキャッシュ更新
+    - Hunk (hunkdiff) & Mermaid-ASCII CLI の導入
+    - Herdr プラグイン (herdr-sidebar) の導入
+    - Cursor Agent CLI (agent / cursor-agent) の自動導入
+    - AI Agent 安全環境変数 & ~/.local/bin シム構築
 #>
 [CmdletBinding()]
 param()
@@ -137,8 +141,86 @@ try {
     Write-Warning "[WARN] Failed to install CLI utilities: $_"
 }
 
-# --- 6. AI Agent Environment Variables & Non-Interactive Safety ---
-Write-Host "`n>> [6/7] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
+# --- 6. Herdr Plugins (herdr-sidebar) ---
+Write-Host "`n>> [6/8] Checking Herdr Plugins (herdr-sidebar)..." -ForegroundColor Cyan
+if (Get-Command herdr -ErrorAction SilentlyContinue) {
+    try {
+        $pluginList = herdr plugin list 2>&1 | Out-String
+        if ($pluginList -notmatch "herdr-sidebar") {
+            Write-Host "   Installing herdr-sidebar plugin from alexarthurs/herdr-sidebar..." -ForegroundColor Gray
+            herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar --yes 2>&1 | Out-Null
+            Write-Host "[OK] herdr-sidebar plugin installed successfully." -ForegroundColor Green
+        } else {
+            Write-Host "[OK] herdr-sidebar plugin is already installed." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "[WARN] Failed to install/verify herdr-sidebar plugin: $_"
+    }
+} else {
+    Write-Host "[SKIP] herdr is not in PATH yet." -ForegroundColor Yellow
+}
+
+# --- 7. Cursor Agent CLI ---
+Write-Host "`n>> [7/9] Setting up Cursor Agent CLI (agent / cursor-agent)..." -ForegroundColor Cyan
+try {
+    $agentPath = "$env:LOCALAPPDATA\cursor-agent"
+    $versionsPath = "$agentPath\versions"
+    $agentExe = "$agentPath\agent.cmd"
+
+    $needsInstall = $false
+    if (-not (Test-Path $agentExe)) {
+        $needsInstall = $true
+    }
+
+    if ($needsInstall) {
+        Write-Host "   Downloading and installing Cursor Agent CLI..." -ForegroundColor Gray
+        $tempZip = "$env:TEMP\cursor-agent.zip"
+        $installScript = curl.exe -fsSL "https://cursor.com/install?win32=true" 2>&1 | Out-String
+        
+        $downloadUrl = "https://downloads.cursor.com/lab/2026.08.11-e8db854/"
+        $version = "2026.08.11-e8db854"
+        if ($installScript -match '\$downloadUrl\s*=\s*''([^'']+)''') { $downloadUrl = $matches[1] }
+        if ($installScript -match '\$version\s*=\s*''([^'']+)''') { $version = $matches[1] }
+
+        if (-not (Test-Path $versionsPath)) {
+            New-Item -ItemType Directory -Path $versionsPath -Force | Out-Null
+        }
+
+        $pkgUrl = "${downloadUrl}windows/x64/agent-cli-package.zip"
+        curl.exe -fsSL -o $tempZip $pkgUrl
+        Expand-Archive -Path $tempZip -DestinationPath $versionsPath -Force
+
+        $distPackagePath = Join-Path $versionsPath "dist-package"
+        $versionPath = Join-Path $versionsPath $version
+        if (Test-Path $distPackagePath) {
+            Rename-Item -Path $distPackagePath -NewName $version -Force -ErrorAction SilentlyContinue
+        }
+
+        Get-ChildItem -Path $versionPath -Filter "cursor-agent*" | Copy-Item -Destination $agentPath -Force
+        if (Test-Path "$agentPath\cursor-agent.exe") { Copy-Item -Path "$agentPath\cursor-agent.exe" -Destination "$agentPath\agent.exe" -Force }
+        if (Test-Path "$agentPath\cursor-agent.cmd") { Copy-Item -Path "$agentPath\cursor-agent.cmd" -Destination "$agentPath\agent.cmd" -Force }
+        if (Test-Path "$agentPath\cursor-agent.ps1") { Copy-Item -Path "$agentPath\cursor-agent.ps1" -Destination "$agentPath\agent.ps1" -Force }
+
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Cursor Agent CLI installed successfully ($version)." -ForegroundColor Green
+    } else {
+        Write-Host "[OK] Cursor Agent CLI is already installed." -ForegroundColor Green
+    }
+
+    # Ensure PATH contains $agentPath
+    $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if ($currentUserPath -notlike "*$agentPath*") {
+        [System.Environment]::SetEnvironmentVariable("Path", "$agentPath;$currentUserPath", "User")
+    }
+    if ($env:Path -notlike "*$agentPath*") {
+        $env:Path = "$agentPath;$env:Path"
+    }
+} catch {
+    Write-Warning "[WARN] Failed to configure Cursor Agent CLI: $_"
+}
+
+# --- 8. AI Agent Environment Variables & Non-Interactive Safety ---
+Write-Host "`n>> [8/9] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
 $envVarsToSet = @{
     "PAGER"                     = "cat"
     "BAT_PAGER"                 = ""
@@ -156,8 +238,8 @@ foreach ($key in $envVarsToSet.Keys) {
 }
 Write-Host "[OK] Agent non-interactive pager bypass & UTF-8 variables set in User scope." -ForegroundColor Green
 
-# --- 7. ~/.local/bin & Coreutils Shim Directory ---
-Write-Host "`n>> [7/7] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
+# --- 9. ~/.local/bin & Coreutils Shim Directory ---
+Write-Host "`n>> [9/9] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
 $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
 if (-not (Test-Path $localBinDir)) {
     New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
@@ -179,7 +261,8 @@ if ($env:Path -notlike "*$localBinDir*") {
 $shimSourceDirs = @(
     "C:\Program Files\coreutils\bin",
     "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
-    "$env:USERPROFILE\.cargo\bin"
+    "$env:USERPROFILE\.cargo\bin",
+    "$env:LOCALAPPDATA\cursor-agent"
 )
 
 # Search WinGet Packages for ast-grep, sd, chafa, glow and other tools if not already linked
@@ -196,7 +279,7 @@ if (Test-Path $wingetPkgDir) {
 
 foreach ($srcDir in $shimSourceDirs) {
     if (Test-Path $srcDir) {
-        $exes = Get-ChildItem -Path $srcDir -Filter "*.exe" -File
+        $exes = Get-ChildItem -Path $srcDir -Include "*.exe", "*.cmd" -File -ErrorAction SilentlyContinue
         foreach ($exe in $exes) {
             $shimPath = Join-Path $localBinDir $exe.Name
             if (-not (Test-Path $shimPath)) {

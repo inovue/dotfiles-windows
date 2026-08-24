@@ -37,7 +37,7 @@ dotfiles-windows/
 │   │       ├── browser-agent/ # Real Chrome automation engine (a11y tree, stealth, profiles)
 │   │       └── modern-cli-expert/ # AST refactoring (ast-grep), sd, jaq, xh recipes
 │   ├── helix/                 # Helix editor (config.toml, languages.toml)
-│   ├── herdr/                 # Herdr AI TUI multiplexer (config.toml)
+│   ├── herdr/                 # Herdr AI TUI multiplexer (config.toml + herdr-sidebar)
 │   ├── lazygit/               # Lazygit TUI + Delta config (config.yml)
 │   ├── nushell/               # Nushell (config.nu, env.nu)
 │   ├── powershell/            # PowerShell 5.1 & 7 profile (Microsoft.PowerShell_profile.ps1)

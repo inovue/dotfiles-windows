@@ -40,7 +40,7 @@ dotfiles-windows/
     │   └── env.nu
     ├── starship/starship.toml      # Starship 美麗プロンプト設定
     ├── lazygit/config.yml          # Lazygit + Delta 連携設定
-    └── herdr/config.toml           # Herdr 設定 (Nushell既定, Catppuccin, IME対策)
+    └── herdr/config.toml           # Herdr 設定 (Nushell既定, Catppuccin, IME対策, herdr-sidebar連携)
 ```
 
 ---
@@ -86,7 +86,7 @@ just install
 | :--- | :--- |
 | `.\install.ps1 -Step 1` | `winget` パッケージの一括インストール |
 | `.\install.ps1 -Step 2` | `UDEV Gothic NF` (35NF) フォントの自動ダウンロード・登録 |
-| `.\install.ps1 -Step 3` | ランタイム初期化、Agent環境変数 (`PAGER=cat`等)、`~/.local/bin` の構成 |
+| `.\install.ps1 -Step 3` | ランタイム初期化、Cursor Agent CLI、Agent環境変数 (`PAGER=cat`等)、`~/.local/bin` の構成 |
 | `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）および AI Agent ルールの一括配備 (`just deploy`) |
 | `.\scripts\sync_agent_rules.ps1` | AI Agent ルール＆スキルのみを高速一括同期 (`just sync-rules`) |
 
@@ -94,7 +94,7 @@ just install
 
 ## 🤖 AI Agent 超高速化・安定化アーキテクチャ (SSOT)
 
-本環境では、AIエージェント（Antigravity, Cursor, Claude Code, Codex）がWindows上で動作する際の遅延・ハングを徹底的に排除しています。
+本環境では、AIエージェント（Antigravity, Cursor Agent, Claude Code, Codex）がWindows上で動作する際の遅延・ハングを徹底的に排除しています。
 
 1. **二重管理ゼロの SSOT ルール**:
    - `configs/agents/AGENTS.md` を唯一のマスターとし、各エージェントのグローバル設定パス（`~/.gemini/config/AGENTS.md`, `~/.claude/CLAUDE.md`, `%APPDATA%\Cursor\User\AGENTS.md`）へ自動シンボリックリンク同期。
@@ -107,6 +107,10 @@ just install
 
 ## 🛠 主な同梱ツール一覧
 
+- **Autonomous AI Agents**:
+  - `agent` / `cursor-agent` (Cursor Agent CLI)
+  - `claude` (Claude Code)
+  - `agy` (Antigravity CLI)
 - **Shell / Terminal**: Nushell, Windows Terminal, PowerShell 7 (`pwsh`)
 - **Font**: UDEV Gothic 35NF (JetBrains Mono + BIZ UDゴシック + Nerd Fonts)
 - **CLI Utilities (Rust/Go)**:
@@ -123,7 +127,7 @@ just install
   - `uutils-coreutils` (Rust製GNUコア: `head`, `tail`, `wc`, `sort`, `uniq`, `cut`, `tr`)
   - `lazygit` + `delta` (TUI Git + 美麗差分)
   - `hunk` (AIエージェント向けTUI diffレビュー)
-  - `herdr` (AI TUIマルチプレクサ)
+  - `herdr` (AI TUIマルチプレクサ) + `herdr-sidebar` (VS Code風ファイルツリー・Git SCMサイドバー)
   - `bottom` (TUIモニタ) / `dust` (容量可視化) / `duf` (ディスク一覧)
   - `tealdeer` (高速tldr) / `just` (make代替) / `hyperfine` (ベンチマーク)
 - **Editor / Formatter**:

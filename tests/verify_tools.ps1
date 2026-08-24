@@ -65,8 +65,11 @@ $toolsToCheck = @(
     @{ Cmd = "procs";    Name = "procs (ps viewer)";  Args = "--version" }
     @{ Cmd = "jaq";      Name = "jaq (Rust jq)";      Args = "--version" }
     @{ Cmd = "hexyl";    Name = "hexyl (hex viewer)"; Args = "--version" }
-    @{ Cmd = "glow";     Name = "glow (Markdown)";    Args = "--version" }
-    @{ Cmd = "chafa";    Name = "chafa (Sixel/Image)";Args = "--version" }
+    @{ Cmd = "glow";         Name = "glow (Markdown)";    Args = "--version" }
+    @{ Cmd = "chafa";        Name = "chafa (Sixel/Image)";Args = "--version" }
+    @{ Cmd = "herdr";        Name = "Herdr (AI TUI)";     Args = "--version" }
+    @{ Cmd = "cursor-agent"; Name = "Cursor Agent CLI";   Args = "--version" }
+    @{ Cmd = "agent";        Name = "Cursor Agent Alias"; Args = "--version" }
 )
 
 foreach ($tool in $toolsToCheck) {
@@ -81,6 +84,17 @@ foreach ($tool in $toolsToCheck) {
         }
     } else {
         Assert-Test -Name "$($tool.Name) is installed in PATH" -Condition $false -Details "Command not found: $($tool.Cmd)"
+    }
+}
+
+# Herdr Plugin (herdr-sidebar) Verification
+if (Get-Command herdr -ErrorAction SilentlyContinue) {
+    try {
+        $pList = herdr plugin list 2>&1 | Out-String
+        $hasSidebar = $pList -match "herdr-sidebar"
+        Assert-Test -Name "Herdr plugin: herdr-sidebar is installed and enabled" -Condition $hasSidebar -Details ($pList.Trim())
+    } catch {
+        Assert-Test -Name "Herdr plugin: herdr-sidebar is installed and enabled" -Condition $false -Details "$_"
     }
 }
 

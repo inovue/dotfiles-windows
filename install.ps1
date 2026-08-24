@@ -25,6 +25,10 @@ param(
 $ErrorActionPreference = "Stop"
 $scriptsDir = Join-Path $PSScriptRoot "scripts"
 
+# UTF-8 出力エンコーディングの設定（文字化け防止）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 function Test-IsAdmin {
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)

@@ -13,20 +13,28 @@ param()
 
 $ErrorActionPreference = "Continue"
 
+# UTF-8 出力エンコーディングの設定（文字化け防止）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 Write-Host "==========================================" -ForegroundColor Magenta
 Write-Host "  Step 3: Runtime & Tool Initialization   " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
 
 # 環境変数の反映（現在のセッションに PATH を再読み込み）
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+$machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+$userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+$env:Path = "$machinePath;$userPath"
 
 # --- 1. fnm & Node.js LTS ---
-Write-Host "`n>> [1/4] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
+Write-Host "`n>> [1/5] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Installing Node.js LTS via fnm..." -ForegroundColor Gray
         fnm install --lts
         fnm default lts-latest
+        # 現在のセッションにも fnm の Node パスを反映
+        fnm env --use-on-cd | Out-String | Invoke-Expression
         Write-Host "[OK] Node.js LTS is set as default." -ForegroundColor Green
     } catch {
         Write-Warning "[WARN] Failed to configure fnm: $_"
@@ -36,7 +44,7 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
 }
 
 # --- 2. uv (Python) ---
-Write-Host "`n>> [2/4] Setting up uv (Python Manager)..." -ForegroundColor Cyan
+Write-Host "`n>> [2/5] Setting up uv (Python Manager)..." -ForegroundColor Cyan
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Installing latest stable Python via uv..." -ForegroundColor Gray
@@ -50,7 +58,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 }
 
 # --- 3. Rustup ---
-Write-Host "`n>> [3/4] Checking Rustup..." -ForegroundColor Cyan
+Write-Host "`n>> [3/5] Checking Rustup..." -ForegroundColor Cyan
 if (Get-Command rustup -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
@@ -80,6 +88,28 @@ if (Get-Command tldr -ErrorAction SilentlyContinue) {
 Write-Host "`n>> [5/5] Installing Hunk (hunkdiff)..." -ForegroundColor Cyan
 try {
     if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        # PNPM_HOME と bin ディレクトリの自動設定（未設定時のエラー防止）
+        $pnpmHome = [System.Environment]::GetEnvironmentVariable("PNPM_HOME", "User")
+        if (-not $pnpmHome) {
+            $pnpmHome = Join-Path $env:LOCALAPPDATA "pnpm"
+            [System.Environment]::SetEnvironmentVariable("PNPM_HOME", $pnpmHome, "User")
+        }
+        $env:PNPM_HOME = $pnpmHome
+        $pnpmBin = Join-Path $pnpmHome "bin"
+        
+        $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+        $newPaths = @()
+        if ($currentUserPath -notlike "*$pnpmBin*") { $newPaths += $pnpmBin }
+        if ($currentUserPath -notlike "*$pnpmHome*") { $newPaths += $pnpmHome }
+        if ($newPaths.Count -gt 0) {
+            [System.Environment]::SetEnvironmentVariable("Path", ($newPaths -join ";") + ";" + $currentUserPath, "User")
+        }
+
+        if ($env:Path -notlike "*$pnpmBin*") { $env:Path = "$pnpmBin;$env:Path" }
+        if ($env:Path -notlike "*$pnpmHome*") { $env:Path = "$pnpmHome;$env:Path" }
+
+        pnpm setup 2>&1 | Out-Null
+
         Write-Host "   Installing hunkdiff via pnpm..." -ForegroundColor Gray
         pnpm add -g hunkdiff
         Write-Host "[OK] hunkdiff installed via pnpm." -ForegroundColor Green

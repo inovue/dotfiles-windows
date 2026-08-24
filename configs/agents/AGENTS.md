@@ -137,27 +137,12 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 ---
 
-## 🧠 8. Graphify × Antigravity Hybrid Protocol (Speed + Stability)
+## 🧠 8. Graphify (gated — do not treat every repo as a graphify project)
 
-**Gate:** Use this protocol only when `graphify-out/graph.json` exists in the current workspace. If missing, use normal `rg` / `fd` / `ast-grep` and do **not** invoke graphify, MCP graph tools, or `/graphify` unless the user asks to build a graph.
+**Gate:** Use graphify only when `graphify-out/graph.json` exists, or the user asks to build a graph. Otherwise use `rg` / `fd` / `ast-grep` and do **not** call graphify, MCP graph tools, or `/graphify`.
 
-When the gate passes: use the knowledge graph for **architecture**, and compiled CLIs for **pinpoint locate/edit**. Prefer MCP when connected; otherwise CLI; never stall on missing tools.
+When gated: MCP (if tools exist) → `graphify query|path|explain --budget 1500` → scoped locate/edit → `graphify update .` **once per edit batch** (not per file; WaitMs ≥ 60000 if needed). Never unsolicited full `/graphify .`.
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ L0 MCP   query_graph / get_node / get_neighbors / shortest_path (if avail.) │
-│ L1 CLI   graphify query|path|explain --budget 1500                          │
-│ L2 Locate rg -n / fd / ast-grep   (exact anchors ONLY)                      │
-│ L3 Edit  replace_file_content / sd / ast-grep -U                            │
-│ L4 Sync  graphify update .   (only if graph already existed; AST-only)      │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-1. **Architecture / relationships / impact** → L0 (if MCP tools exist) else L1. Do **not** start with whole-repo `rg` when the graph exists.
-2. **Exact edit anchors** → L2 (`rg -n`, `fd`, `ast-grep`) on paths already scoped by the graph.
-3. **Edits** → L3 surgical patches; bulk renames via `ast-grep -U` or `fd -x sd`.
-4. **Freshness** → After code changes, run `graphify update .` **only if** the graph already existed. Never unsolicited-bootstrap; if the user asks to build: prefer AST `graphify update .`, full `/graphify .` only when explicitly requested.
-5. **Token discipline** → Prefer scoped subgraph answers over `GRAPH_REPORT.md` or multi-file reads. Cap CLI queries with `--budget 1500`.
-6. **Skill / rules** → Follow `graphify-navigator`; always-on rules live in `configs/agents/antigravity/rules/` and `configs/agents/cursor/rules/` (synced globally). Global always-on ≠ every repo is a graphify project — respect the Gate.
+Details: skill `graphify-navigator`; always-on rules in `configs/agents/antigravity/rules/` and `configs/agents/cursor/rules/` (synced globally).
 
 

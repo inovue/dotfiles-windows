@@ -1,13 +1,8 @@
 {
   "mcpServers": {
     "graphify": {
-      "command": "uv",
+      "command": "graphify-mcp",
       "args": [
-        "tool",
-        "run",
-        "--from",
-        "graphifyy[mcp]",
-        "graphify-mcp",
         "${workspace.path}/graphify-out/graph.json"
       ],
       "env": {

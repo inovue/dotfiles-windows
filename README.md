@@ -19,14 +19,17 @@ dotfiles-windows/
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (日本語 + Nerd Fonts) 自動取得・登録
-│   ├── 03_setup_runtimes.ps1       # 3. fnm / uv / Rust / jaq / Agent環境変数 / ~/.local/bin の初期化
+│   ├── 03_setup_runtimes.ps1       # 3. fnm / uv / Graphify / Rust / jaq / Agent環境変数 / ~/.local/bin の初期化
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles & AI Agent SSOT ルールの自動配備
 │   └── sync_agent_rules.ps1        # AI Agent ルール＆スキルの高速一括同期
 └── configs/
     ├── agents/                     # 🌟 AIエージェント単一マスタールール (SSOT)
     │   ├── AGENTS.md               # グローバル共通ルール (CLI置換表, 非対話, UTF-8, ゼロハング)
+    │   ├── antigravity/            # Antigravity MCP テンプレ + always-on rules/workflows
+    │   ├── cursor/                 # Cursor always-on rules (graphify.mdc; graph 存在時のみ有効)
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・a11y・プロファイル自動化
+    │       ├── graphify-navigator/ # Graphify×CLI ハイブリッドナビ (gated)
     │       └── modern-cli-expert/  # ast-grep, sd, jaq, xh 高速レシピ
     ├── powershell/                 # PowerShell 設定 (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
@@ -97,9 +100,9 @@ just install
 本環境では、AIエージェント（Antigravity, Cursor Agent, Claude Code, Codex）がWindows上で動作する際の遅延・ハングを徹底的に排除しています。
 
 1. **二重管理ゼロの SSOT ルール**:
-   - `configs/agents/AGENTS.md` を唯一のマスターとし、各エージェントのグローバル設定パス（`~/.gemini/config/AGENTS.md`, `~/.claude/CLAUDE.md`, `%APPDATA%\Cursor\User\AGENTS.md`）へ自動シンボリックリンク同期。
+   - `configs/agents/` を唯一のマスターとし、`just sync-rules`（Copy 同期）で各エージェントのグローバルパスへ配備。Graphify は `graphify-out/graph.json` がある時だけ有効（gated always-on + `graphify-navigator`）。
 2. **ネイティブ高速CLIツールの優先**:
-   - 重い PowerShell Cmdlet（`Get-Content`, `Select-String`, `ConvertFrom-Json`）をバイパスし、Rust/Go 製バイナリ（`rg`, `fd`, `sd`, `ast-grep`, `jq`, `bat`）を直接実行。
+   - 重い PowerShell Cmdlet（`Get-Content`, `Select-String`, `ConvertFrom-Json`）をバイパスし、Rust/Go 製バイナリ（`rg`, `fd`, `sd`, `ast-grep`, `jq`, `bat`, `graphify`）を直接実行。
 3. **非対話ハング・文字化けの完全防止**:
    - `PAGER=cat`, `BAT_PAGER=""`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` を永続化し、ページャー待ちやANSIエスケープ破綻を封殺。
 
@@ -119,6 +122,7 @@ just install
   - `ripgrep` (超高速grep) / `fd` (高速find)
   - `sd` (超高速正規表現置換/sed代替)
   - `ast-grep` (`sg`) (AST構造コード検索・リファクタ)
+  - `graphify` / `graphify-mcp` (知識グラフ CLI / MCP; ルールは gated)
   - `jaq` / `jq` (超高速JSONプロセッサ)
   - `xh` (超高速HTTP/APIクライアント/curl代替)
   - `procs` (超高速プロセスビューア/ps代替)

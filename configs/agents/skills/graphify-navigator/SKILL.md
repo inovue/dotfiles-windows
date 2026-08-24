@@ -27,7 +27,7 @@ Turn architecture questions into **scoped subgraph answers**, then finish with *
 ## Hot path
 
 ```text
-MCP query_graph → CLI graphify query → rg/fd/ast-grep locate → edit → graphify update .
+MCP (if tools exist) → CLI graphify query → rg/fd/ast-grep locate → edit → graphify update . (once/batch)
 ```
 
 ### 1. Prefer MCP (when connected)
@@ -43,13 +43,13 @@ When the `graphify` MCP server exposes tools in this session:
 
 If MCP tools are missing or fail once → go to CLI. Do not retry-loop.
 
-### 2. CLI fallback (always available when graph exists)
+### 2. CLI fallback (when graph exists)
 
 ```powershell
 graphify query "how does deploy work?" --budget 1500
 graphify path "Install-WingetPackage" "Deploy"
 graphify explain "sync_agent_rules"
-graphify update .          # after code edits; only if graph already existed
+graphify update .          # once per edit batch; WaitMs >= 60000 if needed
 graphify god-nodes --top 15
 ```
 
@@ -70,9 +70,6 @@ graphify update .
 
 # Full multimodal pipeline — only when the user explicitly asks
 # /graphify .
-
-# Optional: keep fresh across commits
-graphify hook install
 ```
 
 ## Stability rules
@@ -83,3 +80,4 @@ graphify hook install
 4. Do not hang on pagers — use non-interactive flags / `PAGER=cat`.
 5. Missing graph + no user request to build → skip graphify entirely (normal CLI).
 6. MCP unavailable → CLI once → scoped `rg`/`fd`. Never stall on missing tools.
+7. Run `graphify update .` **once per edit batch**, not after every file. It can exceed 10s.

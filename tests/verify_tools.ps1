@@ -164,6 +164,44 @@ foreach ($cf in $configFiles) {
     Assert-Test -Name "Config: $($cf.Name) exists" -Condition $exists -Details "Path: $($cf.Path)"
 }
 
+# MCP must use absolute graphify-mcp on all merge targets (uv tool run is ~8x slower and PATH-fragile)
+$mcpPathsToCheck = @(
+    (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
+    (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
+    (Join-Path $rootDir ".agents\mcp_config.json")
+)
+foreach ($mcpPath in $mcpPathsToCheck) {
+    if (-not (Test-Path $mcpPath)) {
+        # Missing dest is OK when graphify-mcp is not installed yet (sync skips merge)
+        $graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
+        if ($graphifyMcpInstalled) {
+            Assert-Test -Name "MCP graphify config exists ($([IO.Path]::GetFileName($mcpPath)))" -Condition $false -Details "Missing: $mcpPath"
+        } else {
+            Write-Host "  [SKIP] MCP config absent (graphify-mcp not installed): $mcpPath" -ForegroundColor DarkGray
+            $script:warnCount++
+        }
+        continue
+    }
+    try {
+        $mcpObj = [System.IO.File]::ReadAllText($mcpPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        if (-not $mcpObj.mcpServers -or -not $mcpObj.mcpServers.graphify) {
+            $graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
+            if ($graphifyMcpInstalled) {
+                Assert-Test -Name "MCP graphify entry present ($([IO.Path]::GetFileName($mcpPath)))" -Condition $false -Details "No mcpServers.graphify in $mcpPath"
+            }
+            continue
+        }
+        $cmd = [string]$mcpObj.mcpServers.graphify.command
+        $isAbs = ($cmd -match '(?i)\.exe$' -or $cmd -match '^[A-Za-z]:\\' -or $cmd -match '^/')
+        $notUv = ($cmd -notmatch '(?i)(^|[\\/])uv(\.exe)?$')
+        $notBare = ($cmd -ne "graphify-mcp" -and $cmd -ne "graphify-mcp.exe")
+        $pathOk = if ($isAbs) { Test-Path $cmd } else { $false }
+        Assert-Test -Name "MCP graphify uses absolute graphify-mcp ($([IO.Path]::GetFileName($mcpPath)))" -Condition ($isAbs -and $notUv -and $notBare -and $pathOk) -Details "command='$cmd'"
+    } catch {
+        Assert-Test -Name "MCP graphify config parse ($mcpPath)" -Condition $false -Details "$_"
+    }
+}
+
 # --- 4. Functional Execution & UTF-8 Tests ---
 Write-Host "`n[4/5] Running Functional Integration & UTF-8 Tests..." -ForegroundColor White
 

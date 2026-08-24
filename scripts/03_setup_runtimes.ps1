@@ -90,6 +90,13 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
         if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
 
+        # Upgrade can drop extras; re-install with [mcp] if graphify-mcp is missing
+        if (-not (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
+            Write-Host "   graphify-mcp missing after upgrade; reinstalling graphifyy[mcp]..." -ForegroundColor Gray
+            uv tool install "graphifyy[mcp]" --force 2>&1 | Out-Null
+            if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
+        }
+
         if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
             Write-Host "[OK] graphify + graphify-mcp installed. Rules/skills: run ``just sync-rules`` (also via deploy)." -ForegroundColor Green
         } else {

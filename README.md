@@ -37,6 +37,20 @@ dotfiles-windows/
 
 ---
 
+## ⚡ クイックコマンド (`just`)
+
+本リポジトリにはコマンドランナー `just` が設定されており、日常的な操作を1コマンドで実行できます。
+
+| コマンド | 内容 |
+| :--- | :--- |
+| `just sync-rules` | 🌟 正本 (`configs/agents/`) から全エージェント・ワークスペースへルールを一括同期 |
+| `just check-rules`| ルールが正本と同期されているか検証（差分チェック） |
+| `just test` | CLIツール、環境変数、SSOTルールの網羅的自動テストを実行 |
+| `just deploy` | 全設定ファイル（Dotfiles + Rules）をユーザー環境にデプロイ |
+| `just install` | 環境構築（パッケージ、フォント、ランタイム、設定）を一括実行 |
+
+---
+
 ## 🚀 使い方
 
 PowerShell を **管理者権限** で開き、本ディレクトリに移動して実行します。
@@ -45,6 +59,8 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 
 ```powershell
 .\install.ps1 -All
+# または
+just install
 ```
 
 > **シンボリックリンクで設定を同期したい場合**:
@@ -63,7 +79,8 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 | `.\install.ps1 -Step 1` | `winget` パッケージの一括インストール |
 | `.\install.ps1 -Step 2` | `UDEV Gothic NF` (35NF) フォントの自動ダウンロード・登録 |
 | `.\install.ps1 -Step 3` | ランタイム初期化、Agent環境変数 (`PAGER=cat`等)、`~/.local/bin` の構成 |
-| `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）および AI Agent ルールの一括配備 |
+| `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）および AI Agent ルールの一括配備 (`just deploy`) |
+| `.\scripts\sync_agent_rules.ps1` | AI Agent ルール＆スキルのみを高速一括同期 (`just sync-rules`) |
 
 ---
 

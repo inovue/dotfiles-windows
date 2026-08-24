@@ -180,6 +180,10 @@ try {
     $mmdOk = $mmdResult -match "Client" -and $mmdResult -match "Server"
     Assert-Test -Name "Mermaid ASCII diagram rendering" -Condition $mmdOk -Details ($mmdResult.Trim())
 
+    # Test 4.7: AI Agent SSOT Rule Synchronization
+    $syncCheckProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $rootDir "scripts\sync_agent_rules.ps1"), "-Check" -NoNewWindow -Wait -PassThru
+    Assert-Test -Name "AI Agent SSOT Rule Synchronization (Master vs Targets)" -Condition ($syncCheckProc.ExitCode -eq 0) -Details "ExitCode: $($syncCheckProc.ExitCode)"
+
 } finally {
     Remove-Item -Path $tempTestDir -Recurse -Force -ErrorAction SilentlyContinue
 }

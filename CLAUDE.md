@@ -33,8 +33,11 @@ dotfiles-windows/
 ├── configs/                   # 🌟 SINGLE SOURCE OF TRUTH (SSOT) FOR ALL CONFIGS
 │   ├── agents/                # AI Agent master rules & skills
 │   │   ├── AGENTS.md          # Global AI agent rules (CLI replacement matrix, zero-hang rules)
+│   │   ├── antigravity/       # Antigravity MCP + always-on graphify rules/workflows
+│   │   ├── cursor/            # Cursor always-on rules (graphify.mdc; gated on graphify-out/)
 │   │   └── skills/            # Progressive disclosure agent skills
 │   │       ├── browser-agent/ # Real Chrome automation engine (a11y tree, stealth, profiles)
+│   │       ├── graphify-navigator/ # Graphify×Antigravity hybrid (MCP + rg/fd/sd)
 │   │       └── modern-cli-expert/ # AST refactoring (ast-grep), sd, jaq, xh recipes
 │   ├── helix/                 # Helix editor (config.toml, languages.toml)
 │   ├── herdr/                 # Herdr AI TUI multiplexer (config.toml + herdr-sidebar)

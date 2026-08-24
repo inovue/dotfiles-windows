@@ -23,6 +23,8 @@ $configsDir = Join-Path $rootDir "configs"
 $masterRules = Join-Path $configsDir "agents\AGENTS.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
+$masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
+$masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
 $masterAgentsDir = Join-Path $configsDir "agents"
 
 if (-not (Test-Path $masterRules)) {
@@ -90,10 +92,24 @@ $allTargets = @(
     @{ Name = "Claude Code Global Modern-CLI";  Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Antigravity Global Browser-Agent"; Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"; IsDir = $true },
     @{ Name = "Claude Code Global Browser-Agent"; Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent";        IsDir = $true },
+    @{ Name = "Antigravity Global Graphify-Nav"; Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-navigator"; IsDir = $true },
+    @{ Name = "Claude Code Global Graphify-Nav"; Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Agents Skills Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator"; IsDir = $true },
+    @{ Name = "Antigravity Always-on Graphify Rule"; Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
+    @{ Name = "Antigravity Graphify Workflow"; Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
+    @{ Name = "Cursor Always-on Graphify Rule"; Src = (Join-Path $configsDir "agents\cursor\rules\graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
 
     # --- 2. Workspace Navigation & Rule Mirrors (from root AGENTS.md) ---
     @{ Name = "Workspace Claude Code Guide";    Src = $projectAgentsMd; Dest = $projectClaudeMd;    IsDir = $false },
     @{ Name = "Workspace Cursor Rules";         Src = $projectAgentsMd; Dest = $projectCursorRules; IsDir = $false }
+)
+
+# Vendor `graphify install` drops a broad "any codebase question" skill named `graphify`
+# alongside our SSOT `graphify-navigator`. That dual routing destabilizes agents.
+$vendorGraphifySkillDirs = @(
+    Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify"
+    Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify"
+    Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify"
 )
 
 foreach ($target in $allTargets) {
@@ -131,8 +147,132 @@ foreach ($target in $allTargets) {
     }
 }
 
-Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
+# --- 3. Antigravity MCP: upsert graphify server (merge, never wipe other servers) ---
+function Get-NormalizedJsonText {
+    param([string]$JsonText)
+    if (-not $JsonText) { return "" }
+    try {
+        $obj = $JsonText | ConvertFrom-Json
+        return (($obj | ConvertTo-Json -Depth 20 -Compress) -replace '\s+', ' ').Trim()
+    } catch {
+        return $JsonText.Replace("`r`n", "`n").Trim()
+    }
+}
+
+function Test-GraphifyMcpInSync {
+    param(
+        [string]$TemplatePath,
+        [string]$DestPath
+    )
+    if (-not (Test-Path $TemplatePath)) { return $false }
+    if (-not (Test-Path $DestPath)) { return $false }
+    try {
+        $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        $dest = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        $want = Get-NormalizedJsonText -JsonText (($template.mcpServers.graphify | ConvertTo-Json -Depth 20))
+        $have = Get-NormalizedJsonText -JsonText (($dest.mcpServers.graphify | ConvertTo-Json -Depth 20))
+        return ($want -and $have -and ($want -eq $have))
+    } catch {
+        return $false
+    }
+}
+
+function Merge-GraphifyMcpConfig {
+    param(
+        [string]$TemplatePath,
+        [string]$DestPath
+    )
+    if (-not (Test-Path $TemplatePath)) {
+        Write-Warning "[SKIP] MCP template missing: $TemplatePath"
+        return
+    }
+
+    if (Test-GraphifyMcpInSync -TemplatePath $TemplatePath -DestPath $DestPath) {
+        Write-Host "  [OK] Antigravity MCP graphify already in sync -> $DestPath" -ForegroundColor DarkGray
+        $script:skippedCount++
+        return
+    }
+
+    $templateRaw = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8).Trim()
+    if (-not $templateRaw) {
+        Write-Warning "[SKIP] MCP template empty: $TemplatePath"
+        return
+    }
+    $template = $templateRaw | ConvertFrom-Json
+    $graphifyServer = $template.mcpServers.graphify
+    if (-not $graphifyServer) {
+        Write-Warning "[SKIP] Template has no mcpServers.graphify"
+        return
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+    }
+
+    $destObj = $null
+    if (Test-Path $DestPath) {
+        $destRaw = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8).Trim()
+        if ($destRaw) {
+            try { $destObj = $destRaw | ConvertFrom-Json } catch { $destObj = $null }
+        }
+    }
+    if (-not $destObj) {
+        $destObj = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{} }
+    }
+    if (-not $destObj.mcpServers) {
+        $destObj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{}) -Force
+    }
+
+    $destObj.mcpServers | Add-Member -NotePropertyName graphify -NotePropertyValue $graphifyServer -Force
+
+    $json = $destObj | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($DestPath, $json + "`n", [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  [SYNCED] Antigravity MCP graphify -> $DestPath" -ForegroundColor Green
+    $script:syncedCount++
+}
+
+$mcpTemplate = Join-Path $masterAntigravityDir "mcp_config.json"
+$mcpTargets = @(
+    (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json"),
+    (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
+)
+
+Write-Host "`n>> Graphify MCP (Antigravity merge)..." -ForegroundColor Cyan
+foreach ($mcpDest in $mcpTargets) {
+    if ($Check) {
+        if (Test-GraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $mcpDest) {
+            Write-Host "  [OK] MCP graphify in sync -> $mcpDest" -ForegroundColor DarkGray
+            $skippedCount++
+        } else {
+            Write-Host "  [DIFF] MCP graphify differs or missing -> $mcpDest" -ForegroundColor Yellow
+            $hasDiff = $true
+        }
+    } else {
+        Merge-GraphifyMcpConfig -TemplatePath $mcpTemplate -DestPath $mcpDest
+    }
+}
+
+# --- 4. Remove conflicting vendor graphify skills (SSOT uses graphify-navigator) ---
+Write-Host "`n>> Checking for conflicting vendor graphify skills..." -ForegroundColor Cyan
+foreach ($vendorDir in $vendorGraphifySkillDirs) {
+    if (Test-Path $vendorDir) {
+        $hasDiff = $true
+        if ($Check) {
+            Write-Host "  [DIFF] Conflicting vendor skill present: $vendorDir" -ForegroundColor Yellow
+        } else {
+            Remove-Item -Path $vendorDir -Recurse -Force
+            Write-Host "  [REMOVED] Conflicting vendor skill: $vendorDir" -ForegroundColor Green
+            $syncedCount++
+        }
+    } else {
+        Write-Host "  [OK] No vendor conflict at $vendorDir" -ForegroundColor DarkGray
+        $skippedCount++
+    }
+}
+
 if ($Check) {
+    Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
     if ($hasDiff) {
         Write-Host "Result: Differences detected between master and global targets." -ForegroundColor Yellow
         exit 1
@@ -141,5 +281,6 @@ if ($Check) {
         exit 0
     }
 } else {
+    Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
     Write-Host "Sync Completed: $syncedCount synced, $skippedCount already up to date." -ForegroundColor Green
 }

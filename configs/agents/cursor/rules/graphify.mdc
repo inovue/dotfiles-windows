@@ -1,0 +1,22 @@
+---
+description: Graphify-first navigation when a project graph exists. Prefer CLI; use MCP only if connected. Never bootstrap graphs unsolicited.
+alwaysApply: true
+---
+
+# Graphify × Fast CLI Hybrid Protocol
+
+**Gate:** Engage this protocol only when `graphify-out/graph.json` exists in the workspace. If missing, use normal `rg` / `fd` / `ast-grep` and do **not** run graphify, MCP graph tools, or `/graphify`.
+
+```text
+L0 MCP  query_graph / get_node / shortest_path   (only if MCP tools are actually available)
+L1 CLI  graphify query|path|explain --budget 1500
+L2 Locate rg -n / fd / ast-grep (exact anchors ONLY, scoped paths)
+L3 Edit  surgical patch / sd / ast-grep -U
+L4 Sync  graphify update .   (only if graph already existed; AST-only)
+```
+
+- Architecture / relationships: L0 if MCP is connected, else L1. Do not start with whole-repo grep for architecture questions when the graph exists.
+- Cursor often has no graphify MCP — default to L1 CLI; never stall retrying missing MCP tools.
+- Edit anchors: L2 on scoped paths only.
+- After code edits: `graphify update .` **only** when the graph already existed this session. Never run full multimodal `/graphify .` unless the user asks.
+- Prefer wiki / scoped subgraph over `GRAPH_REPORT.md` or multi-file reads.

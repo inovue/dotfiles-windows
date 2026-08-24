@@ -99,3 +99,4 @@ target/
 # --- 8. AI Agent Workspace Junctions & Local Links ---
 .agents/
 .cursor/
+graphify-out/

@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "graphify": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--from",
+        "graphifyy[mcp]",
+        "graphify-mcp",
+        "${workspace.path}/graphify-out/graph.json"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}

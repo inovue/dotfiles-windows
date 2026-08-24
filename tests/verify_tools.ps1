@@ -64,6 +64,8 @@ $toolsToCheck = @(
     @{ Cmd = "xh";       Name = "xh (HTTP client)";   Args = "--version" }
     @{ Cmd = "procs";    Name = "procs (ps viewer)";  Args = "--version" }
     @{ Cmd = "jaq";      Name = "jaq (Rust jq)";      Args = "--version" }
+    @{ Cmd = "graphify"; Name = "graphify (knowledge graph)"; Args = "hook status" }
+    @{ Cmd = "graphify-mcp"; Name = "graphify-mcp (MCP server)"; Args = "--help" }
     @{ Cmd = "hexyl";    Name = "hexyl (hex viewer)"; Args = "--version" }
     @{ Cmd = "glow";         Name = "glow (Markdown)";    Args = "--version" }
     @{ Cmd = "chafa";        Name = "chafa (Sixel/Image)";Args = "--version" }
@@ -136,6 +138,10 @@ $configFiles = @(
     @{ Name = "Master SSOT Rules (configs/agents/AGENTS.md)"; Path = Join-Path $rootDir "configs\agents\AGENTS.md" }
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
+    @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
+    @{ Name = "Master Cursor graphify rule";                 Path = Join-Path $rootDir "configs\agents\cursor\rules\graphify.mdc" }
+    @{ Name = "Master Antigravity MCP template";             Path = Join-Path $rootDir "configs\agents\antigravity\mcp_config.json" }
 
     # Global Deployed Targets
     @{ Name = "Antigravity Global Rules";                    Path = Join-Path $env:USERPROFILE ".gemini\config\AGENTS.md" }
@@ -145,6 +151,9 @@ $configFiles = @(
     @{ Name = "Claude Code Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Antigravity Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\browser-agent\SKILL.md" }
     @{ Name = "Claude Code Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".claude\skills\browser-agent\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
+    @{ Name = "Agents always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".agents\rules\graphify.md" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
     @{ Name = "PowerShell Profile";                          Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }

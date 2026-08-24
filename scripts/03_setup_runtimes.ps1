@@ -8,6 +8,7 @@
     - rustup の初期設定
     - tealdeer (tldr) のキャッシュ更新
     - Hunk (hunkdiff) & Mermaid-ASCII CLI の導入
+    - Graphify (知識グラフ CLI / AI スキル) の導入
     - Herdr プラグイン (herdr-sidebar) の導入
     - Cursor Agent CLI (agent / cursor-agent) の自動導入
     - AI Agent 安全環境変数 & ~/.local/bin シム構築
@@ -31,7 +32,7 @@ $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 $env:Path = "$machinePath;$userPath"
 
 # --- 1. fnm & Node.js LTS ---
-Write-Host "`n>> [1/5] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
+Write-Host "`n>> [1/10] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Installing Node.js LTS via fnm..." -ForegroundColor Gray
@@ -48,7 +49,7 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
 }
 
 # --- 2. uv (Python) ---
-Write-Host "`n>> [2/5] Setting up uv (Python Manager)..." -ForegroundColor Cyan
+Write-Host "`n>> [2/10] Setting up uv (Python Manager)..." -ForegroundColor Cyan
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Installing latest stable Python via uv..." -ForegroundColor Gray
@@ -61,8 +62,48 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] uv is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 3. Rustup & Cargo Modern Tools (jaq) ---
-Write-Host "`n>> [3/5] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
+# --- 3. Graphify (knowledge-graph CLI for AI assistants) ---
+# Install CLI binaries only. Always-on rules / navigator skill are owned by
+# configs/agents/ and deployed via sync_agent_rules.ps1 (just sync-rules).
+# Do NOT run `graphify install --platform ...` / `graphify antigravity install`
+# here — vendor always-on skills conflict with SSOT and force graphify on every repo.
+Write-Host "`n>> [3/10] Setting up Graphify (uv tool)..." -ForegroundColor Cyan
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    try {
+        $graphifyPresent = $false
+        try {
+            $toolList = uv tool list 2>&1 | Out-String
+            $graphifyPresent = ($toolList -match '(?m)^graphifyy\b')
+        } catch { }
+
+        if ($graphifyPresent) {
+            Write-Host "   graphifyy already installed; upgrading via uv tool..." -ForegroundColor Gray
+            uv tool upgrade "graphifyy" 2>&1 | Out-Null
+        } else {
+            Write-Host "   Installing graphifyy[mcp] via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
+            uv tool install "graphifyy[mcp]" 2>&1 | Out-Null
+        }
+
+        # Ensure uv tool bin is on PATH for this session (Windows: ~/.local/bin)
+        $uvToolBin = ""
+        try { $uvToolBin = (uv tool dir --bin 2>$null).Trim() } catch { }
+        if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
+        if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
+
+        if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
+            Write-Host "[OK] graphify + graphify-mcp installed. Rules/skills: run ``just sync-rules`` (also via deploy)." -ForegroundColor Green
+        } else {
+            Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
+        }
+    } catch {
+        Write-Warning "[WARN] Failed to install/configure graphify: $_"
+    }
+} else {
+    Write-Host "[SKIP] uv is not in PATH yet (required for graphify)." -ForegroundColor Yellow
+}
+
+# --- 4. Rustup & Cargo Modern Tools (jaq) ---
+Write-Host "`n>> [4/10] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
 if (Get-Command rustup -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
@@ -84,8 +125,8 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 4. tealdeer (tldr) ---
-Write-Host "`n>> [4/5] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
+# --- 5. tealdeer (tldr) ---
+Write-Host "`n>> [5/10] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
 if (Get-Command tldr -ErrorAction SilentlyContinue) {
     try {
         tldr --update
@@ -97,8 +138,8 @@ if (Get-Command tldr -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] tldr is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 5. Hunk & Mermaid-ASCII CLI ---
-Write-Host "`n>> [5/6] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
+# --- 6. Hunk & Mermaid-ASCII CLI ---
+Write-Host "`n>> [6/10] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
 try {
     if (Get-Command bun -ErrorAction SilentlyContinue) {
         Write-Host "   Installing hunkdiff and mermaid-ascii via bun..." -ForegroundColor Gray
@@ -141,8 +182,8 @@ try {
     Write-Warning "[WARN] Failed to install CLI utilities: $_"
 }
 
-# --- 6. Herdr Plugins (herdr-sidebar) ---
-Write-Host "`n>> [6/8] Checking Herdr Plugins (herdr-sidebar)..." -ForegroundColor Cyan
+# --- 7. Herdr Plugins (herdr-sidebar) ---
+Write-Host "`n>> [7/10] Checking Herdr Plugins (herdr-sidebar)..." -ForegroundColor Cyan
 if (Get-Command herdr -ErrorAction SilentlyContinue) {
     try {
         $pluginList = herdr plugin list 2>&1 | Out-String
@@ -160,8 +201,8 @@ if (Get-Command herdr -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] herdr is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 7. Cursor Agent CLI ---
-Write-Host "`n>> [7/9] Setting up Cursor Agent CLI (agent / cursor-agent)..." -ForegroundColor Cyan
+# --- 8. Cursor Agent CLI ---
+Write-Host "`n>> [8/10] Setting up Cursor Agent CLI (agent / cursor-agent)..." -ForegroundColor Cyan
 try {
     $agentPath = "$env:LOCALAPPDATA\cursor-agent"
     $versionsPath = "$agentPath\versions"
@@ -219,8 +260,8 @@ try {
     Write-Warning "[WARN] Failed to configure Cursor Agent CLI: $_"
 }
 
-# --- 8. AI Agent Environment Variables & Non-Interactive Safety ---
-Write-Host "`n>> [8/9] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
+# --- 9. AI Agent Environment Variables & Non-Interactive Safety ---
+Write-Host "`n>> [9/10] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
 $envVarsToSet = @{
     "PAGER"                     = "cat"
     "BAT_PAGER"                 = ""
@@ -238,8 +279,8 @@ foreach ($key in $envVarsToSet.Keys) {
 }
 Write-Host "[OK] Agent non-interactive pager bypass & UTF-8 variables set in User scope." -ForegroundColor Green
 
-# --- 9. ~/.local/bin & Coreutils Shim Directory ---
-Write-Host "`n>> [9/9] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
+# --- 10. ~/.local/bin & Coreutils Shim Directory ---
+Write-Host "`n>> [10/10] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
 $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
 if (-not (Test-Path $localBinDir)) {
     New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null

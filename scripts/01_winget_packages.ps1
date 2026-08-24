@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     winget を使用してモダン開発環境のツール・ランタイム・アプリケーションを一括インストールします。
@@ -22,6 +22,7 @@ $packageGroups = [ordered]@{
     "Terminal" = @(
         @{ Id = "Microsoft.WindowsTerminal"; Name = "Windows Terminal" }
         @{ Id = "Nushell.Nushell";           Name = "Nushell (モダン構造化シェル)" }
+        @{ Id = "Microsoft.PowerShell";      Name = "PowerShell 7 (pwsh)" }
     )
 
     "CLI_Tools" = @(
@@ -31,6 +32,9 @@ $packageGroups = [ordered]@{
         @{ Id = "sharkdp.bat";               Name = "bat (シンタックスハイライト付きcat)" }
         @{ Id = "BurntSushi.ripgrep.MSVC";   Name = "ripgrep (超高速grep)" }
         @{ Id = "sharkdp.fd";                Name = "fd (シンプル・高速find)" }
+        @{ Id = "chmln.sd";                  Name = "sd (超高速正規表現置換/sed代替)" }
+        @{ Id = "ast-grep.ast-grep";         Name = "ast-grep (AST構造コード検索・リファクタ)" }
+        @{ Id = "jqlang.jq";                 Name = "jq (超高速JSONプロセッサ)" }
         @{ Id = "junegunn.fzf";              Name = "fzf (汎用ファジーファインダー)" }
         @{ Id = "JesseDuffield.lazygit";     Name = "lazygit (TUI Gitクライアント)" }
         @{ Id = "dandavison.delta";          Name = "delta (構文ハイライト付きdiffビューア)" }
@@ -42,6 +46,11 @@ $packageGroups = [ordered]@{
         @{ Id = "sharkdp.hyperfine";         Name = "hyperfine (CLIベンチマークツール)" }
         @{ Id = "hdosys.herdr-win";          Name = "Herdr (AI TUIマルチプレクサ)" }
         @{ Id = "Microsoft.Coreutils";       Name = "uutils coreutils (Rust製GNUコア)" }
+        @{ Id = "uutils.diffutils";          Name = "uutils diffutils (Rust製diff/cmp)" }
+        @{ Id = "Wilfred.difftastic";        Name = "difftastic (AST構文木Diffビューア/difft)" }
+        @{ Id = "ducaale.xh";                Name = "xh (超高速HTTP/APIクライアント/curl代替)" }
+        @{ Id = "dalance.procs";             Name = "procs (超高速プロセスビューア/ps代替)" }
+        @{ Id = "sharkdp.hexyl";             Name = "hexyl (色分けバイナリ/Hexビューア)" }
     )
 
     "Editors_DevTools" = @(

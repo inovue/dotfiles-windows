@@ -26,7 +26,7 @@ $env.config = {
     }
 }
 
-# --- Aliases (Modern Rust/Go CLI replacements) ---
+# --- Aliases (Modern Rust/Go CLI replacements & Ultra-fast defaults) ---
 alias cat = bat --paging=never
 alias ls = eza --icons --group-directories-first
 alias ll = eza -l --icons --git --group-directories-first
@@ -36,6 +36,13 @@ alias lg = lazygit
 alias btm = bottom
 alias grep = rg
 alias find = fd
+alias sed = sd
+alias sg = ast-grep
 alias df = duf
 alias du = dust
 alias hk = hunk
+alias hx = helix
+alias dft = difft
+alias http = xh
+alias ps = procs
+alias hex = hexyl

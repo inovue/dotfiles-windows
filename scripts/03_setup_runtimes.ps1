@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     インストールされたランタイム・CLIツールの初期化・セットアップを行います。
@@ -127,5 +127,79 @@ try {
 } catch {
     Write-Warning "[WARN] Failed to install hunkdiff: $_"
 }
+
+# --- 6. AI Agent Environment Variables & Non-Interactive Safety ---
+Write-Host "`n>> [6/7] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
+$envVarsToSet = @{
+    "PAGER"                     = "cat"
+    "BAT_PAGER"                 = ""
+    "BAT_STYLE"                 = "plain"
+    "GIT_PAGER"                 = "cat"
+    "DELTA_PAGER"               = "cat"
+    "PYTHONUTF8"                = "1"
+    "POWERSHELL_TELEMETRY_OPTOUT" = "1"
+    "DOTNET_CLI_TELEMETRY_OPTOUT" = "1"
+}
+foreach ($key in $envVarsToSet.Keys) {
+    $val = $envVarsToSet[$key]
+    [System.Environment]::SetEnvironmentVariable($key, $val, "User")
+    Set-Item -Path "env:$key" -Value $val
+}
+Write-Host "[OK] Agent non-interactive pager bypass & UTF-8 variables set in User scope." -ForegroundColor Green
+
+# --- 7. ~/.local/bin & Coreutils Shim Directory ---
+Write-Host "`n>> [7/7] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
+$localBinDir = Join-Path $env:USERPROFILE ".local\bin"
+if (-not (Test-Path $localBinDir)) {
+    New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
+}
+
+$currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if ($currentUserPath -notlike "*$localBinDir*") {
+    $updatedUserPath = "$localBinDir;" + $currentUserPath
+    [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
+    Write-Host "[OK] Added $localBinDir to User PATH." -ForegroundColor Green
+} else {
+    Write-Host "[OK] $localBinDir is already in User PATH." -ForegroundColor Green
+}
+if ($env:Path -notlike "*$localBinDir*") {
+    $env:Path = "$localBinDir;$env:Path"
+}
+
+# Link Coreutils, Cargo, and WinGet modern CLI executables into ~/.local/bin
+$shimSourceDirs = @(
+    "C:\Program Files\coreutils\bin",
+    "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
+    "$env:USERPROFILE\.cargo\bin"
+)
+
+# Search WinGet Packages for ast-grep, sd, and other tools if not already linked
+$wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
+if (Test-Path $wingetPkgDir) {
+    $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe" -ErrorAction SilentlyContinue
+    foreach ($f in $foundExes) {
+        $shimPath = Join-Path $localBinDir $f.Name
+        if (-not (Test-Path $shimPath)) {
+            Copy-Item -Path $f.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+foreach ($srcDir in $shimSourceDirs) {
+    if (Test-Path $srcDir) {
+        $exes = Get-ChildItem -Path $srcDir -Filter "*.exe" -File
+        foreach ($exe in $exes) {
+            $shimPath = Join-Path $localBinDir $exe.Name
+            if (-not (Test-Path $shimPath)) {
+                try {
+                    New-Item -ItemType HardLink -Path $shimPath -Target $exe.FullName -Force -ErrorAction SilentlyContinue | Out-Null
+                } catch {
+                    Copy-Item -Path $exe.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue | Out-Null
+                }
+            }
+        }
+    }
+}
+Write-Host "[OK] Modern CLI and Coreutils shims verified in $localBinDir." -ForegroundColor Green
 
 Write-Host "`n[DONE] Runtime setup step finished." -ForegroundColor Green

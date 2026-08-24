@@ -1,6 +1,6 @@
 # dotfiles-windows
 
-Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI ツールを中心とした Windows ネイティブ開発環境のセットアップ＆設定管理リポジトリです。
+Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI ツールを中心とした Windows ネイティブ開発環境、ならびに **AI エージェント（Antigravity CLI, Cursor, Claude Code, Codex等）の超高速化・安定化** を実現する設定管理リポジトリです。
 
 ---
 
@@ -10,12 +10,18 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 dotfiles-windows/
 ├── install.ps1                     # 統合エントリポイント (全自動 or ステップ別実行)
 ├── README.md                       # 本ドキュメント
+├── tests/
+│   └── verify_tools.ps1            # 環境・モダンCLI・エージェント設定の網羅的自動テスト
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (日本語 + Nerd Fonts) 自動取得・登録
-│   ├── 03_setup_runtimes.ps1       # 3. fnm(Node) / uv(Python) / Rust の初期化
-│   └── 04_setup_configs.ps1        # 4. Windows Terminal/Helix/Nushell/Starship/Herdr 設定配備
+│   ├── 03_setup_runtimes.ps1       # 3. fnm / uv / Rust / Agent環境変数 / ~/.local/bin の初期化
+│   └── 04_setup_configs.ps1        # 4. Dotfiles & AI Agent SSOT ルールの自動配備
 └── configs/
+    ├── agents/                     # 🌟 AIエージェント単一マスタールール (SSOT)
+    │   └── AGENTS.md               # (Antigravity / Claude Code / Cursor / Codex 共通)
+    ├── powershell/                 # PowerShell 設定 (非対話高速化, エイリアス解除, UTF-8)
+    │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic 35NF, Catppuccin, Nushell既定)
     │   └── settings.json
     ├── helix/                      # Helix 設定 (相対行番号, IME対策, Biome/Rust LSP連携)
@@ -56,24 +62,45 @@ PowerShell を **管理者権限** で開き、本ディレクトリに移動し
 | :--- | :--- |
 | `.\install.ps1 -Step 1` | `winget` パッケージの一括インストール |
 | `.\install.ps1 -Step 2` | `UDEV Gothic NF` (35NF) フォントの自動ダウンロード・登録 |
-| `.\install.ps1 -Step 3` | `fnm` (Node LTS) / `uv` (Python) / `Rust` / `tldr` の初期化 |
-| `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）のユーザーディレクトリへの配備 |
+| `.\install.ps1 -Step 3` | ランタイム初期化、Agent環境変数 (`PAGER=cat`等)、`~/.local/bin` の構成 |
+| `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles）および AI Agent ルールの一括配備 |
+
+---
+
+## 🤖 AI Agent 超高速化・安定化アーキテクチャ (SSOT)
+
+本環境では、AIエージェント（Antigravity, Cursor, Claude Code, Codex）がWindows上で動作する際の遅延・ハングを徹底的に排除しています。
+
+1. **二重管理ゼロの SSOT ルール**:
+   - `configs/agents/AGENTS.md` を唯一のマスターとし、各エージェントのグローバル設定パス（`~/.gemini/config/AGENTS.md`, `~/.claude/CLAUDE.md`, `%APPDATA%\Cursor\User\AGENTS.md`）へ自動シンボリックリンク同期。
+2. **ネイティブ高速CLIツールの優先**:
+   - 重い PowerShell Cmdlet（`Get-Content`, `Select-String`, `ConvertFrom-Json`）をバイパスし、Rust/Go 製バイナリ（`rg`, `fd`, `sd`, `ast-grep`, `jq`, `bat`）を直接実行。
+3. **非対話ハング・文字化けの完全防止**:
+   - `PAGER=cat`, `BAT_PAGER=""`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` を永続化し、ページャー待ちやANSIエスケープ破綻を封殺。
 
 ---
 
 ## 🛠 主な同梱ツール一覧
 
-- **Shell / Terminal**: Nushell, Windows Terminal
+- **Shell / Terminal**: Nushell, Windows Terminal, PowerShell 7 (`pwsh`)
 - **Font**: UDEV Gothic 35NF (JetBrains Mono + BIZ UDゴシック + Nerd Fonts)
 - **CLI Utilities (Rust/Go)**:
   - `Starship` (プロンプト) / `zoxide` (スマートcd)
   - `eza` (モダンls) / `bat` (ハイライト付きcat)
-  - `ripgrep` (高速grep) / `fd` (高速find)
+  - `ripgrep` (超高速grep) / `fd` (高速find)
+  - `sd` (超高速正規表現置換/sed代替)
+  - `ast-grep` (`sg`) (AST構造コード検索・リファクタ)
+  - `jaq` / `jq` (超高速JSONプロセッサ)
+  - `xh` (超高速HTTP/APIクライアント/curl代替)
+  - `procs` (超高速プロセスビューア/ps代替)
+  - `difftastic` (`difft`) (AST構文木差分ビューア)
+  - `hexyl` (色分けバイナリ/Hexビューア)
+  - `uutils-coreutils` (Rust製GNUコア: `head`, `tail`, `wc`, `sort`, `uniq`, `cut`, `tr`)
   - `lazygit` + `delta` (TUI Git + 美麗差分)
   - `hunk` (AIエージェント向けTUI diffレビュー)
   - `herdr` (AI TUIマルチプレクサ)
   - `bottom` (TUIモニタ) / `dust` (容量可視化) / `duf` (ディスク一覧)
-  - `tealdeer` (高速tldr) / `just` (make代替)
+  - `tealdeer` (高速tldr) / `just` (make代替) / `hyperfine` (ベンチマーク)
 - **Editor / Formatter**:
   - `Helix` (モーダルエディタ) / `Cursor`
   - `Biome` (超高速 JS/TS Linter & Formatter)

@@ -1,4 +1,4 @@
-﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---
@@ -27,7 +27,15 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 
 # --- 4. Fast Non-Interactive Guard for AI Agents & Automation ---
 # Subprocesses spawned by Antigravity, Cursor, Claude Code, etc. return immediately here.
-if (-not [Environment]::UserInteractive -or $env:TERM_PROGRAM -eq "antigravity" -or $env:CI -eq "1" -or [Console]::IsInputRedirected) {
+$isNonInteractive = $false
+try {
+    if (-not [Environment]::UserInteractive -or $env:TERM_PROGRAM -eq "antigravity" -or $env:CI -eq "1" -or [Console]::IsInputRedirected) {
+        $isNonInteractive = $true
+    }
+} catch {
+    $isNonInteractive = $true
+}
+if ($isNonInteractive) {
     return
 }
 

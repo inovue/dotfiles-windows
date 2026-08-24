@@ -140,7 +140,9 @@ __MERMAID_CONTENT__
 
     if (which mermaid-ascii | is-not-empty) {
         $mmd | ^mermaid-ascii -x $pad_x -y $pad_y -p $border_p
-    } else {
+    } else if (which bunx | is-not-empty) {
         $mmd | ^bunx --bun mermaid-ascii -x $pad_x -y $pad_y -p $border_p
+    } else if (which npx | is-not-empty) {
+        $mmd | ^npx -y mermaid-ascii -x $pad_x -y $pad_y -p $border_p
     }
 }

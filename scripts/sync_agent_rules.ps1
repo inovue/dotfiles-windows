@@ -249,21 +249,25 @@ $projectClaudeMd = Join-Path $rootDir "CLAUDE.md"
 $projectCursorRules = Join-Path $rootDir ".cursorrules"
 
 $allTargets = @(
-    @{ Name = "Antigravity Global Rules";       Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "AGENTS.md"; IsDir = $false },
-    @{ Name = "Claude Code Global Rules";       Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "CLAUDE.md";        IsDir = $false },
-    @{ Name = "Cursor Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
-    @{ Name = "Antigravity Global Modern-CLI";  Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"; IsDir = $true },
-    @{ Name = "Claude Code Global Modern-CLI";  Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert";        IsDir = $true },
-    @{ Name = "Antigravity Global Browser-Agent"; Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"; IsDir = $true },
-    @{ Name = "Claude Code Global Browser-Agent"; Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent";        IsDir = $true },
-    @{ Name = "Antigravity Global Graphify-Nav"; Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-navigator"; IsDir = $true },
-    @{ Name = "Claude Code Global Graphify-Nav"; Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
-    @{ Name = "Agents Skills Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator"; IsDir = $true },
-    @{ Name = "Antigravity Always-on Graphify Rule"; Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
-    @{ Name = "Antigravity Graphify Workflow"; Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
-    @{ Name = "Cursor Always-on Graphify Rule"; Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
-    @{ Name = "Workspace Claude Code Guide";    Src = $projectAgentsMd; Dest = $projectClaudeMd;    IsDir = $false },
-    @{ Name = "Workspace Cursor Rules";         Src = $projectAgentsMd; Dest = $projectCursorRules; IsDir = $false }
+    @{ Name = "Antigravity Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "AGENTS.md"; IsDir = $false },
+    @{ Name = "Claude Code Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "CLAUDE.md";        IsDir = $false },
+    @{ Name = "Cursor Global Rules";                 Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
+    @{ Name = "Antigravity Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"; IsDir = $true },
+    @{ Name = "Claude Code Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert";        IsDir = $true },
+    @{ Name = "Agents Skills Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "modern-cli-expert";        IsDir = $true },
+    @{ Name = "Antigravity Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"; IsDir = $true },
+    @{ Name = "Claude Code Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent";        IsDir = $true },
+    @{ Name = "Agents Skills Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "browser-agent";        IsDir = $true },
+    @{ Name = "Antigravity Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-navigator"; IsDir = $true },
+    @{ Name = "Claude Code Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Agents Skills Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
+    @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
+    @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
+    @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
+    @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
+    @{ Name = "Workspace Claude Code Guide";         Src = $projectAgentsMd; Dest = $projectClaudeMd;    IsDir = $false },
+    @{ Name = "Workspace Cursor Rules";              Src = $projectAgentsMd; Dest = $projectCursorRules; IsDir = $false }
 )
 
 # Broad vendor "graphify" skills conflict with SSOT graphify-navigator.

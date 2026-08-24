@@ -49,10 +49,11 @@ Use the following modern tools for file system inspection, searching, refactorin
 - ❌ **NEVER** use `Get-ChildItem -Recurse -Filter *.ext`. Always use `fd -e ext`.
 - ❌ **NEVER** use `read_url_content` on GitHub repository web pages (e.g. `https://github.com/user/repo`). This returns 300KB+ of heavy HTML/JS/CSS, wastes tokens, and truncates the README. Use `gh repo view` or `git clone --depth 1` instead.
 - ❌ **NEVER** re-read (`view_file`) the same file multiple times across turns when the content is already in your conversation context. Reuse existing context or pinpoint lines with `rg -n`.
-- ❌ **NEVER** manually edit mirrored documentation files (`CLAUDE.md`, `.cursorrules`, etc.) individually. Always edit the master SSOT (`configs/agents/AGENTS.md`) and run `just sync-rules`.
+- ❌ **NEVER** manually edit mirrored documentation files (`CLAUDE.md`, `.cursorrules`, etc.) individually. Always edit the master SSOT (`configs/agents/AGENTS.md` for global rules, `AGENTS.md` for workspace rules) and run `just sync-rules`.
 - ❌ **NEVER** run commands that wait for user confirmation without an automatic yes flag (e.g., use `winget install --silent --accept-package-agreements`, `npm init -y`, `rm -Force`, `herdr plugin install ... --yes`).
 - ❌ **NEVER** leave pagers enabled on `git diff` or `git log`. Always use `git --no-pager diff` or set `GIT_PAGER=cat`.
-- ❌ **NEVER** use interactive editors (`vi`, `vim`, `nano`, `helix`) in automated agent subshells.
+- ❌ **NEVER** use interactive editors (`vi`, `vim`, `nano`, `helix`) or launch interactive TUI tools (`lazygit`, `herdr`, `btm`) in automated agent subshells.
+- ❌ **NEVER** run PowerShell without `-NoProfile -NonInteractive -ExecutionPolicy Bypass` in agent commands. Profile loading introduces latency, telemetry delays, and potential subshell hangs.
 
 ---
 

@@ -86,7 +86,7 @@ function Deploy-WindowsTerminalConfig {
         )
     }
     $fragmentJson = $fragmentObj | ConvertTo-Json -Depth 5
-    [System.IO.File]::WriteAllText((Join-Path $fragmentDir "nu.json"), $fragmentJson, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText((Join-Path $fragmentDir "nu.json"), $fragmentJson, [System.Text.UTF8Encoding]::new($false))
     Write-Host "[OK] Nushell dynamic profile fragment verified: $(Join-Path $fragmentDir 'nu.json')" -ForegroundColor Green
 
     $templateJson = Get-Content -Path $SrcPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -174,7 +174,7 @@ function Deploy-WindowsTerminalConfig {
                 Copy-Item -Path $DestPath -Destination $backupPath -Force
                 Write-Host ">> Backed up existing settings.json -> $backupPath" -ForegroundColor Gray
             }
-            [System.IO.File]::WriteAllText($DestPath, $mergedJson, [System.Text.Encoding]::UTF8)
+            [System.IO.File]::WriteAllText($DestPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
             Write-Host "[OK] Windows Terminal settings merged & applied: $DestPath" -ForegroundColor Green
         } else {
             Write-Host "  [OK] Windows Terminal settings are already up to date." -ForegroundColor DarkGray

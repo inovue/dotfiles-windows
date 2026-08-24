@@ -55,6 +55,14 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         Write-Host "   Installing latest stable Python via uv..." -ForegroundColor Gray
         uv python install 3.12 3.13
         Write-Host "[OK] Python 3.12/3.13 installed via uv." -ForegroundColor Green
+
+        # Install playwright for browser-agent
+        Write-Host "   Installing/Verifying playwright for browser automation..." -ForegroundColor Gray
+        uv pip install --system playwright 2>&1 | Out-Null
+        if (-not $?) {
+            pip install playwright 2>&1 | Out-Null
+        }
+        Write-Host "[OK] Playwright installed for browser-agent." -ForegroundColor Green
     } catch {
         Write-Warning "[WARN] Failed to configure uv: $_"
     }

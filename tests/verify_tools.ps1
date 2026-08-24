@@ -149,14 +149,22 @@ $configFiles = @(
     @{ Name = "Cursor Global Rules";                         Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
     @{ Name = "Antigravity Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Claude Code Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
+    @{ Name = "Agents Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Antigravity Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\browser-agent\SKILL.md" }
     @{ Name = "Claude Code Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".claude\skills\browser-agent\SKILL.md" }
+    @{ Name = "Agents Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".agents\skills\browser-agent\SKILL.md" }
+    @{ Name = "Antigravity Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Agents Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
+    @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
     @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
     @{ Name = "Agents always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".agents\rules\graphify.md" }
+    @{ Name = "Agents graphify workflow";                    Path = Join-Path $env:USERPROFILE ".agents\workflows\graphify.md" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
-    @{ Name = "PowerShell Profile";                          Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
+    @{ Name = "PowerShell 5.1 Profile";                      Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
+    @{ Name = "PowerShell 7 Profile";                        Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PowerShell") "Microsoft.PowerShell_profile.ps1" }
 )
 
 foreach ($cf in $configFiles) {
@@ -277,15 +285,18 @@ try {
     for ($i = 0; $i -lt 50; $i++) {
         $filePath = Join-Path $benchDir "file_$i.txt"
         $content = ($chunk * 20) + "TARGET_KEYWORD_UNIQUE_$i`n"
-        [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText($filePath, $content, [System.Text.UTF8Encoding]::new($false))
     }
+
+    # Warm-up OS filesystem cache once
+    $null = rg "TARGET_KEYWORD_UNIQUE" $benchDir 2>&1
 
     $sw1 = [System.Diagnostics.Stopwatch]::StartNew()
     $rgMatches = rg "TARGET_KEYWORD_UNIQUE" $benchDir 2>&1
     $sw1.Stop()
 
     $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
-    $psMatches = Get-ChildItem -Path $benchDir -Filter "*.txt" | Select-String "TARGET_KEYWORD_UNIQUE"
+    $psMatches = Get-ChildItem -Path $benchDir -Filter "*.txt" -Recurse | Select-String "TARGET_KEYWORD_UNIQUE"
     $sw2.Stop()
 
     Write-Host "  -> [Benchmark] rg execution time (all files):             $($sw1.ElapsedMilliseconds) ms" -ForegroundColor Cyan

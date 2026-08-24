@@ -1,4 +1,4 @@
-﻿param (
+param (
     [string]$ProfileName = "default"
 )
 
@@ -10,13 +10,15 @@ if (-not (Test-Path $profilePath)) {
     Write-Host "[+] Created new profile directory: $profilePath" -ForegroundColor Green
 }
 
+$chromeCmd = Get-Command chrome -ErrorAction SilentlyContinue
 $chromePaths = @(
+    $(if ($chromeCmd) { $chromeCmd.Source }),
     "C:\Program Files\Google\Chrome\Application\chrome.exe",
     "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-)
+) | Where-Object { $_ -and (Test-Path $_) }
 
-$chromeExe = $chromePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+$chromeExe = $chromePaths | Select-Object -First 1
 
 if (-not $chromeExe) {
     Write-Error "Google Chrome executable not found. Please ensure Chrome is installed."

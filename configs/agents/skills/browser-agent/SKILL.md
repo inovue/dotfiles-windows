@@ -77,12 +77,19 @@ Open a visible Chrome window to log into 2FA/Google/SSO and persist credentials:
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\setup_profile.ps1" -ProfileName "work"
 ```
 
+### Recipe 6: Capture Screenshot
+Capture a high-fidelity screenshot of any page (viewport or full-page):
+
+```powershell
+python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" screenshot --url "https://google.com" --output "screenshot.png" --profile temp --headless
+```
+
 ---
 
 ## 4. Error Handling & Recovery Runbook
 
 1. **Singleton Lock Detected**:
-   - If a previous Chrome crash left a lock file, rowser_runner.py automatically detects and clears stale SingletonLock files.
+   - If a previous Chrome crash left a lock file, `browser_runner.py` automatically detects and clears stale SingletonLock files.
 2. **Cloudflare / Bot Challenge Encountered**:
    - Run without --headless (visible mode) and prompt the user to resolve any interactive challenge, or use setup_profile.ps1 to solve it once in the persistent profile.
 3. **Dynamic SPA Loading Delays**:

@@ -128,6 +128,14 @@ async def execute_actions(page: Page, actions: List[Dict[str, Any]]) -> List[Dic
                 text = await page.inner_text(selector, timeout=timeout)
                 step_res["status"] = "success"
                 step_res["data"] = text
+            elif act_type == "screenshot":
+                path = act.get("path", "screenshot.png")
+                full_page = act.get("full_page", False)
+                out_path = Path(path).resolve()
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                await page.screenshot(path=str(out_path), full_page=full_page)
+                step_res["status"] = "success"
+                step_res["path"] = str(out_path)
             else:
                 step_res["status"] = "error"
                 step_res["error"] = f"Unknown action type: {act_type}"
@@ -138,6 +146,15 @@ async def execute_actions(page: Page, actions: List[Dict[str, Any]]) -> List[Dic
             break
         results.append(step_res)
     return results
+
+def normalize_url(url: str) -> str:
+    """Ensure URL has a valid protocol prefix (defaults to http for localhost, https otherwise)."""
+    url = url.strip()
+    if url.startswith(("http://", "https://", "file://", "data:", "about:")):
+        return url
+    if url.startswith(("localhost", "127.0.0.1", "0.0.0.0", "::1")):
+        return f"http://{url}"
+    return f"https://{url}"
 
 async def main():
     parser = argparse.ArgumentParser(description="Antigravity Ultra-Reliable Browser Runner")
@@ -163,6 +180,12 @@ async def main():
     p_eval = subparsers.add_parser("eval", help="Evaluate JavaScript inside page context")
     add_common_args(p_eval)
     p_eval.add_argument("--script", required=True, help="JavaScript function or expression to execute")
+
+    # 4. screenshot
+    p_screenshot = subparsers.add_parser("screenshot", help="Take a screenshot of the target page")
+    add_common_args(p_screenshot)
+    p_screenshot.add_argument("--output", "-o", default="screenshot.png", help="Path to save screenshot")
+    p_screenshot.add_argument("--full-page", action="store_true", help="Capture full scrollable page")
 
     args = parser.parse_args()
 
@@ -212,12 +235,25 @@ async def main():
         page = context.pages[0] if context.pages else await context.new_page()
 
         try:
-            await page.goto(args.url, wait_until="domcontentloaded", timeout=args.timeout)
+            target_url = normalize_url(args.url)
+            await page.goto(target_url, wait_until="domcontentloaded", timeout=args.timeout)
             # Give short buffer for hydration
             await asyncio.sleep(1.0)
 
             if args.command == "inspect":
                 output = await extract_a11y_tree(page)
+
+            elif args.command == "screenshot":
+                out_path = Path(args.output).resolve()
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                await page.screenshot(path=str(out_path), full_page=args.full_page)
+                output = {
+                    "status": "success",
+                    "title": await page.title(),
+                    "url": page.url,
+                    "screenshot_path": str(out_path),
+                    "full_page": args.full_page
+                }
 
             elif args.command == "act":
                 try:
@@ -249,9 +285,15 @@ async def main():
         except Exception as e:
             output = {"status": "error", "error": str(e)}
         finally:
-            await context.close()
+            try:
+                await context.close()
+            except Exception:
+                pass
             if temp_dir_obj:
-                temp_dir_obj.cleanup()
+                try:
+                    temp_dir_obj.cleanup()
+                except Exception:
+                    pass
 
     print(json.dumps(output, ensure_ascii=False, indent=2))
 

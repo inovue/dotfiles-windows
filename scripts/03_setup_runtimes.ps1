@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     インストールされたランタイム・CLIツールの初期化・セットアップを行います。
@@ -57,15 +57,24 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] uv is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 3. Rustup ---
-Write-Host "`n>> [3/5] Checking Rustup..." -ForegroundColor Cyan
+# --- 3. Rustup & Cargo Modern Tools (jaq) ---
+Write-Host "`n>> [3/5] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
 if (Get-Command rustup -ErrorAction SilentlyContinue) {
     try {
         Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
         rustup default stable
         Write-Host "[OK] Rust stable toolchain configured." -ForegroundColor Green
+
+        # Install jaq (Rust jq alternative) if not present
+        if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) {
+            Write-Host "   Installing jaq (Rust high-speed JSON processor) via cargo..." -ForegroundColor Gray
+            cargo install jaq --locked 2>&1 | Out-Null
+            Write-Host "[OK] jaq installed via cargo." -ForegroundColor Green
+        } else {
+            Write-Host "[OK] jaq is already installed." -ForegroundColor Green
+        }
     } catch {
-        Write-Warning "[WARN] Failed to configure rustup: $_"
+        Write-Warning "[WARN] Failed to configure rustup/cargo: $_"
     }
 } else {
     Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow

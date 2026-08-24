@@ -85,3 +85,14 @@ Use the following modern tools for file system inspection, searching, refactorin
 2. **Standardized Mermaid Code Blocks**:
    - When Mermaid syntax is used, always enclose it in standard fenced code blocks (` ```mermaid `) so the user's terminal renderer (`mm` in Nushell) can automatically detect and render it.
    - For complex architectures, ER diagrams, or detailed sequence flows, write the full diagram to a markdown artifact or documentation file where rich graphical rendering is supported.
+
+---
+
+## ⚡ 6. Agent Execution & Anti-Hang Guidelines (Zero-Freeze Policy)
+
+1. **Always Use `-NoProfile` for PowerShell Invocations**:
+   - When running PowerShell scripts or inline commands, always supply `-NoProfile -NonInteractive -ExecutionPolicy Bypass` (e.g. `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ...` or `pwsh -NoProfile ...`). This prevents module loading and telemetry delays that cause CLI timeouts.
+2. **Synchronous Execution Guarantee**:
+   - For CLI commands expected to finish quickly (< 10 seconds), always allocate the full synchronous wait limit (`WaitMsBeforeAsync: 10000`) to avoid unnecessary background task switches and turn drops.
+3. **Prefer Native Binaries over Heavy Subshells**:
+   - Use compiled utilities (`fd`, `rg`, `sd`, `difft`, `python -c`) directly instead of wrapping operations in nested `powershell -Command "..."` subshells.

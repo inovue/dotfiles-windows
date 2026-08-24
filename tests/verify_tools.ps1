@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     dotfiles-windows および AI Agent 高速化・安定化環境の網羅的自動テストスクリプト
@@ -113,19 +113,27 @@ Assert-Test -Name "EnvVar: BAT_PAGER is empty/disabled" -Condition $batPagerOk -
 Write-Host "`n[3/5] Checking AI Agent SSOT Rules & Dotfiles Deployment..." -ForegroundColor White
 
 $configFiles = @(
-    @{ Name = "Antigravity Global Rules"; Path = Join-Path $env:USERPROFILE ".gemini\config\AGENTS.md" }
-    @{ Name = "Claude Code Global Rules"; Path = Join-Path $env:USERPROFILE ".claude\CLAUDE.md" }
-    @{ Name = "Cursor Global Rules";       Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
-    @{ Name = "Workspace AGENTS.md";       Path = Join-Path $rootDir "AGENTS.md" }
-    @{ Name = "Workspace CLAUDE.md";       Path = Join-Path $rootDir "CLAUDE.md" }
-    @{ Name = "Workspace .cursorrules";    Path = Join-Path $rootDir ".cursorrules" }
-    @{ Name = "Nushell config.nu";         Path = Join-Path $env:APPDATA "nushell\config.nu" }
-    @{ Name = "Nushell env.nu";            Path = Join-Path $env:APPDATA "nushell\env.nu" }
-    @{ Name = "PowerShell Profile";        Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
-    @{ Name = "Antigravity Global Skill";  Path = Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Claude Code Global Skill";  Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Workspace Root Skill";      Path = Join-Path $rootDir ".agents\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Cursor MDC Rules";          Path = Join-Path $rootDir ".cursor\rules\modern-cli.mdc" }
+    # Workspace Level Files (for instant agent context)
+    @{ Name = "Workspace Project Guide (AGENTS.md)";         Path = Join-Path $rootDir "AGENTS.md" }
+    @{ Name = "Workspace Claude Guide (CLAUDE.md)";          Path = Join-Path $rootDir "CLAUDE.md" }
+    @{ Name = "Workspace Cursor Rules (.cursorrules)";       Path = Join-Path $rootDir ".cursorrules" }
+
+    # Master SSOT Configs
+    @{ Name = "Master SSOT Rules (configs/agents/AGENTS.md)"; Path = Join-Path $rootDir "configs\agents\AGENTS.md" }
+    @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
+    @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
+
+    # Global Deployed Targets
+    @{ Name = "Antigravity Global Rules";                    Path = Join-Path $env:USERPROFILE ".gemini\config\AGENTS.md" }
+    @{ Name = "Claude Code Global Rules";                    Path = Join-Path $env:USERPROFILE ".claude\CLAUDE.md" }
+    @{ Name = "Cursor Global Rules";                         Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
+    @{ Name = "Antigravity Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
+    @{ Name = "Antigravity Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\browser-agent\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".claude\skills\browser-agent\SKILL.md" }
+    @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
+    @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
+    @{ Name = "PowerShell Profile";                          Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
 )
 
 foreach ($cf in $configFiles) {
@@ -161,12 +169,20 @@ try {
     $sdOk = $replacedContent -match "VerifiedAgentSuccess"
     Assert-Test -Name "sd in-place regex replacement" -Condition $sdOk
 
-    # Test 4.4: jq JSON Processing
+    # Test 4.4: jaq & jq JSON Processing (Deterministic UTF-8 without BOM)
     $jsonFile = Join-Path $tempTestDir "test.json"
-    [System.IO.File]::WriteAllText($jsonFile, '{"agent": "antigravity", "speed": "extreme", "status": "active"}', [System.Text.Encoding]::UTF8)
-    $jqResult = jq -r ".speed" $jsonFile 2>&1 | Out-String
-    $jqOk = ($jqResult.Trim() -eq "extreme")
-    Assert-Test -Name "jq stream JSON evaluation" -Condition $jqOk
+    $jsonBytes = [System.Text.Encoding]::UTF8.GetBytes('{"agent": "antigravity", "speed": "extreme", "status": "active"}')
+    [System.IO.File]::WriteAllBytes($jsonFile, $jsonBytes)
+    $jaqCmd = Get-Command jaq -ErrorAction SilentlyContinue
+    if ($jaqCmd) {
+        $jaqResult = & jaq -r ".speed" $jsonFile 2>&1 | Out-String
+        $jaqOk = ($jaqResult.Trim() -eq "extreme")
+        Assert-Test -Name "jaq (Rust) stream JSON evaluation" -Condition $jaqOk
+    } else {
+        $jqResult = & jq -r ".speed" $jsonFile 2>&1 | Out-String
+        $jqOk = ($jqResult.Trim() -eq "extreme")
+        Assert-Test -Name "jq stream JSON evaluation" -Condition $jqOk
+    }
 
     # Test 4.5: ast-grep AST Pattern Matching
     $jsFile = Join-Path $tempTestDir "test.js"

@@ -8,18 +8,26 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 
 ```
 dotfiles-windows/
+├── AGENTS.md                       # 🧭 AIエージェント向けプロジェクトナビゲーション＆実行SSOT
+├── CLAUDE.md                       # Claude Code 用プロジェクトガイド（AGENTS.md同期）
+├── .cursorrules                    # Cursor 用プロジェクトルール（AGENTS.md同期）
+├── justfile                        # Just タスクランナー定義（sync-rules, deploy, test等）
 ├── install.ps1                     # 統合エントリポイント (全自動 or ステップ別実行)
-├── README.md                       # 本ドキュメント
+├── README.md                       # ユーザー向けドキュメント
 ├── tests/
 │   └── verify_tools.ps1            # 環境・モダンCLI・エージェント設定の網羅的自動テスト
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (日本語 + Nerd Fonts) 自動取得・登録
-│   ├── 03_setup_runtimes.ps1       # 3. fnm / uv / Rust / Agent環境変数 / ~/.local/bin の初期化
-│   └── 04_setup_configs.ps1        # 4. Dotfiles & AI Agent SSOT ルールの自動配備
+│   ├── 03_setup_runtimes.ps1       # 3. fnm / uv / Rust / jaq / Agent環境変数 / ~/.local/bin の初期化
+│   ├── 04_setup_configs.ps1        # 4. Dotfiles & AI Agent SSOT ルールの自動配備
+│   └── sync_agent_rules.ps1        # AI Agent ルール＆スキルの高速一括同期
 └── configs/
     ├── agents/                     # 🌟 AIエージェント単一マスタールール (SSOT)
-    │   └── AGENTS.md               # (Antigravity / Claude Code / Cursor / Codex 共通)
+    │   ├── AGENTS.md               # グローバル共通ルール (CLI置換表, 非対話, UTF-8, ゼロハング)
+    │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
+    │       ├── browser-agent/      # 実Chrome・a11y・プロファイル自動化
+    │       └── modern-cli-expert/  # ast-grep, sd, jaq, xh 高速レシピ
     ├── powershell/                 # PowerShell 設定 (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic 35NF, Catppuccin, Nushell既定)

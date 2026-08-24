@@ -1,87 +1,86 @@
-# AI Agent Operational Rules & Modern Tooling Guide (SSOT)
+# AI Agent Workspace Guide for `dotfiles-windows`
 
-> **Single Source of Truth (SSOT)**: This document defines mandatory guidelines, performance rules, and CLI conventions for all autonomous coding agents (Antigravity CLI, Cursor Agent, Claude Code, Codex CLI, etc.) operating in this workspace and across this Windows environment.
-
----
-
-## ⚡ 1. Core Directives & Performance Principles
-
-1. **Extreme Speed & Low Latency First**:
-   - Always prefer **compiled, native Rust/Go CLI utilities** (`rg`, `fd`, `sd`, `ast-grep`, `bat`, `jaq`/`jq`, `xh`, `procs`, `difft`, `uutils-coreutils`) over slow, interpreted commands or heavy PowerShell cmdlets.
-   - Streaming raw byte streams is 10x to 100x faster and consumes a fraction of the memory compared to PowerShell .NET object pipelines.
-
-2. **Non-Interactive & Zero-Hang Guarantee**:
-   - Never allow commands to invoke interactive pagers (`less`, `more`, interactive `bat`, interactive `git diff`).
-   - Always supply non-interactive / bypass flags (`--paging=never`, `--no-pager`, `-y`, `--yes`, `--force`) when executing terminal tools.
-
-3. **Deterministic UTF-8 Text Processing**:
-   - Assume all code and text files are UTF-8. Avoid tools that output legacy Windows codepages (Shift-JIS/CP932) or add unexpected UTF-16 BOMs.
+> **Project Context & Operational Map**: This document equips coding agents (Antigravity, Cursor, Claude Code, Codex) with instant context, directory maps, and modification rules to prevent context drift, unnecessary file traversal, and token waste.
 
 ---
 
-## 🛠 2. Tool Replacement Matrix & Preferred Commands
+## 🧭 1. Architectural Principles & Single Source of Truth (SSOT)
 
-Use the following modern tools for file system inspection, searching, refactoring, and data processing:
-
-| Task | ❌ Anti-Pattern (Slow / Risky) | ⚡ Preferred Modern Command | Notes & Flags |
-| :--- | :--- | :--- | :--- |
-| **Content Search** | `Select-String`, `findstr`, `grep -r` | `rg -n "pattern" [path]` | Use `rg -l` for file paths only, `rg -i` for case-insensitive, `rg -t <type>` for language filters. |
-| **File / Dir Search** | `Get-ChildItem -Recurse`, `find . -name` | `fd "pattern" [path]` | Use `fd -t f` (files), `fd -t d` (dirs), `fd -e <ext>` (extensions), `fd -H` (hidden). |
-| **File Viewing** | `Get-Content`, `type`, `cat`, `more` | `bat --paging=never --style=plain [file]` | `--paging=never` prevents terminal hangs; `--style=plain` saves tokens. |
-| **Line Limits** | `Get-Content -Head 20` | `head -n 20 [file]` / `tail -n 20 [file]` | Powered by native `uutils-coreutils`. |
-| **Text Replace** | `sed -i "s/a/b/g"`, custom scripts | `sd 'regex_find' 'replacement' [file]` | Ultra-fast in-place regex substitution without escaping headaches. |
-| **AST / Code Refactor** | Multi-line regex grep / Python scripts | `ast-grep -p 'pattern' -r 'replacement'` | Syntax-tree aware search & replace across JS/TS, Python, Rust, Go, HTML, CSS. |
-| **JSON Querying** | `ConvertFrom-Json`, custom node scripts | `jaq '.path.to.key' [file.json]` / `jq` | `jaq` (Rust) is 10x faster than C jq; zero-dependency stream parsing. |
-| **HTTP / API Queries** | `curl -X POST -H ...`, `Invoke-WebRequest` | `xh [METHOD] [URL] [key=val]` | Ultra-fast Rust HTTP client; auto JSON parsing, clean syntax, no header boilerplate. |
-| **Process Inspection** | `Get-Process`, `tasklist`, `ps` | `procs [query/PID/port]` | Instant PID, tree hierarchy, port binding (`procs :8080`), and memory inspection. |
-| **Syntax Tree Diff** | Line-based `git diff` / `diff` | `difft [file1] [file2]` | AST-aware structural diffing; ignores cosmetic whitespace/formatting changes. |
-| **Line / Word Count** | `Measure-Object -Line` | `wc -l [file]` / `wc -w [file]` | Fast byte/line counting via uutils. |
-| **Sorting / Uniq** | `Sort-Object -Unique` | `sort.exe [file] \| uniq.exe` | Avoid PowerShell object overhead. |
-| **Directory Tree** | `tree /F`, `dir /s` | `eza --tree --level=2 --icons=never` | Fast directory visualization. |
-| **Benchmarking** | `Measure-Command` | `hyperfine "cmd1" "cmd2"` | Accurate, statistical CLI performance measurement. |
-| **Binary / Hex View** | `Format-Hex`, `xxd` | `hexyl [file]` | Colored byte inspection. |
+1. **All Master Configurations Live in `configs/`**:
+   - **NEVER** edit deployed files directly in `$env:APPDATA`, `$env:LOCALAPPDATA`, `$HOME/.gemini/config`, or `$HOME/.claude/`.
+   - Always modify the template/source files under `configs/` inside this repository.
+2. **Deterministic Deployment via `just`**:
+   - After modifying configurations in `configs/`:
+     - Run `just deploy` to apply changes to user and application directories.
+     - Run `just sync-rules` to propagate AI agent rules & skills.
+     - Run `just test` to verify complete environment and configuration integrity.
+3. **Zero-Guessing Directory Map**:
+   - Consult the directory map below before searching files with `fd` or `rg` to save tokens.
 
 ---
 
-## 🚫 3. Prohibited Commands & Anti-Patterns
+## 🗺️ 2. Repository Quick Map (Token-Saving Structure)
 
-- ❌ **NEVER** pipe `Get-Content` into `Select-String` (e.g. `Get-Content file.txt | Select-String "foo"`). This loads the entire file into .NET objects in memory. Always use `rg "foo" file.txt`.
-- ❌ **NEVER** use `Get-ChildItem -Recurse -Filter *.ext`. Always use `fd -e ext`.
-- ❌ **NEVER** run commands that wait for user confirmation without an automatic yes flag (e.g., use `winget install --silent --accept-package-agreements`, `npm init -y`, `rm -Force`).
-- ❌ **NEVER** leave pagers enabled on `git diff` or `git log`. Always use `git --no-pager diff` or set `GIT_PAGER=cat`.
-- ❌ **NEVER** use interactive editors (`vi`, `vim`, `nano`, `helix`) in automated agent subshells.
+```text
+dotfiles-windows/
+├── AGENTS.md                  # Project-level agent navigation & workflow guide (This file)
+├── CLAUDE.md                  # Claude Code workspace navigation (Synced with AGENTS.md)
+├── .cursorrules               # Cursor agent rules (Synced with SSOT)
+├── justfile                   # Just task runner definitions
+├── README.md                  # Human & Agent user documentation
+├── install.ps1                # Master installer entrypoint (-All / -Step N / -UseSymlinks)
+│
+├── configs/                   # 🌟 SINGLE SOURCE OF TRUTH (SSOT) FOR ALL CONFIGS
+│   ├── agents/                # AI Agent master rules & skills
+│   │   ├── AGENTS.md          # Global AI agent rules (CLI replacement matrix, zero-hang rules)
+│   │   └── skills/            # Progressive disclosure agent skills
+│   │       ├── browser-agent/ # Real Chrome automation engine (a11y tree, stealth, profiles)
+│   │       └── modern-cli-expert/ # AST refactoring (ast-grep), sd, jaq, xh recipes
+│   ├── helix/                 # Helix editor (config.toml, languages.toml)
+│   ├── herdr/                 # Herdr AI TUI multiplexer (config.toml)
+│   ├── lazygit/               # Lazygit TUI + Delta config (config.yml)
+│   ├── nushell/               # Nushell (config.nu, env.nu)
+│   ├── powershell/            # PowerShell 5.1 & 7 profile (Microsoft.PowerShell_profile.ps1)
+│   ├── starship/              # Starship prompt (starship.toml)
+│   └── windows-terminal/      # Windows Terminal template (settings.json)
+│
+├── scripts/                   # Modular automation & setup scripts
+│   ├── 01_winget_packages.ps1 # Winget package bulk installation
+│   ├── 02_install_fonts.ps1   # UDEV Gothic 35NF automatic download & font registry
+│   ├── 03_setup_runtimes.ps1  # fnm, uv, rustup, jaq, env vars, ~/.local/bin shims
+│   ├── 04_setup_configs.ps1   # Deploy configs/ to $APPDATA, profiles, and Windows Terminal
+│   └── sync_agent_rules.ps1   # Fast sync configs/agents/ to Antigravity/Claude/Cursor globals
+│
+└── tests/
+    └── verify_tools.ps1       # Comprehensive automated integration, UTF-8 & speed test suite
+```
 
 ---
 
-## 🛡 4. Non-Interactive Execution Best Practices
+## ⚡ 3. Agent Command Matrix
 
-1. **Environment Variables**:
-   The system has configured:
-   - `PAGER=cat`
-   - `BAT_PAGER=""`
-   - `BAT_STYLE=plain`
-   - `GIT_PAGER=cat`
-   - `DELTA_PAGER=cat`
-   - `PYTHONUTF8=1`
-   Even with these environment variables, it is best practice to pass `--paging=never` and `--no-pager` when calling CLI tools to guarantee non-interactive completion.
+Always use these `just` commands instead of constructing manual shell commands:
 
-2. **Cross-Platform Path Separators**:
-   - Modern Rust/Go CLI utilities (`rg`, `fd`, `sd`, `ast-grep`, `bat`, `jaq`, `jq`, `xh`, `difft`) fully support standard forward slashes `/` on Windows (e.g. `rg "fn main" src/main.rs`).
-   - Use standard forward slashes `/` or double-quoted paths for paths containing spaces.
-
-3. **Shell Independence**:
-   - Keep command lines compatible across PowerShell, Git Bash, and Nushell by invoking native CLI binaries directly rather than relying on shell-specific internal scripting functions.
+| Command | Purpose | When to Run |
+| :--- | :--- | :--- |
+| `just test` | Run full automated test suite (CLI binaries, env vars, rules sync, UTF-8, benchmarks) | Before & after making changes |
+| `just deploy` | Deploy all `configs/` to user profile directories and Windows Terminal | After updating any file in `configs/` |
+| `just sync-rules` | Synchronize AI rules and skills to global paths & project mirrors | After editing `configs/agents/` |
+| `just check-rules`| Check if deployed rules match master SSOT without modifying files | During CI or pre-flight verification |
+| `just install` | Run full clean setup (Packages, Fonts, Runtimes, Configs) | On fresh machine installation |
 
 ---
 
-## 📊 5. Terminal Diagram & Mermaid Output Policy (Cognitive Load Reduction)
+## 🛡️ 4. Execution & Safety Rules
 
-1. **Terminal-Friendly Direct Diagrams**:
-   - When presenting architecture, data flows, or state machines in terminal conversational responses, **prefer clean Unicode Box Drawing diagrams (`┌─┐`, `│`, `──►`) directly in the response** to minimize user cognitive load.
-   - Always enclose Unicode diagrams in standard plaintext code blocks (` ```text `) to prevent UI syntax highlighters from misinterpreting characters as syntax errors or displaying invalid colors.
-   - **East Asian Width (2:1) Rule**: When including Japanese (full-width / CJK) characters in Unicode box diagrams, strictly treat full-width characters as **width 2** and half-width characters as **width 1** so that box borders (`│`, `┌─┐`) align perfectly without horizontal displacement.
-   - For simple flows (3–5 nodes), inline Unicode art provides instant comprehension without requiring external tools.
-
-2. **Standardized Mermaid Code Blocks**:
-   - When Mermaid syntax is used, always enclose it in standard fenced code blocks (` ```mermaid `) so the user's terminal renderer (`mm` in Nushell) can automatically detect and render it.
-   - For complex architectures, ER diagrams, or detailed sequence flows, write the full diagram to a markdown artifact or documentation file where rich graphical rendering is supported.
+1. **PowerShell Non-Interactive Flags**:
+   - Always run PowerShell commands with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`.
+   - In `justfile`, `set windows-shell := ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]` is already configured.
+2. **Compiled Modern Tools Over PowerShell Cmdlets**:
+   - `rg -n "term"` instead of `Select-String`
+   - `fd -t f "pattern"` instead of `Get-ChildItem -Recurse`
+   - `sd 'find' 'replace' file` instead of `sed` or string replacement scripts
+   - `jaq` or `jq` instead of `ConvertFrom-Json`
+3. **UTF-8 & Non-Interactive Pagers**:
+   - Ensure all generated code and text files are saved in UTF-8 without BOM.
+   - Never invoke interactive pagers or editors.

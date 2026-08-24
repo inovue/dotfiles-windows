@@ -235,74 +235,6 @@ $deployTargets = @(
         Name = "PowerShell Profile (PowerShell 7 - pwsh)"
         Src  = Join-Path $configsDir "powershell\Microsoft.PowerShell_profile.ps1"
         Dest = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PowerShell") "Microsoft.PowerShell_profile.ps1"
-    },
-    # AI Agent SSOT Rules (Antigravity, Claude Code, Cursor, Workspace Root)
-    @{
-        Name = "Antigravity Global Agent Rules (~/.gemini/config/AGENTS.md)"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "AGENTS.md"
-    },
-    @{
-        Name = "Claude Code Global Agent Rules (~/.claude/CLAUDE.md)"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "CLAUDE.md"
-    },
-    @{
-        Name = "Cursor Global Agent Rules (AppData/Cursor/User/AGENTS.md)"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md"
-    },
-    @{
-        Name = "Workspace Root AGENTS.md"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path $rootDir "AGENTS.md"
-    },
-    @{
-        Name = "Workspace Root CLAUDE.md"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path $rootDir "CLAUDE.md"
-    },
-    @{
-        Name = "Workspace Root .cursorrules"
-        Src  = Join-Path $configsDir "agents\AGENTS.md"
-        Dest = Join-Path $rootDir ".cursorrules"
-    },
-    # AI Agent Global & Workspace Skills (modern-cli-expert)
-    @{
-        Name = "Antigravity Global Skill (modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"
-    },
-    @{
-        Name = "Claude Code Global Skill (modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert"
-    },
-    @{
-        Name = "Workspace Root Skill (.agents/skills/modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
-        Dest = Join-Path (Join-Path $rootDir ".agents\skills") "modern-cli-expert"
-    },
-    @{
-        Name = "Cursor MDC Rules (.cursor/rules/modern-cli.mdc)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert\SKILL.md"
-        Dest = Join-Path (Join-Path $rootDir ".cursor\rules") "modern-cli.mdc"
-    },
-    # AI Agent Global & Workspace Skills (browser-agent)
-    @{
-        Name = "Antigravity Global Skill (browser-agent)"
-        Src  = Join-Path $configsDir "agents\skills\browser-agent"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"
-    },
-    @{
-        Name = "Claude Code Global Skill (browser-agent)"
-        Src  = Join-Path $configsDir "agents\skills\browser-agent"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent"
-    },
-    @{
-        Name = "Workspace Root Skill (.agents/skills/browser-agent)"
-        Src  = Join-Path $configsDir "agents\skills\browser-agent"
-        Dest = Join-Path (Join-Path $rootDir ".agents\skills") "browser-agent"
     }
 )
 
@@ -392,5 +324,9 @@ foreach ($target in $deployTargets) {
         Write-Host "[OK] Copied file: $($target.Dest)" -ForegroundColor Green
     }
 }
+
+# 3. AI Agent SSOT ルール & スキルの同期とゼロ複製リンク
+Write-Host "`n>> Step 4.2: Synchronizing AI Agent SSOT Rules & Skills..." -ForegroundColor Magenta
+& (Join-Path $PSScriptRoot "sync_agent_rules.ps1")
 
 Write-Host "`n[DONE] Configuration deployment step finished." -ForegroundColor Green

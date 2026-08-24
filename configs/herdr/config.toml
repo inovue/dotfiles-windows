@@ -1,0 +1,14 @@
+﻿# Herdr Configuration (AI TUI Multiplexer)
+
+onboarding = false
+
+[theme]
+name = "catppuccin"
+
+[terminal]
+# Set Nushell as default shell for interactive panes
+default_shell = "nu"
+
+[experimental]
+# Windows IME friendly: switch input source during prefix mode
+switch_ascii_input_source_in_prefix = true

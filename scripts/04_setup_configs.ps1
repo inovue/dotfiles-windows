@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     configs/ ディレクトリ内の各種ツール設定ファイル（Dotfiles）をユーザー環境に配置します。
@@ -207,6 +207,11 @@ $deployTargets = @(
         Name = "Lazygit (config.yml)"
         Src  = Join-Path $configsDir "lazygit\config.yml"
         Dest = Join-Path $env:LOCALAPPDATA "lazygit\config.yml"
+    },
+    @{
+        Name = "Herdr (config.toml)"
+        Src  = Join-Path $configsDir "herdr\config.toml"
+        Dest = Join-Path $env:APPDATA "herdr\config.toml"
     }
 )
 

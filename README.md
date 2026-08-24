@@ -14,7 +14,7 @@ dotfiles-windows/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (日本語 + Nerd Fonts) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm(Node) / uv(Python) / Rust の初期化
-│   └── 04_setup_configs.ps1        # 4. Windows Terminal/Helix/Nushell/Starship 設定配備
+│   └── 04_setup_configs.ps1        # 4. Windows Terminal/Helix/Nushell/Starship/Herdr 設定配備
 └── configs/
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic 35NF, Catppuccin, Nushell既定)
     │   └── settings.json
@@ -25,7 +25,8 @@ dotfiles-windows/
     │   ├── config.nu
     │   └── env.nu
     ├── starship/starship.toml      # Starship 美麗プロンプト設定
-    └── lazygit/config.yml          # Lazygit + Delta 連携設定
+    ├── lazygit/config.yml          # Lazygit + Delta 連携設定
+    └── herdr/config.toml           # Herdr 設定 (Nushell既定, Catppuccin, IME対策)
 ```
 
 ---

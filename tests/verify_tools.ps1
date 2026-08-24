@@ -65,6 +65,8 @@ $toolsToCheck = @(
     @{ Cmd = "procs";    Name = "procs (ps viewer)";  Args = "--version" }
     @{ Cmd = "jaq";      Name = "jaq (Rust jq)";      Args = "--version" }
     @{ Cmd = "hexyl";    Name = "hexyl (hex viewer)"; Args = "--version" }
+    @{ Cmd = "glow";     Name = "glow (Markdown)";    Args = "--version" }
+    @{ Cmd = "chafa";    Name = "chafa (Sixel/Image)";Args = "--version" }
 )
 
 foreach ($tool in $toolsToCheck) {
@@ -172,6 +174,11 @@ try {
     $astResult = ast-grep -p "function calculate(`$A) { `$`$`$B }" $jsFile 2>&1 | Out-String
     $astOk = $astResult -match "function calculate"
     Assert-Test -Name "ast-grep AST pattern match" -Condition $astOk
+
+    # Test 4.6: Mermaid ASCII Diagram Rendering
+    $mmdResult = nu -c '"graph TD\n  A[Client] --> B[Server]" | ^bunx --bun mermaid-ascii' 2>&1 | Out-String
+    $mmdOk = $mmdResult -match "Client" -and $mmdResult -match "Server"
+    Assert-Test -Name "Mermaid ASCII diagram rendering" -Condition $mmdOk -Details ($mmdResult.Trim())
 
 } finally {
     Remove-Item -Path $tempTestDir -Recurse -Force -ErrorAction SilentlyContinue

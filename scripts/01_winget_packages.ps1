@@ -51,6 +51,8 @@ $packageGroups = [ordered]@{
         @{ Id = "ducaale.xh";                Name = "xh (超高速HTTP/APIクライアント/curl代替)" }
         @{ Id = "dalance.procs";             Name = "procs (超高速プロセスビューア/ps代替)" }
         @{ Id = "sharkdp.hexyl";             Name = "hexyl (色分けバイナリ/Hexビューア)" }
+        @{ Id = "charmbracelet.glow";        Name = "glow (ターミナルMarkdownリッチレンダラー)" }
+        @{ Id = "hpjansson.Chafa";           Name = "Chafa (超高速ターミナル画像/Sixelレンダラー)" }
     )
 
     "Editors_DevTools" = @(

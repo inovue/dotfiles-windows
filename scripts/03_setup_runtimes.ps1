@@ -84,10 +84,14 @@ if (Get-Command tldr -ErrorAction SilentlyContinue) {
     Write-Host "[SKIP] tldr is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 5. Hunk (TUI Diff Reviewer for AI Agents) ---
-Write-Host "`n>> [5/5] Installing Hunk (hunkdiff)..." -ForegroundColor Cyan
+# --- 5. Hunk & Mermaid-ASCII CLI ---
+Write-Host "`n>> [5/6] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
 try {
-    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+    if (Get-Command bun -ErrorAction SilentlyContinue) {
+        Write-Host "   Installing hunkdiff and mermaid-ascii via bun..." -ForegroundColor Gray
+        bun add -g hunkdiff mermaid-ascii 2>&1 | Out-Null
+        Write-Host "[OK] hunkdiff and mermaid-ascii installed via bun." -ForegroundColor Green
+    } elseif (Get-Command pnpm -ErrorAction SilentlyContinue) {
         # PNPM_HOME と bin ディレクトリの自動設定（未設定時のエラー防止）
         $pnpmHome = [System.Environment]::GetEnvironmentVariable("PNPM_HOME", "User")
         if (-not $pnpmHome) {
@@ -110,22 +114,18 @@ try {
 
         pnpm setup 2>&1 | Out-Null
 
-        Write-Host "   Installing hunkdiff via pnpm..." -ForegroundColor Gray
-        pnpm add -g hunkdiff
-        Write-Host "[OK] hunkdiff installed via pnpm." -ForegroundColor Green
-    } elseif (Get-Command bun -ErrorAction SilentlyContinue) {
-        Write-Host "   Installing hunkdiff via bun..." -ForegroundColor Gray
-        bun add -g hunkdiff
-        Write-Host "[OK] hunkdiff installed via bun." -ForegroundColor Green
+        Write-Host "   Installing hunkdiff & mermaid-ascii via pnpm..." -ForegroundColor Gray
+        pnpm add -g hunkdiff mermaid-ascii
+        Write-Host "[OK] hunkdiff and mermaid-ascii installed via pnpm." -ForegroundColor Green
     } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
-        Write-Host "   Installing hunkdiff via npm..." -ForegroundColor Gray
-        npm install -g hunkdiff
-        Write-Host "[OK] hunkdiff installed via npm." -ForegroundColor Green
+        Write-Host "   Installing hunkdiff & mermaid-ascii via npm..." -ForegroundColor Gray
+        npm install -g hunkdiff mermaid-ascii
+        Write-Host "[OK] hunkdiff and mermaid-ascii installed via npm." -ForegroundColor Green
     } else {
-        Write-Host "[SKIP] Node/Bun package manager not in PATH yet. Run 'pnpm add -g hunkdiff' after restarting terminal." -ForegroundColor Yellow
+        Write-Host "[SKIP] Node/Bun package manager not in PATH yet." -ForegroundColor Yellow
     }
 } catch {
-    Write-Warning "[WARN] Failed to install hunkdiff: $_"
+    Write-Warning "[WARN] Failed to install CLI utilities: $_"
 }
 
 # --- 6. AI Agent Environment Variables & Non-Interactive Safety ---
@@ -173,10 +173,10 @@ $shimSourceDirs = @(
     "$env:USERPROFILE\.cargo\bin"
 )
 
-# Search WinGet Packages for ast-grep, sd, and other tools if not already linked
+# Search WinGet Packages for ast-grep, sd, chafa, glow and other tools if not already linked
 $wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
 if (Test-Path $wingetPkgDir) {
-    $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe" -ErrorAction SilentlyContinue
+    $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe", "Chafa.exe", "chafa.exe", "glow.exe" -ErrorAction SilentlyContinue
     foreach ($f in $foundExes) {
         $shimPath = Join-Path $localBinDir $f.Name
         if (-not (Test-Path $shimPath)) {

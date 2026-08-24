@@ -71,3 +71,17 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 3. **Shell Independence**:
    - Keep command lines compatible across PowerShell, Git Bash, and Nushell by invoking native CLI binaries directly rather than relying on shell-specific internal scripting functions.
+
+---
+
+## 📊 5. Terminal Diagram & Mermaid Output Policy (Cognitive Load Reduction)
+
+1. **Terminal-Friendly Direct Diagrams**:
+   - When presenting architecture, data flows, or state machines in terminal conversational responses, **prefer clean Unicode Box Drawing diagrams (`┌─┐`, `│`, `──►`) directly in the response** to minimize user cognitive load.
+   - Always enclose Unicode diagrams in standard plaintext code blocks (` ```text `) to prevent UI syntax highlighters from misinterpreting characters as syntax errors or displaying invalid colors.
+   - **East Asian Width (2:1) Rule**: When including Japanese (full-width / CJK) characters in Unicode box diagrams, strictly treat full-width characters as **width 2** and half-width characters as **width 1** so that box borders (`│`, `┌─┐`) align perfectly without horizontal displacement.
+   - For simple flows (3–5 nodes), inline Unicode art provides instant comprehension without requiring external tools.
+
+2. **Standardized Mermaid Code Blocks**:
+   - When Mermaid syntax is used, always enclose it in standard fenced code blocks (` ```mermaid `) so the user's terminal renderer (`mm` in Nushell) can automatically detect and render it.
+   - For complex architectures, ER diagrams, or detailed sequence flows, write the full diagram to a markdown artifact or documentation file where rich graphical rendering is supported.

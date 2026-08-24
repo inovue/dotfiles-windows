@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     dotfiles-windows および AI Agent 高速化・安定化環境の網羅的自動テストスクリプト

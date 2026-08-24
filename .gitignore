@@ -1,18 +1,97 @@
-# Temporary / Backup files
+# =============================================================================
+#  dotfiles-windows - Git Ignore Configuration
+# =============================================================================
+
+# --- 1. Temporary & Backup Files ---
 *.bak
 *.bak_*
+*.backup
+*.old
+*.orig
 *.tmp
+*.temp
+*.swp
+*.swo
+*~
 *.log
+transcript*.txt
 
-# OS generated files
+# --- 2. OS & Windows Generated Files ---
 Thumbs.db
 ehthumbs.db
-Desktop.ini
+[Dd]esktop.ini
 $RECYCLE.BIN/
 .DS_Store
 
-# Secrets & Local credentials (safety measure)
+# --- 3. Secrets & Credentials (Security Protection) ---
 *.key
 *.pem
+*.crt
+*.pfx
+*.p12
+*.kdbx
 *.env
 .env.*
+!*.env.example
+*.token
+id_rsa*
+id_ed25519*
+
+# --- 4. Python Runtime & Virtual Environments (browser-agent & scripts) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+
+# --- 5. Browser Automation & Profile Caches (browser-agent) ---
+chrome-profile/
+.browser-profile/
+Default/
+Crashpad/
+GrShaderCache/
+ShaderCache/
+BrowserMetrics/
+
+# --- 6. Node.js & Rust Build Artifacts ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+target/
+
+# --- 7. Editor & IDE Caches ---
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project

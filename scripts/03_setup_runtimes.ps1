@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     インストールされたランタイム・CLIツールの初期化・セットアップを行います。

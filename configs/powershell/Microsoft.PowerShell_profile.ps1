@@ -1,4 +1,4 @@
-# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---

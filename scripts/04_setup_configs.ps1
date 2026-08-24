@@ -3,11 +3,16 @@
 .SYNOPSIS
     configs/ ディレクトリ内の各種ツール設定ファイル（Dotfiles）をユーザー環境に配置します。
 .DESCRIPTION
-    既存の設定ファイルが存在する場合は .bak バックアップを作成してから配置します。
+    configs/ 内の設定をユーザー環境に配置します。ファイル変更時のみ単一の .bak バックアップを作成します。
+.PARAMETER UseSymlinks
+    コピーではなくシンボリックリンクを作成します。
+.PARAMETER Backup
+    既存ファイル変更時に .bak バックアップを作成します（デフォルト: 有効）。
 #>
 [CmdletBinding()]
 param(
-    [switch]$UseSymlinks
+    [switch]$UseSymlinks,
+    [bool]$Backup = $true
 )
 
 $ErrorActionPreference = "Continue"
@@ -87,15 +92,13 @@ function Deploy-WindowsTerminalConfig {
     $templateJson = Get-Content -Path $SrcPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
     if (Test-Path $DestPath) {
-        $backupPath = "$($DestPath).bak_$(Get-Date -Format 'yyyyMMddHHmmss')"
-        Write-Host ">> Backing up existing settings.json -> $backupPath" -ForegroundColor Gray
-        Copy-Item -Path $DestPath -Destination $backupPath -Force
-
         try {
             $destJson = Get-Content -Path $DestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $origJsonStr = $destJson | ConvertTo-Json -Depth 10
         } catch {
             Write-Warning "Existing settings.json could not be parsed. Overwriting with template."
             $destJson = $templateJson
+            $origJsonStr = ""
         }
 
         # defaultProfile を Nushell ({47302f9c-1ac4-566c-aa3e-8cf29889d6ab}) に設定
@@ -165,8 +168,17 @@ function Deploy-WindowsTerminalConfig {
         $destJson.theme = "dark"
 
         $mergedJson = $destJson | ConvertTo-Json -Depth 10
-        [System.IO.File]::WriteAllText($DestPath, $mergedJson, [System.Text.Encoding]::UTF8)
-        Write-Host "[OK] Windows Terminal settings merged & applied: $DestPath" -ForegroundColor Green
+        if ($origJsonStr -ne $mergedJson) {
+            if ($Backup) {
+                $backupPath = "$DestPath.bak"
+                Copy-Item -Path $DestPath -Destination $backupPath -Force
+                Write-Host ">> Backed up existing settings.json -> $backupPath" -ForegroundColor Gray
+            }
+            [System.IO.File]::WriteAllText($DestPath, $mergedJson, [System.Text.Encoding]::UTF8)
+            Write-Host "[OK] Windows Terminal settings merged & applied: $DestPath" -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] Windows Terminal settings are already up to date." -ForegroundColor DarkGray
+        }
     } else {
         Copy-Item -Path $SrcPath -Destination $DestPath -Force
         Write-Host "[OK] Windows Terminal settings copied: $DestPath" -ForegroundColor Green
@@ -258,29 +270,45 @@ $deployTargets = @(
     # AI Agent Global & Workspace Skills (modern-cli-expert)
     @{
         Name = "Antigravity Global Skill (modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert\SKILL.md"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert") "SKILL.md"
+        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
+        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"
     },
     @{
         Name = "Claude Code Global Skill (modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert\SKILL.md"
-        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert") "SKILL.md"
+        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
+        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert"
     },
     @{
         Name = "Workspace Root Skill (.agents/skills/modern-cli-expert)"
-        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert\SKILL.md"
-        Dest = Join-Path (Join-Path $rootDir ".agents\skills\modern-cli-expert") "SKILL.md"
+        Src  = Join-Path $configsDir "agents\skills\modern-cli-expert"
+        Dest = Join-Path (Join-Path $rootDir ".agents\skills") "modern-cli-expert"
     },
     @{
         Name = "Cursor MDC Rules (.cursor/rules/modern-cli.mdc)"
         Src  = Join-Path $configsDir "agents\skills\modern-cli-expert\SKILL.md"
         Dest = Join-Path (Join-Path $rootDir ".cursor\rules") "modern-cli.mdc"
+    },
+    # AI Agent Global & Workspace Skills (browser-agent)
+    @{
+        Name = "Antigravity Global Skill (browser-agent)"
+        Src  = Join-Path $configsDir "agents\skills\browser-agent"
+        Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"
+    },
+    @{
+        Name = "Claude Code Global Skill (browser-agent)"
+        Src  = Join-Path $configsDir "agents\skills\browser-agent"
+        Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent"
+    },
+    @{
+        Name = "Workspace Root Skill (.agents/skills/browser-agent)"
+        Src  = Join-Path $configsDir "agents\skills\browser-agent"
+        Dest = Join-Path (Join-Path $rootDir ".agents\skills") "browser-agent"
     }
 )
 
 foreach ($target in $deployTargets) {
     if (-not (Test-Path $target.Src)) {
-        Write-Warning "[SKIP] Source file not found: $($target.Src)"
+        Write-Warning "[SKIP] Source not found: $($target.Src)"
         continue
     }
 
@@ -289,25 +317,78 @@ foreach ($target in $deployTargets) {
         New-Item -Path $destDir -ItemType Directory -Force | Out-Null
     }
 
-    # 既存ファイルのバックアップ
-    if (Test-Path $target.Dest) {
-        $backupPath = "$($target.Dest).bak_$(Get-Date -Format 'yyyyMMddHHmmss')"
-        Write-Host ">> Backing up existing $($target.Name) -> $backupPath" -ForegroundColor Gray
+    $isDir = Test-Path -PathType Container $target.Src
+
+    if (-not $UseSymlinks -and (Test-Path $target.Dest)) {
+        if ($isDir) {
+            $isIdentical = $true
+            $srcFiles = Get-ChildItem -Path $target.Src -Recurse -File
+            foreach ($sFile in $srcFiles) {
+                $rel = $sFile.FullName.Substring($target.Src.Length).TrimStart('\', '/')
+                $dFilePath = Join-Path $target.Dest $rel
+                if (-not (Test-Path $dFilePath)) { $isIdentical = $false; break }
+                $sBytes = [System.IO.File]::ReadAllBytes($sFile.FullName)
+                $dBytes = [System.IO.File]::ReadAllBytes($dFilePath)
+                if ($sBytes.Length -ne $dBytes.Length) { $isIdentical = $false; break }
+                for ($i = 0; $i -lt $sBytes.Length; $i++) {
+                    if ($sBytes[$i] -ne $dBytes[$i]) { $isIdentical = $false; break }
+                }
+                if (-not $isIdentical) { break }
+            }
+            if ($isIdentical) {
+                Write-Host "  [OK] $($target.Name) is already up to date." -ForegroundColor DarkGray
+                continue
+            }
+        } else {
+            $srcBytes = [System.IO.File]::ReadAllBytes($target.Src)
+            $destBytes = [System.IO.File]::ReadAllBytes($target.Dest)
+            $isIdentical = $false
+            if ($srcBytes.Length -eq $destBytes.Length) {
+                $isIdentical = $true
+                for ($i = 0; $i -lt $srcBytes.Length; $i++) {
+                    if ($srcBytes[$i] -ne $destBytes[$i]) {
+                        $isIdentical = $false
+                        break
+                    }
+                }
+            }
+            if ($isIdentical) {
+                Write-Host "  [OK] $($target.Name) is already up to date." -ForegroundColor DarkGray
+                continue
+            }
+        }
+    }
+
+    # 既存ファイルのバックアップ (変更がある場合のみ、単一の .bak を作成)
+    if ($Backup -and (Test-Path $target.Dest) -and -not $isDir) {
+        $backupPath = "$($target.Dest).bak"
         Copy-Item -Path $target.Dest -Destination $backupPath -Force
+        Write-Host ">> Backed up existing $($target.Name) -> $backupPath" -ForegroundColor Gray
     }
 
     Write-Host ">> Deploying $($target.Name)..." -ForegroundColor Cyan
     if ($UseSymlinks) {
         try {
+            if (Test-Path $target.Dest) { Remove-Item -Path $target.Dest -Recurse -Force }
             New-Item -ItemType SymbolicLink -Path $target.Dest -Target $target.Src -Force | Out-Null
             Write-Host "[OK] Symlink created: $($target.Dest)" -ForegroundColor Green
         } catch {
             Write-Warning "Failed to create symlink (Developer Mode/Admin required). Copying instead."
-            Copy-Item -Path $target.Src -Destination $target.Dest -Force
+            if ($isDir) {
+                if (-not (Test-Path $target.Dest)) { New-Item -Path $target.Dest -ItemType Directory -Force | Out-Null }
+                Copy-Item -Path "$($target.Src)\*" -Destination $target.Dest -Recurse -Force
+            } else {
+                Copy-Item -Path $target.Src -Destination $target.Dest -Force
+            }
             Write-Host "[OK] Copied file: $($target.Dest)" -ForegroundColor Green
         }
     } else {
-        Copy-Item -Path $target.Src -Destination $target.Dest -Force
+        if ($isDir) {
+            if (-not (Test-Path $target.Dest)) { New-Item -Path $target.Dest -ItemType Directory -Force | Out-Null }
+            Copy-Item -Path "$($target.Src)\*" -Destination $target.Dest -Recurse -Force
+        } else {
+            Copy-Item -Path $target.Src -Destination $target.Dest -Force
+        }
         Write-Host "[OK] Copied file: $($target.Dest)" -ForegroundColor Green
     }
 }

@@ -28,6 +28,7 @@ $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
 $masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
 $masterCursorRulesDir = Join-Path $configsDir "agents\cursor\rules"
+$masterCursorHooks = Join-Path $configsDir "agents\cursor\hooks.json"
 $masterAgentsDir = Join-Path $configsDir "agents"
 $masterHooks = Join-Path $masterAgentsDir "hooks.json"
 $masterAgentGuard = Join-Path $rootDir "scripts\agent_guard.py"
@@ -256,21 +257,27 @@ $allTargets = @(
     @{ Name = "Cursor Global Rules";                 Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
     @{ Name = "Antigravity Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"; IsDir = $true },
     @{ Name = "Claude Code Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert";        IsDir = $true },
+    @{ Name = "Cursor Global Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Agents Skills Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Antigravity Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"; IsDir = $true },
     @{ Name = "Claude Code Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent";        IsDir = $true },
+    @{ Name = "Cursor Global Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "browser-agent";        IsDir = $true },
     @{ Name = "Agents Skills Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "browser-agent";        IsDir = $true },
     @{ Name = "Antigravity Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-navigator"; IsDir = $true },
     @{ Name = "Claude Code Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Cursor Global Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Agents Skills Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
+    @{ Name = "Workspace Cursor Rule (MDC)";         Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $rootDir ".cursor\rules") "graphify.mdc"; IsDir = $false },
     @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false },
     @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false },
     @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false },
+    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false },
+    @{ Name = "Workspace Cursor Hooks";              Src = $masterCursorHooks; Dest = Join-Path (Join-Path $rootDir ".cursor") "hooks.json"; IsDir = $false },
     @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
@@ -282,6 +289,7 @@ $allTargets = @(
 $vendorGraphifySkillDirs = @(
     (Join-Path $env:USERPROFILE ".agents\skills\graphify")
     (Join-Path $env:USERPROFILE ".claude\skills\graphify")
+    (Join-Path $env:USERPROFILE ".cursor\skills\graphify")
     (Join-Path $env:USERPROFILE ".gemini\config\skills\graphify")
     (Join-Path $env:USERPROFILE ".codex\skills\graphify")
     (Join-Path $env:USERPROFILE ".config\opencode\skills\graphify")
@@ -290,6 +298,7 @@ $vendorGraphifySkillDirs = @(
     (Join-Path $env:USERPROFILE ".kimi\skills\graphify")
     (Join-Path $rootDir ".agents\skills\graphify")
     (Join-Path $rootDir ".claude\skills\graphify")
+    (Join-Path $rootDir ".cursor\skills\graphify")
 )
 
 foreach ($target in $allTargets) {
@@ -330,7 +339,9 @@ foreach ($target in $allTargets) {
 $mcpTargets = @(
     (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
     (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
+    (Join-Path $env:USERPROFILE ".cursor\mcp.json")
     (Join-Path $rootDir ".agents\mcp_config.json")
+    (Join-Path $rootDir ".cursor\mcp.json")
 )
 
 Write-Host "`n>> Graphify MCP (merge; absolute graphify-mcp path)..." -ForegroundColor Cyan

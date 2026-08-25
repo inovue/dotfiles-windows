@@ -141,6 +141,7 @@ $configFiles = @(
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
     @{ Name = "Master Cursor graphify rule";                 Path = Join-Path $rootDir "configs\agents\cursor\rules\graphify.mdc" }
+    @{ Name = "Master Cursor hooks";                         Path = Join-Path $rootDir "configs\agents\cursor\hooks.json" }
     @{ Name = "Master Antigravity MCP template";             Path = Join-Path $rootDir "configs\agents\antigravity\mcp_config.json" }
 
     # Global Deployed Targets
@@ -149,16 +150,20 @@ $configFiles = @(
     @{ Name = "Cursor Global Rules";                         Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
     @{ Name = "Antigravity Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Claude Code Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
+    @{ Name = "Cursor Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Agents Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Antigravity Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\browser-agent\SKILL.md" }
     @{ Name = "Claude Code Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".claude\skills\browser-agent\SKILL.md" }
+    @{ Name = "Cursor Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\browser-agent\SKILL.md" }
     @{ Name = "Agents Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Antigravity Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Cursor Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Agents Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
     @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
     @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
+    @{ Name = "Workspace Cursor Rule (.cursor/rules/graphify.mdc)"; Path = Join-Path $rootDir ".cursor\rules\graphify.mdc" }
     @{ Name = "Agents always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".agents\rules\graphify.md" }
     @{ Name = "Agents graphify workflow";                    Path = Join-Path $env:USERPROFILE ".agents\workflows\graphify.md" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
@@ -171,6 +176,8 @@ $configFiles = @(
     @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
     @{ Name = "Workspace hooks (.agents/hooks.json)";        Path = Join-Path $rootDir ".agents\hooks.json" }
     @{ Name = "Antigravity global hooks";                    Path = Join-Path $env:USERPROFILE ".gemini\config\hooks.json" }
+    @{ Name = "Cursor Global hooks";                         Path = Join-Path $env:USERPROFILE ".cursor\hooks.json" }
+    @{ Name = "Workspace Cursor hooks (.cursor/hooks.json)"; Path = Join-Path $rootDir ".cursor\hooks.json" }
 )
 
 foreach ($cf in $configFiles) {

@@ -55,7 +55,7 @@ def save_state(conv_id: str, state: dict):
         pass
 
 def inspect_run_command(args: dict) -> dict:
-    cmd = args.get("CommandLine", "")
+    cmd = args.get("CommandLine") or args.get("command") or args.get("cmd") or args.get("script") or ""
     for pattern, reason in DANGEROUS_PATTERNS:
         if re.search(pattern, cmd, re.IGNORECASE):
             return {
@@ -71,9 +71,9 @@ def inspect_run_command(args: dict) -> dict:
     return {"decision": "allow"}
 
 def inspect_view_file(args: dict, conv_id: str) -> dict:
-    target_path = args.get("AbsolutePath") or args.get("TargetFile") or ""
-    start_line = args.get("StartLine")
-    end_line = args.get("EndLine")
+    target_path = args.get("AbsolutePath") or args.get("TargetFile") or args.get("path") or args.get("file_path") or args.get("filename") or ""
+    start_line = args.get("StartLine") or args.get("start_line") or args.get("offset")
+    end_line = args.get("EndLine") or args.get("end_line") or args.get("limit")
 
     if not target_path:
         return {"decision": "allow"}
@@ -113,7 +113,7 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
     return {"decision": "allow"}
 
 def inspect_write_to_file(args: dict) -> dict:
-    target_file = args.get("TargetFile", "")
+    target_file = args.get("TargetFile") or args.get("path") or args.get("file_path") or ""
     metadata = args.get("ArtifactMetadata")
     
     # If writing to workspace project files (not in brain/artifact folder) with ArtifactMetadata
@@ -137,27 +137,27 @@ def main():
             return
 
         payload = json.loads(raw_input)
-        tool_call = payload.get("toolCall", {})
-        tool_name = tool_call.get("name", "")
-        args = tool_call.get("args", {})
-        conv_id = payload.get("conversationId", "default")
+        tool_call = payload.get("toolCall") or payload.get("tool_call") or payload
+        tool_name = (tool_call.get("name") or tool_call.get("tool_name") or payload.get("name") or "").lower()
+        args = tool_call.get("args") or tool_call.get("arguments") or tool_call.get("parameters") or payload.get("args") or payload.get("input") or {}
+        conv_id = payload.get("conversationId") or payload.get("conversation_id") or "default"
 
-        if tool_name == "run_command":
+        if tool_name in ["run_command", "bash", "execute_command", "powershell", "terminal", "exec"]:
             res = inspect_run_command(args)
             print(json.dumps(res))
             return
 
-        if tool_name == "view_file":
+        if tool_name in ["view_file", "readfile", "read_file", "view", "cat", "get_content"]:
             res = inspect_view_file(args, conv_id)
             print(json.dumps(res))
             return
 
-        if tool_name == "write_to_file":
+        if tool_name in ["write_to_file", "writefile", "write_file", "write", "create_file"]:
             res = inspect_write_to_file(args)
             print(json.dumps(res))
             return
 
-        if tool_name in ["replace_file_content", "edit_file"]:
+        if tool_name in ["replace_file_content", "editfile", "edit_file", "edit", "str_replace_editor"]:
             # On file edits, reset read budget for the next iteration cycle
             state = load_state(conv_id)
             state["reads"] = []

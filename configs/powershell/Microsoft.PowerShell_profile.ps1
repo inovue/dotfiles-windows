@@ -1,4 +1,4 @@
-﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---
@@ -32,6 +32,17 @@ foreach ($k in $aiKeys) {
         $v = [System.Environment]::GetEnvironmentVariable($k, "User")
         if ($v) { [System.Environment]::SetEnvironmentVariable($k, $v, "Process") }
     }
+}
+
+# Ensure ~/.local/bin is in PATH for fnm, modern CLI tools, and runtime shims
+$localBin = Join-Path $env:USERPROFILE ".local\bin"
+if ((Test-Path $localBin) -and ($env:Path -notlike "*$localBin*")) {
+    $env:Path = "$localBin;$env:Path"
+}
+
+# Initialize fnm (Fast Node Manager) for Node.js / npm / pnpm resolution
+if (Get-Command fnm -ErrorAction SilentlyContinue) {
+    fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 }
 
 # --- 4. Fast Non-Interactive Guard for AI Agents & Automation ---

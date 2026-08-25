@@ -20,6 +20,18 @@ if ($local_bin | path exists) {
     $env.PATH = ($env.PATH | split row (char esep) | prepend $local_bin)
 }
 
+# Initialize fnm (Fast Node Manager) for Node.js / npm / npx / pnpm resolution
+if (which fnm | is-not-empty) {
+    try {
+        let fnm_env = (fnm env --json | from json)
+        if ($fnm_env.FNM_MULTISHELL_PATH? | is-not-empty) {
+            $env.FNM_MULTISHELL_PATH = $fnm_env.FNM_MULTISHELL_PATH
+            $env.FNM_DIR = $fnm_env.FNM_DIR
+            $env.PATH = ($env.PATH | split row (char esep) | prepend $fnm_env.FNM_MULTISHELL_PATH)
+        }
+    }
+}
+
 # Starship & Zoxide initialization
 let autoload_dir = ($nu.data-dir | path join "vendor/autoload")
 if not ($autoload_dir | path exists) {

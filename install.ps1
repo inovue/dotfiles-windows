@@ -50,6 +50,19 @@ if (-not (Test-IsAdmin)) {
     Write-Warning "一部のパッケージインストールやシンボリックリンク作成には管理者権限を推奨します。"
 }
 
+# PowerShell スクリプト実行ポリシーの確認・自動設定（CurrentUser）
+try {
+    Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue
+    $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser -ErrorAction SilentlyContinue
+    if ($null -eq $currentPolicy -or $currentPolicy -eq "Undefined" -or $currentPolicy -eq "Restricted") {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+    }
+} catch {
+    try {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" | Out-Null
+    } catch {}
+}
+
 $stepsToRun = @()
 if ($All -or $Step -eq "All") {
     $stepsToRun = @("1", "2", "3", "4")

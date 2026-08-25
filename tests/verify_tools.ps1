@@ -73,6 +73,11 @@ $toolsToCheck = @(
     @{ Cmd = "herdr";        Name = "Herdr (AI TUI)";     Args = "--version" }
     @{ Cmd = "cursor-agent"; Name = "Cursor Agent CLI";   Args = "--version" }
     @{ Cmd = "agent";        Name = "Cursor Agent Alias"; Args = "--version" }
+    @{ Cmd = "fnm";          Name = "fnm (Node Manager)"; Args = "--version" }
+    @{ Cmd = "node";         Name = "Node.js (node)";     Args = "--version" }
+    @{ Cmd = "npm";          Name = "npm";                Args = "--version" }
+    @{ Cmd = "npx";          Name = "npx (Package Runner)"; Args = "--version" }
+    @{ Cmd = "pnpm";         Name = "pnpm";               Args = "--version" }
 )
 
 foreach ($tool in $toolsToCheck) {

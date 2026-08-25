@@ -329,4 +329,24 @@ foreach ($target in $deployTargets) {
 Write-Host "`n>> Step 4.2: Synchronizing AI Agent SSOT Rules & Skills..." -ForegroundColor Magenta
 & (Join-Path $PSScriptRoot "sync_agent_rules.ps1")
 
+# 4. PowerShell ExecutionPolicy の検証・自動設定 (プロファイル読込の永続保証)
+Write-Host "`n>> Step 4.3: Verifying PowerShell ExecutionPolicy for CurrentUser..." -ForegroundColor Magenta
+try {
+    Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue
+    $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser -ErrorAction SilentlyContinue
+    if ($null -eq $currentPolicy -or $currentPolicy -eq "Undefined" -or $currentPolicy -eq "Restricted") {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Configured CurrentUser ExecutionPolicy to RemoteSigned." -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] CurrentUser ExecutionPolicy is already $currentPolicy." -ForegroundColor DarkGray
+    }
+} catch {
+    try {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force"
+        Write-Host "[OK] Configured CurrentUser ExecutionPolicy to RemoteSigned." -ForegroundColor Green
+    } catch {
+        Write-Warning "[WARN] Could not set CurrentUser ExecutionPolicy: $_"
+    }
+}
+
 Write-Host "`n[DONE] Configuration deployment step finished." -ForegroundColor Green

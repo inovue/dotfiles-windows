@@ -407,11 +407,53 @@ function Build-LocalBinShims {
         $env:Path = "$localBinDir;$env:Path"
     }
 
+    # fnm default node shims (provides permanent node/npm/npx/corepack fallback in ~/.local/bin for all shells & IDEs)
+    $fnmDefaultDir = "$env:APPDATA\fnm\aliases\default"
+    if (-not (Test-Path (Join-Path $fnmDefaultDir "node.exe"))) {
+        $fnmVersionsDir = "$env:APPDATA\fnm\node-versions"
+        if (Test-Path $fnmVersionsDir) {
+            $latestNode = Get-ChildItem -Path $fnmVersionsDir -Directory | Where-Object { $_.Name -like "v*" } | Sort-Object Name -Descending | Select-Object -First 1
+            if ($latestNode) {
+                $fnmDefaultDir = Join-Path $latestNode.FullName "installation"
+            }
+        }
+    }
+
+    if (Test-Path (Join-Path $fnmDefaultDir "node.exe")) {
+        # Copy standalone node.exe
+        $nodeDest = Join-Path $localBinDir "node.exe"
+        if (Test-Path $nodeDest) { Remove-Item $nodeDest -Force -ErrorAction SilentlyContinue }
+        Copy-Item -Path (Join-Path $fnmDefaultDir "node.exe") -Destination $nodeDest -Force -ErrorAction SilentlyContinue | Out-Null
+
+        # Create forwarder wrappers for npm, npx, corepack so %~dp0 relative path to node_modules is preserved
+        foreach ($tool in @("npm", "npx", "corepack")) {
+            $cmdPath = Join-Path $localBinDir "$tool.cmd"
+            $ps1Path = Join-Path $localBinDir "$tool.ps1"
+            if (Test-Path $cmdPath) { Remove-Item $cmdPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $ps1Path) { Remove-Item $ps1Path -Force -ErrorAction SilentlyContinue }
+
+            $cmdContent = "@echo off`r`nif exist `"%APPDATA%\fnm\aliases\default\$tool.cmd`" (`r`n  `"%APPDATA%\fnm\aliases\default\$tool.cmd`" %*`r`n) else (`r`n  echo [ERROR] Node.js / $tool not found in fnm default installation. >&2`r`n  exit /b 1`r`n)"
+            $ps1Content = "`$target = `"`$env:APPDATA\fnm\aliases\default\$tool.cmd`"`r`nif (Test-Path `$target) {`r`n    & `$target @args`r`n} else {`r`n    Write-Error `"$tool could not be resolved from fnm default installation.`"`r`n    exit 1`r`n}"
+
+            Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII -Force
+            Set-Content -Path $ps1Path -Value $ps1Content -Encoding ASCII -Force
+        }
+    }
+
+    # Cursor Agent CLI resilient wrappers in ~/.local/bin (delegates execution to %LOCALAPPDATA%\cursor-agent to find index.js)
+    $cursorAgentCmd = "$env:LOCALAPPDATA\cursor-agent\cursor-agent.cmd"
+    $agentCmd = "$env:LOCALAPPDATA\cursor-agent\agent.cmd"
+    if (Test-Path $agentCmd) {
+        "@echo off`r`n`"$cursorAgentCmd`" %*" | Set-Content -Path (Join-Path $localBinDir "cursor-agent.cmd") -Encoding ASCII
+        "@echo off`r`n`"$agentCmd`" %*" | Set-Content -Path (Join-Path $localBinDir "agent.cmd") -Encoding ASCII
+        "& `"$cursorAgentCmd`" @args" | Set-Content -Path (Join-Path $localBinDir "cursor-agent.ps1") -Encoding ASCII
+        "& `"$agentCmd`" @args" | Set-Content -Path (Join-Path $localBinDir "agent.ps1") -Encoding ASCII
+    }
+
     $shimSourceDirs = @(
         "C:\Program Files\coreutils\bin",
         "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
-        "$env:USERPROFILE\.cargo\bin",
-        "$env:LOCALAPPDATA\cursor-agent"
+        "$env:USERPROFILE\.cargo\bin"
     )
 
     $wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
@@ -427,7 +469,7 @@ function Build-LocalBinShims {
 
     foreach ($srcDir in $shimSourceDirs) {
         if (Test-Path $srcDir) {
-            $exes = Get-ChildItem -Path $srcDir -Include "*.exe", "*.cmd" -File -ErrorAction SilentlyContinue
+            $exes = Get-ChildItem -Path "$srcDir\*" -Include "*.exe", "*.cmd", "*.ps1" -File -ErrorAction SilentlyContinue
             foreach ($exe in $exes) {
                 $shimPath = Join-Path $localBinDir $exe.Name
                 if (-not (Test-Path $shimPath)) {
@@ -440,7 +482,7 @@ function Build-LocalBinShims {
             }
         }
     }
-    Write-Host "[OK] Modern CLI and Coreutils shims verified in $localBinDir." -ForegroundColor Green
+    Write-Host "[OK] Modern CLI, Coreutils, and Node shims verified in $localBinDir." -ForegroundColor Green
 }
 
 if ($OnlyRtk) {

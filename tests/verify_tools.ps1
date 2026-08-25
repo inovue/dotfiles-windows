@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     dotfiles-windows および AI Agent 高速化・安定化環境の網羅的自動テストスクリプト
@@ -165,12 +165,25 @@ $configFiles = @(
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
     @{ Name = "PowerShell 5.1 Profile";                      Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
     @{ Name = "PowerShell 7 Profile";                        Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PowerShell") "Microsoft.PowerShell_profile.ps1" }
+    @{ Name = "Script: setup_api_keys.ps1";                  Path = Join-Path $rootDir "scripts\setup_api_keys.ps1" }
 )
 
 foreach ($cf in $configFiles) {
     $exists = Test-Path $cf.Path
     Assert-Test -Name "Config: $($cf.Name) exists" -Condition $exists -Details "Path: $($cf.Path)"
 }
+
+# Verify all PowerShell scripts parse cleanly in PowerShell AST (BOM & syntax check)
+$allPsScripts = Get-ChildItem -Path (Join-Path $rootDir "scripts") -Filter "*.ps1" -File
+foreach ($psScript in $allPsScripts) {
+    $parseErrors = $null
+    $parseTokens = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($psScript.FullName, [ref]$parseTokens, [ref]$parseErrors)
+    $parseOk = ($parseErrors.Count -eq 0)
+    $errDetail = if ($parseOk) { "Parsed successfully" } else { ($parseErrors | ForEach-Object { $_.Message }) -join "; " }
+    Assert-Test -Name "PS Script AST parse: $($psScript.Name)" -Condition $parseOk -Details $errDetail
+}
+
 
 # MCP must use absolute graphify-mcp on all merge targets (uv tool run is ~8x slower and PATH-fragile)
 $mcpPathsToCheck = @(

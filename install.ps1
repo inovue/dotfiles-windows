@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Windows モダン開発環境 (Nushell, Helix, Rust/Go CLI) 統合セットアップスクリプト
@@ -89,3 +89,5 @@ Write-Host "`n==========================================================" -Foreg
 Write-Host "   Setup Completed!                                       " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "推奨: ターミナル (Windows Terminal) を再起動してください。" -ForegroundColor Yellow
+Write-Host "ヒント: AI Agent / Graphify の API キーを設定する場合は ``just setup-keys`` を実行してください。" -ForegroundColor DarkGray
+

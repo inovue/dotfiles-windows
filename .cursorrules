@@ -52,6 +52,7 @@ dotfiles-windows/
 │   ├── 02_install_fonts.ps1   # UDEV Gothic 35NF automatic download & font registry
 │   ├── 03_setup_runtimes.ps1  # fnm, uv, rustup, jaq, env vars, ~/.local/bin shims
 │   ├── 04_setup_configs.ps1   # Deploy configs/ to $APPDATA, profiles, and Windows Terminal
+│   ├── setup_api_keys.ps1     # Secure standalone API key setup (Windows User Environment)
 │   └── sync_agent_rules.ps1   # Fast sync configs/agents/ to Antigravity/Claude/Cursor globals
 │
 └── tests/
@@ -71,6 +72,8 @@ Always use these `just` commands instead of constructing manual shell commands:
 | `just sync-rules` | Synchronize AI rules and skills to global paths & project mirrors | After editing `configs/agents/` |
 | `just check-rules`| Check if deployed rules match master SSOT without modifying files | During CI or pre-flight verification |
 | `just install` | Run full clean setup (Packages, Fonts, Runtimes, Configs) | On fresh machine installation |
+| `just setup-keys` | Securely configure AI Agent & Graphify API keys in Windows User Environment | When adding or updating API keys |
+
 
 ---
 
@@ -84,6 +87,8 @@ Always use these `just` commands instead of constructing manual shell commands:
    - `fd -t f "pattern"` instead of `Get-ChildItem -Recurse`
    - `sd 'find' 'replace' file` instead of `sed` or string replacement scripts
    - `jaq` or `jq` instead of `ConvertFrom-Json`
-3. **UTF-8 & Non-Interactive Pagers**:
-   - Ensure all generated code and text files are saved in UTF-8 without BOM.
+3. **UTF-8 & PowerShell (.ps1) Encoding**:
+   - Ensure all generated code, configs, and text files are saved in UTF-8.
+   - **Critical for PowerShell (.ps1)**: Windows PowerShell 5.1 (`powershell.exe`) defaults to Shift-JIS/CP932 for BOM-less files. Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent parser crashes (e.g. `TerminatorExpectedAtEndOfString`).
    - Never invoke interactive pagers or editors.
+

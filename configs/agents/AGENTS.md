@@ -77,6 +77,12 @@ Use the following modern tools for file system inspection, searching, refactorin
    - Keep command lines strictly Windows-native (PowerShell 7 / Nushell / compiled native `.exe`).
    - Do not invoke or deliberate over Linux/macOS bash scripts when inspecting cross-platform configurations.
 
+4. **PowerShell (.ps1) Scripts & UTF-8 with BOM**:
+   - Legacy Windows PowerShell 5.1 (`powershell.exe`) defaults to Shift-JIS (CP932) for BOM-less files. Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent parser crashes (e.g. `TerminatorExpectedAtEndOfString`).
+   - Standard code/data files (Rust, JS/TS, Python, JSON, YAML, Markdown) remain UTF-8 without BOM.
+   - When creating or editing `.ps1` scripts with Japanese text, ensure BOM is preserved and verify AST parsing via `just test`.
+
+
 ---
 
 ## 📊 5. Terminal Diagram & Mermaid Output Policy (Cognitive Load Reduction)

@@ -27,3 +27,8 @@ test:
 # Run the full setup process (Winget, Fonts, Runtimes, Configs)
 install:
     @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -All
+
+# Securely configure AI Agent & Graphify API keys in Windows User Environment
+setup-keys:
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
+

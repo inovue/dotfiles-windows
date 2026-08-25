@@ -45,6 +45,7 @@ dotfiles-windows/
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, Graphify, Rustup, jaq, hunkdiff, herdr-sidebar, Cursor Agent CLI, 安全環境変数, ~/.local/bin シム初期化
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles (Windows Terminal, Helix, Nushell, PowerShell等) & AI Agent SSOT ルールの自動配備
+│   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査＆クリーンアップ (テスト, SSOT同期, グラフ健全性, ゴミ検知)
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 AI Agent ルール＆スキルの高速一括同期 (正本 -> 全グローバル/ワークスペース)
 └── configs/
@@ -135,6 +136,8 @@ just install
 | `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles: Windows Terminal, Helix, Nushell, Profiles）および AI Agent ルールの一括配備 (`just deploy`) |
 | `just sync-rules` | AI Agent ルール＆スキルのみを高速一括同期 (`.\scripts\sync_agent_rules.ps1`) |
 | `just setup-keys` | AI Agent & Graphify 用 API キーの安全な対話型登録 (`.\scripts\setup_api_keys.ps1`) |
+| `just audit` | 🌟 4フェーズ統合監査（テスト+SSOT同期+グラフ健全性+ゴミ検知）の実行 (`.\scripts\audit_workspace.ps1`) |
+| `just clean` | 一時ファイル・古いバックアップ（`*.bak`）・キャッシュの一括消去 (`.\scripts\audit_workspace.ps1 -Clean`) |
 | `just test` | 環境全体の整合性・ツール動作確認・ベンチマークテスト (`.\tests\verify_tools.ps1`) |
 
 ---

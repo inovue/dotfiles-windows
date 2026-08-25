@@ -142,6 +142,7 @@ $configFiles = @(
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Master rtk-expert Skill";                     Path = Join-Path $rootDir "configs\agents\skills\rtk-expert\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
+    @{ Name = "Master Claude settings";                      Path = Join-Path $rootDir "configs\agents\claude\settings.json" }
     @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
     @{ Name = "Master Cursor graphify rule";                 Path = Join-Path $rootDir "configs\agents\cursor\rules\graphify.mdc" }
     @{ Name = "Master Cursor hooks";                         Path = Join-Path $rootDir "configs\agents\cursor\hooks.json" }
@@ -168,6 +169,7 @@ $configFiles = @(
     @{ Name = "Cursor Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert\SKILL.md" }
     @{ Name = "Agents Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".agents\skills\rtk-expert\SKILL.md" }
     @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
+    @{ Name = "Claude Code Global Settings";                 Path = Join-Path $env:USERPROFILE ".claude\settings.json" }
     @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
     @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
     @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }

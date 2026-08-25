@@ -14,7 +14,10 @@
     - AI Agent 安全環境変数 & ~/.local/bin シム構築
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$OnlyRtk,
+    [switch]$Force
+)
 
 $ErrorActionPreference = "Continue"
 
@@ -135,6 +138,7 @@ function Install-RustupJaq {
 }
 
 function Install-RtkCli {
+    param([switch]$Force)
     Write-Host "`n>> [5/11] Checking RTK (Rust Token Killer - LLM Token Optimizer CLI)..." -ForegroundColor Cyan
     $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
     $rtkExe = Join-Path $localBinDir "rtk.exe"
@@ -143,24 +147,46 @@ function Install-RtkCli {
         New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
     }
 
-    $installed = $false
+    $currentVersion = $null
     if (Test-Path $rtkExe) {
         try {
-            $ver = & $rtkExe --version 2>&1
-            if ($LASTEXITCODE -eq 0 -and $ver -like "*rtk*") {
-                Write-Host "[OK] RTK is already installed: $ver" -ForegroundColor Green
-                $installed = $true
+            $verOutput = & $rtkExe --version 2>&1
+            if ($LASTEXITCODE -eq 0 -and $verOutput -match "rtk\s+([\d\.]+)") {
+                $currentVersion = $Matches[1]
             }
         } catch {
-            $installed = $false
+            $currentVersion = $null
         }
     }
 
-    if (-not $installed) {
-        Write-Host "   Downloading pre-built RTK binary from GitHub releases..." -ForegroundColor Gray
+    # Query latest release from GitHub API
+    $latestTag = $null
+    $release = $null
+    try {
+        $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
+        $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction SilentlyContinue
+        if ($release -and $release.tag_name) {
+            $latestTag = $release.tag_name.TrimStart('v')
+        }
+    } catch {}
+
+    $needsInstall = ($null -eq $currentVersion) -or $Force
+    if ($currentVersion -and $latestTag -and ($currentVersion -ne $latestTag)) {
+        Write-Host "   Update available for RTK: v$currentVersion -> v$latestTag" -ForegroundColor Yellow
+        $needsInstall = $true
+    } elseif ($currentVersion -and (-not $Force)) {
+        Write-Host "[OK] RTK is up to date (v$currentVersion)." -ForegroundColor Green
+        return
+    }
+
+    if ($needsInstall) {
+        Write-Host "   Downloading RTK binary$(if ($latestTag) { " (v$latestTag)" }) from GitHub releases..." -ForegroundColor Gray
+        $installed = $false
         try {
-            $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
-            $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction Stop
+            if (-not $release) {
+                $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
+                $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction Stop
+            }
             $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
             if ($asset) {
                 $downloadUrl = $asset.browser_download_url
@@ -172,7 +198,8 @@ function Install-RtkCli {
                 if ($extractedExe) {
                     Copy-Item -Path $extractedExe.FullName -Destination $rtkExe -Force
                     Remove-Item -Path $tempZip, $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-Host "[OK] RTK binary installed to $rtkExe." -ForegroundColor Green
+                    $newVer = & $rtkExe --version 2>&1
+                    Write-Host "[OK] RTK binary updated: $newVer" -ForegroundColor Green
                     $installed = $true
                 }
             }
@@ -414,6 +441,12 @@ function Build-LocalBinShims {
         }
     }
     Write-Host "[OK] Modern CLI and Coreutils shims verified in $localBinDir." -ForegroundColor Green
+}
+
+if ($OnlyRtk) {
+    Install-RtkCli -Force:$Force
+    Write-Host "`n[DONE] RTK setup completed." -ForegroundColor Green
+    return
 }
 
 # --- 順次実行 ---

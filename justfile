@@ -79,3 +79,9 @@ rtk-history:
 # Discover missed token-saving opportunities from agent history
 rtk-discover:
     @rtk discover
+
+# Update RTK to the latest release, re-sync agent rules, and run verification
+update-rtk:
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/03_setup_runtimes.ps1 -OnlyRtk -Force
+    @just sync-rules
+    @just test

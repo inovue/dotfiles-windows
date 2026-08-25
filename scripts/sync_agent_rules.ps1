@@ -28,6 +28,7 @@ $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
 $masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
+$masterClaudeSettings = Join-Path $configsDir "agents\claude\settings.json"
 $masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
 $masterCursorRulesDir = Join-Path $configsDir "agents\cursor\rules"
 $masterCursorHooks = Join-Path $configsDir "agents\cursor\hooks.json"
@@ -275,6 +276,7 @@ $allTargets = @(
     @{ Name = "Agents Skills RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";        Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
+    @{ Name = "Claude Code Global Settings";         Src = $masterClaudeSettings; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json";                        IsDir = $false },
     @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },

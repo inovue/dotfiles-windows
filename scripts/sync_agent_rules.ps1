@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     configs/agents/ 内の SSOT ルール＆スキルをグローバルエージェント環境へ一括同期します。

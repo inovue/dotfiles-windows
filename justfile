@@ -32,3 +32,11 @@ install:
 setup-keys:
     @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
 
+# Create a lightweight git checkpoint branch before risky agent edits
+checkpoint:
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$tag = "checkpoint-" + (Get-Date -Format "yyyyMMdd-HHmmss"); git branch $tag; Write-Host "[OK] Created git checkpoint branch: $tag" -ForegroundColor Green'
+
+# Refresh knowledge graph (AST code-only update)
+update-graph:
+    @graphify update .
+

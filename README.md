@@ -90,6 +90,8 @@ dotfiles-windows/
 | `just check-rules`| ルールが正本と同期されているか検証（差分チェック・CI用） | 変更前の確認やCI検証時 |
 | `just deploy` | 全設定ファイル（Dotfiles + Rules）をユーザー環境にデプロイ | `configs/` 内の設定変更後 |
 | `just test` | CLIツール、環境変数、SSOTルール、UTF-8、ベンチマークの網羅的自動テストを実行 | セットアップ後・定期動作確認 |
+| `just checkpoint` | エージェントの編集前に安全な Git チェックポイントブランチを作成 | 大規模・破壊的リファクタリング前 |
+| `just update-graph`| 高速 AST 解析によりナレッジグラフ（`graphify-out/`）を更新 | 編集バッチ完了時 |
 | `just install` | 環境構築（パッケージ、フォント、ランタイム、設定）を一括実行 | 新規マシン構築時 |
 | `just setup-keys` | 🔑 AI Agent & Graphify 用 API キーを Windows ユーザー環境変数に対話型登録 | APIキー初回設定・更新時 |
 

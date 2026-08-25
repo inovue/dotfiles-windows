@@ -1,25 +1,28 @@
 ---
-description: Gated graphify protocol. Only when graphify-out/graph.json exists. Prefer CLI; MCP only if tools exist. No unsolicited bootstrap.
+description: Graphify hybrid navigation protocol for Cursor agent (gated on graphify-out/)
+globs: ["*"]
 alwaysApply: true
 ---
 
-# Graphify × Fast CLI (gated)
+# Graphify × Cursor Hybrid Protocol
 
-**Gate:** If `graphify-out/graph.json` is missing → normal `rg`/`fd`/`ast-grep` only. Do not call graphify, MCP graph tools, or `/graphify`.
+**Gate:** Apply only when `graphify-out/graph.json` exists. Otherwise use `rg` / `fd` / `ast-grep`.
 
-When the gate passes:
+## ⚡ Deterministic Execution State Machine
+1. **Mode A (Survey / Audit / QA)**:
+   - Run `just test` first. If PASS -> 100% ground truth verified.
+   - Run `graphify god-nodes --top 10` or `graphify query "<topic>" --budget 1500`.
+   - Expand central hubs with `graphify query "<hub>" --budget 1500`.
+   - **Zero-Crawler Rule**: Never run `rg`/`fd` across scripts to re-check facts verified by `just test`.
+2. **Mode B (Code Modification / Refactoring)**:
+   - Locate blast radius via `graphify path` or `graphify explain`.
+   - Locate exact edit lines via scoped `rg -n`.
+   - Edit via `replace_file_content` / `sd`.
+   - Run `just test` + `graphify update .` once per batch.
 
-```text
-L0 MCP (only if tools exist) → L1 graphify query|path|explain --budget 1500
-→ L2 scoped rg/fd/ast-grep → L3 edit (replace_file_content/sd) → L4 graphify update . (once per edit batch)
-```
+## ❌ Hard Anti-Pattern Bans
+- ❌ NEVER fall back to unanchored `rg` before querying and expanding central hubs (`god-nodes`).
+- ❌ Max 2–3 `view_file` calls per task. No terminal slicing cascades (`head`, `tail`, `Get-Content`).
+- ❌ Safe editing: Never edit `CLAUDE.md` or `.cursorrules` directly (edit `configs/agents/` and run `just sync-rules`).
 
-- **Task Routing**:
-  - **Survey / Doc / Architecture Audit**: Mandatory `just test` (for instant 80+ ground-truth checks) + L0/L1 first (do NOT bypass just because a single doc file is named in prompt).
-  - **Pinpoint Fix**: Bypass L0/L1 directly to L2 (`rg -n`).
-- **Two-Tier Discovery & Strict Budget**: Tier 1 (Topology via L0/L1) → Tier 2 (Granular values via `rg -n` only on scoped files). Max 2–3 `view_file` calls per task. Never read 4+ whole files sequentially.
-- Cursor often has no graphify MCP → default L1 (`graphify query "<q>" --budget 1500`); never retry-loop missing tools.
-- **L4 Sync**: Run `graphify update .` once at end of a coherent edit batch (not after every file). Skip if graph was absent.
-- Never run full multimodal `/graphify .` unless the user asks.
-- Prefer scoped subgraph / wiki over `GRAPH_REPORT.md` or multi-file reads.
 

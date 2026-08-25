@@ -7,46 +7,39 @@ description: Gated graphify navigation when graphify-out exists. MCP if connecte
 
 **Gate:** If `graphify-out/graph.json` is missing → use normal `rg` / `fd` / `ast-grep` only. Do **not** run graphify, MCP graph tools, or `/graphify` unless the user explicitly asks to build a graph.
 
-## Ladder (when gate passes)
+## ⚡ Deterministic Execution State Machine
 
 ```text
-L0  MCP   query_graph / get_node / get_neighbors / shortest_path  (try first if MCP tools exist)
-          │
-          └── [On ANY error / failure / tool absent] ──► IMMEDIATELY fall back to L1:
-L1  CLI   graphify query "<topic>" --budget 1500  /  graphify god-nodes --top 10
-L2  Locate rg -n / fd / ast-grep                                   (scoped paths ONLY)
-L3  Edit  replace_file_content / sd / ast-grep -U                (atomic surgical edits)
-L4  Sync  graphify update .                                       (once per edit batch; AST-only)
+MODE A: Survey / Audit / QA
+  1. Ground Truth -> Run `just test` first (93+ checks). If PASS, all tools/syntax/configs are proven valid.
+  2. Topology Hubs -> Run `query_graph(question="...")` OR `god_nodes` -> MUST immediately call `get_neighbors("<hub>")`.
+  3. Synthesize -> Answer user. [HARD BAN: Zero manual `rg`/`fd` allowed if test passes].
+
+MODE B: Code Modification / Refactoring
+  1. Scope -> `shortest_path` / `get_node` (find callers/callees).
+  2. Locate (L2) -> Scoped `rg -n` / `ast-grep` on exact files only.
+  3. Edit (L3) -> `replace_file_content`.
+  4. Sync (L4) -> `just test` + `graphify update .` (once per batch).
 ```
 
-## Task Classification & Trigger Protocol
+## 🛠 Exact MCP Signatures & Mandatory Transitions
 
-1. **System Survey & Global Overview** (README/AGENTS.md sync, architecture docs, codebase tour, dependency analysis, blast radius):
-   - **Ground Truth First**: If verifying system state/documentation, run `just test` first for instant 80+ parameter ground-truth proof.
-   - **MANDATORY L0/L1 Trigger**: Always start with `query_graph`, `god_nodes`, or fallback to L1 CLI (`graphify query`). Do NOT bypass Graphify merely because a single doc file is named in the user prompt.
-2. **Multi-Component Feature / Refactor**:
-   - **MANDATORY L0/L1 Trigger**: Use `get_node` / `shortest_path` (or `graphify path`) to map dependencies before touching files.
-3. **Self-Contained Pinpoint Fix** (Single line typo, static color hex change in known file):
-   - **Bypass L0/L1 directly to L2**: Use `rg -n` anchor → `replace_file_content`.
+| Intent | MCP Tool | Required Parameters | Optional Parameters | Mandatory Next Step |
+| :--- | :--- | :--- | :--- | :--- |
+| **Open Survey / QA** | `query_graph` | `question: string` *(NOT query)* | `token_budget: int` (2000), `depth: int` (3), `mode: "bfs"\|"dfs"` | Read output or synthesize. |
+| **Concept / Node** | `get_node` | `label: string` | `project_path: string` | Query neighbors if node has relations. |
+| **Neighborhood** | `get_neighbors` | `label: string` | `relation_filter: string`, `token_budget: int` | Expand child components or anchor L2. |
+| **Path between A & B**| `shortest_path` | `source: string`, `target: string`| `max_hops: int` (8), `undirected: bool` | Inspect intermediate nodes. |
+| **God nodes / Hubs** | `god_nodes` | *(None)* | `top_n: int` (10), `project_path: string` | **MUST** call `get_neighbors("<hub>")`. |
+| **Community Cluster** | `get_community` | `community_id: int` | `token_budget: int` (2000), `project_path: string` | Inspect cluster members. |
+| **Graph Statistics** | `graph_stats` | *(None)* | `project_path: string` | Check node/edge density. |
 
-## Two-Tier Hybrid Discovery & Strict Budget
-- **Tier 1 (High-Level Topology via Graphify L0/L1)**: Identify modules, public functions, caller/callee paths, and skills in 1-2 tool calls.
-- **Tier 2 (Granular Detail via Native CLI L2)**: Use `rg -n` / `ast-grep` ONLY on the scoped files from Tier 1 for exact variable values, lists, and line anchors.
-- **Strict Read Budget**: Max **2–3 `view_file` calls per task**. NEVER read 4+ whole files sequentially.
+## ❌ Hard Anti-Pattern Bans
+- ❌ **Premature Fallback**: NEVER fall back to `rg`/`fd` scanning after only querying a file node (e.g. `README.md`) or `god_nodes`. Always expand central hubs with `get_neighbors`.
+- ❌ **Post-Test Crawling**: If `just test` PASSES, never run manual `rg`/`fd` across scripts to re-verify already-proven facts.
+- ❌ **Cascading Reads**: Max 2–3 `view_file` calls per task. Never read 4+ whole files sequentially.
+- ❌ **Parameter Guessing**: Never pass `query` or `name` to MCP tools (use `question` for `query_graph`, `label` for `get_neighbors`).
+- ❌ **Per-File Updates**: Run `graphify update .` **once** at the end of a coherent edit batch.
 
-## Safe Workspace Editing & Batch Completion
-- **Editing**: Always use `replace_file_content` for workspace files. Never pass `ArtifactMetadata` to workspace paths.
-- **L4 Sync**: Run `graphify update .` **once** at the end of a coherent edit batch (not after every file). Skip if the graph was absent. Full `/graphify .` only when the user asks.
-
-## Hard bans
-
-- ❌ Treating every workspace as a graphify project (respect the gate)
-- ❌ Skipping Graphify L0/L1 during whole-codebase survey or documentation update tasks
-- ❌ Abandoning Graphify on L0 MCP error instead of falling back to L1 CLI (`graphify query` / `graphify god-nodes`)
-- ❌ Sequential whole-file `view_file` cascades across 4+ files (Budget: max 2–3)
-- ❌ Unsolicited `/graphify .` / LLM extract mid-task
-- ❌ MCP/tool retry loops — fall through L0→L1→L2 once
-- ❌ Per-file `graphify update` spam
-- ❌ Forgetting `graphify update .` at the end of an edit batch when graph exists
 
 

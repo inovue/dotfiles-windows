@@ -71,47 +71,23 @@ Always use these `just` commands instead of constructing manual shell commands:
 | `just deploy` | Deploy all `configs/` to user profile directories and Windows Terminal | After updating any file in `configs/` |
 | `just sync-rules` | Synchronize AI rules and skills to global paths & project mirrors | After editing `configs/agents/` |
 | `just check-rules`| Check if deployed rules match master SSOT without modifying files | During CI or pre-flight verification |
+| `just checkpoint` | Create a lightweight git checkpoint branch before risky agent edits | Before large/destructive refactoring |
+| `just update-graph`| Refresh repository knowledge graph via fast AST analysis | After completing an edit batch |
 | `just install` | Run full clean setup (Packages, Fonts, Runtimes, Configs) | On fresh machine installation |
 | `just setup-keys` | Securely configure AI Agent & Graphify API keys in Windows User Environment | When adding or updating API keys |
 
-
 ---
 
-## 🛡️ 4. Execution & Safety Rules
+## 🛡️ 4. Project Operational Invariants
 
 1. **PowerShell Non-Interactive Flags**:
-   - Always run PowerShell commands with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`.
-   - In `justfile`, `set windows-shell := ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]` is already configured.
-2. **Compiled Modern Tools Over PowerShell Cmdlets**:
-   - `rg -n "term"` instead of `Select-String`
-   - `fd -t f "pattern"` instead of `Get-ChildItem -Recurse`
-   - `sd 'find' 'replace' file` instead of `sed` or string replacement scripts
-   - `jaq` or `jq` instead of `ConvertFrom-Json`
-3. **Safe Workspace File Modification**:
-   - Always use `replace_file_content` for modifying workspace files.
-   - Never use `write_to_file` with `ArtifactMetadata` on workspace files (`ArtifactMetadata` is strictly for `<appDataDir>\brain\<conversation-id>/...` artifacts).
-4. **UTF-8 & PowerShell (.ps1) Encoding**:
-   - Ensure all generated code, configs, and text files are saved in UTF-8.
-   - **Critical for PowerShell (.ps1)**: Windows PowerShell 5.1 (`powershell.exe`) defaults to Shift-JIS/CP932 for BOM-less files. Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent parser crashes (e.g. `TerminatorExpectedAtEndOfString`).
-   - Never invoke interactive pagers or editors.
-
----
-
-## 🧠 5. Graphify & Fast Navigation Protocol in this Workspace
-
-`dotfiles-windows` has `graphify-out/graph.json` present. Follow this protocol:
-
-1. **Task Routing (Mandatory Gate)**:
-   - **System Survey / Documentation Verification / Architecture Analysis**:
-     - **Ground Truth First**: Run `just test` first for immediate proof of 80+ parameters across tools, configs, and scripts.
-     - **MANDATORY L0/L1 Trigger**: Call Graphify MCP (`query_graph`, `god_nodes`) or immediately fall back to CLI (`graphify query "<topic>" --budget 1500` / `graphify god-nodes --top 10`) if MCP fails. Do NOT cascade whole-file `view_file` calls.
-   - **Isolated Pinpoint Fix (Single line typo, static hex in known file)**:
-     Bypass L0/L1 directly to L2 (`rg -n` anchor) → L3 (`replace_file_content`).
-2. **Two-Tier Hybrid Discovery & Strict Budget**:
-   - Tier 1: Graphify L0/L1 maps components, functions, and cross-file dependencies.
-   - Tier 2: Native CLI L2 (`rg -n`, `sd`) locates exact line numbers, arrays, or variable strings inside ONLY the scoped files.
-   - **Strict Read Budget**: Max **2–3 `view_file` calls per task**. NEVER read 4+ whole files sequentially.
-3. **Batch Completion Sync (L4)**:
-   - Whenever code or documentation in this repository is modified in a batch, execute `graphify update .` **once at the end of the batch** to ensure the knowledge graph stays 100% fresh.
-
-
+   - In `justfile`, `set windows-shell := ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]` is configured.
+   - When executing external `.ps1` directly, always provide `-NoProfile -NonInteractive -ExecutionPolicy Bypass`.
+2. **Safe Workspace File Modification**:
+   - Always use `replace_file_content` for modifying workspace files. Never pass `ArtifactMetadata` to workspace files.
+3. **UTF-8 & PowerShell (.ps1) Encoding**:
+   - Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent Windows PowerShell 5.1 parser crashes.
+4. **Graphify Fast Navigation in this Workspace**:
+   - `graphify-out/graph.json` is present. Follow the 2-Tier Discovery protocol:
+     - **Survey / Architecture**: Run `just test` first → `god_nodes` / `get_neighbors` (expand hubs) → scoped `rg -n` / `replace_file_content`.
+     - **Batch Sync**: Execute `just update-graph` once at the end of an edit batch.

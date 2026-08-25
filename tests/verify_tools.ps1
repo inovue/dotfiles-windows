@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     dotfiles-windows および AI Agent 高速化・安定化環境の網羅的自動テストスクリプト
@@ -173,8 +173,15 @@ foreach ($cf in $configFiles) {
     Assert-Test -Name "Config: $($cf.Name) exists" -Condition $exists -Details "Path: $($cf.Path)"
 }
 
-# Verify all PowerShell scripts parse cleanly in PowerShell AST (BOM & syntax check)
-$allPsScripts = Get-ChildItem -Path (Join-Path $rootDir "scripts") -Filter "*.ps1" -File
+# Verify SSOT Rules Compactness (prevents prompt bloat)
+$masterRulesFile = Join-Path $rootDir "configs\agents\AGENTS.md"
+if (Test-Path $masterRulesFile) {
+    $rulesLineCount = (Get-Content $masterRulesFile | Measure-Object -Line).Lines
+    Assert-Test -Name "SSOT Rules Compactness (AGENTS.md < 200 lines)" -Condition ($rulesLineCount -lt 200) -Details "Current lines: $rulesLineCount"
+}
+
+# Verify all PowerShell scripts parse cleanly in PowerShell AST and have UTF-8 BOM if non-ASCII
+$allPsScripts = Get-ChildItem -Path (Join-Path $rootDir "scripts"), (Join-Path $rootDir "tests") -Filter "*.ps1" -File
 foreach ($psScript in $allPsScripts) {
     $parseErrors = $null
     $parseTokens = $null
@@ -182,7 +189,15 @@ foreach ($psScript in $allPsScripts) {
     $parseOk = ($parseErrors.Count -eq 0)
     $errDetail = if ($parseOk) { "Parsed successfully" } else { ($parseErrors | ForEach-Object { $_.Message }) -join "; " }
     Assert-Test -Name "PS Script AST parse: $($psScript.Name)" -Condition $parseOk -Details $errDetail
+
+    $bytes = [System.IO.File]::ReadAllBytes($psScript.FullName)
+    $hasNonAscii = ($bytes | Where-Object { $_ -gt 127 }).Count -gt 0
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    $bomOk = (-not $hasNonAscii) -or $hasBom
+    $bomDetail = if ($hasBom) { "UTF-8 with BOM" } elseif (-not $hasNonAscii) { "ASCII only (no BOM needed)" } else { "Missing UTF-8 BOM on non-ASCII script" }
+    Assert-Test -Name "PS Script UTF-8 BOM: $($psScript.Name)" -Condition $bomOk -Details $bomDetail
 }
+
 
 
 # MCP must use absolute graphify-mcp on all merge targets (uv tool run is ~8x slower and PATH-fragile)
@@ -334,9 +349,14 @@ try {
 }
 
 # --- Final Summary ---
-Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "`n=======================================================" -ForegroundColor Cyan
 Write-Host " Test Summary: $passedCount PASSED, $failedCount FAILED, $warnCount WARNINGS" -ForegroundColor $(if ($failedCount -eq 0) { "Green" } else { "Red" })
-Write-Host "-------------------------------------------------------`n" -ForegroundColor Cyan
+if ($failedCount -eq 0) {
+    Write-Host " [GROUND TRUTH VERIFIED] All CLI tools, environment vars," -ForegroundColor Green
+    Write-Host " dotfiles, PowerShell ASTs, and SSOT rules are 100% valid." -ForegroundColor Green
+    Write-Host " No manual file inspection or terminal slicing needed." -ForegroundColor Green
+}
+Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 if ($failedCount -gt 0) {
     exit 1

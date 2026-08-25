@@ -8,6 +8,7 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 
 - ⚡ **AI エージェント超高速化・安定化 (SSOT)**:
   - 単一正本（`configs/agents/`）から Antigravity, Cursor, Claude Code, Codex へルール＆スキルを一括同期（`just sync-rules`）。
+  - 🛡️ **決定論的サイバネティック・ガバナー (`agent_guard.py` / `hooks.json`)**: `PreToolUse` ライフサイクルフックにより、破壊的コマンド、遅い PowerShell Cmdlet、トークンを浪費する巨大ファイル読み込み、ワークスペース直接上書きを自動遮断。
   - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`）を直結。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
   - Gated Graphify（`graphify-out/graph.json` 存在時のみ MCP/知識グラフを有効化し、不要な全リポジトリ走査を防止）。
@@ -45,17 +46,20 @@ dotfiles-windows/
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, Graphify, Rustup, jaq, hunkdiff, herdr-sidebar, Cursor Agent CLI, 安全環境変数, ~/.local/bin シム初期化
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles (Windows Terminal, Helix, Nushell, PowerShell等) & AI Agent SSOT ルールの自動配備
+│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse ライフサイクルフック)
 │   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査＆クリーンアップ (テスト, SSOT同期, グラフ健全性, ゴミ検知)
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 AI Agent ルール＆スキルの高速一括同期 (正本 -> 全グローバル/ワークスペース)
 └── configs/
     ├── agents/                     # 🌟 AIエージェント単一マスタールール (SSOT)
     │   ├── AGENTS.md               # グローバル共通ルール (CLI置換表, 非対話, UTF-8, ゼロハング)
+    │   ├── hooks.json              # Antigravity 用 PreToolUse ライフサイクルフック設定
     │   ├── antigravity/            # Antigravity MCP テンプレ + always-on rules/workflows (graphify)
     │   │   ├── mcp_config.json
     │   │   ├── rules/graphify.md
     │   │   └── workflows/graphify.md
-    │   ├── cursor/                 # Cursor always-on rules (graphify.mdc; graph 存在時のみ有効)
+    │   ├── cursor/                 # Cursor always-on rules & hooks (graphify.mdc, hooks.json)
+    │   │   ├── hooks.json
     │   │   └── rules/graphify.mdc
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・Playwright・a11y・プロファイル自動化
@@ -155,6 +159,7 @@ just install
 │ 3. 非対話・ゼロハング: PAGER=cat, BAT_STYLE=plain, -NoProfile, UTF-8 永続化   │
 │ 4. Gated Graphify: graphify-out/graph.json 存在時のみ MCP/知識グラフを起動   │
 │ 5. 段階的開示スキル: browser-agent, modern-cli-expert, graphify-navigator   │
+│ 6. ガバナー抑止: agent_guard.py により危険コマンド・低速Cmdletを物理遮断     │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -170,6 +175,8 @@ just install
    - `browser-agent`: 実 Google Chrome + Playwright によるログインセッション維持・動的SPAスクレイピング。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索。
+6. **決定論的サイバネティック・ガバナー (`agent_guard.py`)**:
+   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format`, `diskpart`, `rmdir /s C:\`, `git push --force`）、低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、120行以上の未スライスファイル読み込み、ワークスペースソースファイルの直接上書きを自動遮断。
 
 ---
 

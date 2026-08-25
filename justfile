@@ -67,3 +67,15 @@ neighbors label:
 # Trace the shortest dependency/caller path between two components
 path source target:
     @graphify path "{{source}}" "{{target}}"
+
+# Show RTK LLM token reduction analytics dashboard
+rtk-gain:
+    @rtk gain
+
+# Show RTK recent command execution history with savings breakdown
+rtk-history:
+    @rtk gain --history
+
+# Discover missed token-saving opportunities from agent history
+rtk-discover:
+    @rtk discover

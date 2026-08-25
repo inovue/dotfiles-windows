@@ -6,6 +6,11 @@
         "matcher": "run_command|view_file|write_to_file|replace_file_content|Bash|bash|execute_command|ReadFile|read_file|WriteFile|write_file|Edit|EditFile|edit_file",
         "command": "python scripts/agent_guard.py",
         "timeout": 5
+      },
+      {
+        "matcher": "Shell|run_command|Bash|bash|execute_command",
+        "command": "rtk hook cursor",
+        "timeout": 5
       }
     ]
   }

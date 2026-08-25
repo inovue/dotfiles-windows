@@ -8,7 +8,8 @@
 
 | Category | ⚡ Mandatory Invariant | ❌ Prohibited Anti-Pattern |
 | :--- | :--- | :--- |
-| **Speed & Runtime** | Prefer compiled native Rust/Go CLI (`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`). | Never use slow PowerShell pipelines (`Select-String`, `Get-ChildItem -Recurse`, `Get-Content`). |
+| **Token Optimization** | Prepend `rtk` to shell commands (`rtk git status`, `rtk read`, `rtk test`, `rtk cargo test`). | Never run uncompressed noisy commands that dump massive raw output to context. |
+| **Speed & Runtime** | Prefer compiled native Rust/Go CLI (`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`). | Never use slow PowerShell pipelines (`Select-String`, `Get-ChildItem -Recurse`, `Get-Content`). |
 | **Read Budget** | Max **2–3 scoped files** per task (`view_file`). Zero file reads for audits when `just audit` passes. | Never sequentially read 4+ whole files or bypass budget with terminal slicing (`head`, `tail`, `bat -r`). |
 | **Ground Truth** | Run `just audit` or `just test` first for surveys/audits (96+ instant checks + graph health). | Never manually grep/inspect files to verify project status when `just audit` passes. |
 | **Hub-Expansion** | `god_nodes` discovery MUST be immediately followed by `get_neighbors("<hub>")`. | Never stop at god_nodes/root node or fall back to manual `rg`/`fd` scanning before expanding hubs. |
@@ -25,18 +26,21 @@
 
 | Task | ❌ Slow / Risky Cmdlet | ⚡ Preferred Native Command | Flags & Best Practice |
 | :--- | :--- | :--- | :--- |
-| **Content Search** | `Select-String`, `grep -r` | `rg -n "pattern" [path]` | Scoped paths only; `-l` for list, `-i` case-insensitive. |
-| **File Search** | `Get-ChildItem -Recurse` | `fd "pattern" [path]` | `-t f` (files), `-t d` (dirs), `-e <ext>`, `-H` (hidden). |
-| **File Viewing** | `Get-Content`, `type`, `cat` | `bat --paging=never --style=plain [file]` | Token-saving & non-interactive. |
+| **Token Proxy (RTK)** | Raw `git`, `test`, `build`, `cat` | `rtk [cmd]` (`rtk git status`, `rtk read`, `rtk test`) | Cuts 60-90% output tokens; failure-only tee log recovery. |
+| **Content Search** | `Select-String`, `grep -r` | `rg -n "pattern" [path]` / `rtk grep` | Scoped paths only; `-l` for list, `-i` case-insensitive. |
+| **File Search** | `Get-ChildItem -Recurse` | `fd "pattern" [path]` / `rtk find` | `-t f` (files), `-t d` (dirs), `-e <ext>`, `-H` (hidden). |
+| **File Viewing** | `Get-Content`, `type`, `cat` | `rtk read [file]` / `bat --paging=never [file]` | Token-saving & non-interactive. |
+| **Code Summary** | Manual skimming | `rtk smart [file]` | Instant 2-line heuristic summary (0 file read overhead). |
 | **Line Limits** | `Get-Content -Head 20` | `head -n 20 [file]` / `tail -n 20` | Native uutils. |
 | **Regex Replace** | `sed -i`, string replace | `sd 'regex' 'replacement' [file]` | In-place regex substitution. |
 | **AST Refactor** | Multi-line regex / Python | `ast-grep -p 'pattern' -r 'replacement'` | Structural AST matching (JS/TS, Rust, Go, Python). |
-| **JSON Query** | `ConvertFrom-Json` | `jaq '.path.key' [file.json]` | Rust `jaq` (10x faster than jq; zero memory blowup). |
+| **JSON Query** | `ConvertFrom-Json` | `jaq '.path.key' [file.json]` / `rtk json` | Rust `jaq` (10x faster than jq; zero memory blowup). |
 | **HTTP / API** | `curl`, `Invoke-WebRequest` | `xh [METHOD] [URL] [key=val]` | Auto JSON parsing, no header boilerplate. |
 | **Process Inspection**| `Get-Process`, `tasklist` | `procs [query/PID/:port]` | Tree hierarchy, port bindings, memory inspection. |
-| **Structural Diff** | Line `git diff` / `diff` | `difft [file1] [file2]` | AST syntax-tree diffing (ignores cosmetic formatting). |
-| **Directory Tree** | `tree /F`, `dir /s` | `eza --tree --level=2 --icons=never` | Fast directory visualization. |
+| **Structural Diff** | Line `git diff` / `diff` | `rtk diff [file1] [file2]` / `difft` | AST / condensed diff (only changed lines). |
+| **Directory Tree** | `tree /F`, `dir /s` | `eza --tree --level=2` / `rtk ls` | Fast directory visualization. |
 | **Benchmarking** | `Measure-Command` | `hyperfine "cmd1" "cmd2"` | Statistical CLI benchmark. |
+| **Token Analytics** | None / manual calculation | `rtk gain` / `rtk gain --history` | Real-time token reduction metrics & history. |
 | **Binary / Hex** | `Format-Hex`, `xxd` | `hexyl [file]` | Colored byte inspection. |
 
 ---

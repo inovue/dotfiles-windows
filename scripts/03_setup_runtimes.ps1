@@ -112,7 +112,7 @@ function Install-GraphifyCli {
 }
 
 function Install-RustupJaq {
-    Write-Host "`n>> [4/10] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
+    Write-Host "`n>> [4/11] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
     if (Get-Command rustup -ErrorAction SilentlyContinue) {
         try {
             Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
@@ -131,6 +131,69 @@ function Install-RustupJaq {
         }
     } else {
         Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow
+    }
+}
+
+function Install-RtkCli {
+    Write-Host "`n>> [5/11] Checking RTK (Rust Token Killer - LLM Token Optimizer CLI)..." -ForegroundColor Cyan
+    $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
+    $rtkExe = Join-Path $localBinDir "rtk.exe"
+
+    if (-not (Test-Path $localBinDir)) {
+        New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
+    }
+
+    $installed = $false
+    if (Test-Path $rtkExe) {
+        try {
+            $ver = & $rtkExe --version 2>&1
+            if ($LASTEXITCODE -eq 0 -and $ver -like "*rtk*") {
+                Write-Host "[OK] RTK is already installed: $ver" -ForegroundColor Green
+                $installed = $true
+            }
+        } catch {
+            $installed = $false
+        }
+    }
+
+    if (-not $installed) {
+        Write-Host "   Downloading pre-built RTK binary from GitHub releases..." -ForegroundColor Gray
+        try {
+            $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
+            $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction Stop
+            $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
+            if ($asset) {
+                $downloadUrl = $asset.browser_download_url
+                $tempZip = Join-Path $env:TEMP "rtk_latest.zip"
+                $tempExtract = Join-Path $env:TEMP "rtk_extract"
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing -ErrorAction Stop
+                Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
+                $extractedExe = Get-ChildItem -Path $tempExtract -Filter "rtk.exe" -Recurse | Select-Object -First 1
+                if ($extractedExe) {
+                    Copy-Item -Path $extractedExe.FullName -Destination $rtkExe -Force
+                    Remove-Item -Path $tempZip, $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Host "[OK] RTK binary installed to $rtkExe." -ForegroundColor Green
+                    $installed = $true
+                }
+            }
+        } catch {
+            Write-Warning "[WARN] Failed to download pre-built RTK release: $_"
+        }
+
+        if (-not $installed -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            Write-Host "   Building RTK from source via cargo..." -ForegroundColor Gray
+            try {
+                cargo install --git https://github.com/rtk-ai/rtk --locked 2>&1 | Out-Null
+                $cargoRtk = Join-Path $env:USERPROFILE ".cargo\bin\rtk.exe"
+                if (Test-Path $cargoRtk) {
+                    Copy-Item -Path $cargoRtk -Destination $rtkExe -Force
+                    Write-Host "[OK] RTK built and installed via cargo." -ForegroundColor Green
+                    $installed = $true
+                }
+            } catch {
+                Write-Warning "[WARN] Failed to build RTK via cargo: $_"
+            }
+        }
     }
 }
 
@@ -287,6 +350,8 @@ function Set-AgentSafetyEnvironmentVariables {
         "PYTHONUTF8"                  = "1"
         "POWERSHELL_TELEMETRY_OPTOUT" = "1"
         "DOTNET_CLI_TELEMETRY_OPTOUT" = "1"
+        "RTK_TELEMETRY_DISABLED"      = "1"
+        "RTK_SKIP_ENV"                = "1"
     }
     foreach ($key in $envVarsToSet.Keys) {
         $val = $envVarsToSet[$key]
@@ -356,6 +421,7 @@ Install-FnmNode
 Install-UvPython
 Install-GraphifyCli
 Install-RustupJaq
+Install-RtkCli
 Update-TealdeerCache
 Install-HunkMermaid
 Install-HerdrPlugins

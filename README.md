@@ -9,7 +9,8 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 - ⚡ **AI エージェント超高速化・安定化 (SSOT)**:
   - 単一正本（`configs/agents/`）から Antigravity, Cursor, Claude Code, Codex へルール＆スキルを一括同期（`just sync-rules`）。
   - 🛡️ **決定論的サイバネティック・ガバナー (`agent_guard.py` / `hooks.json`)**: `PreToolUse` ライフサイクルフックにより、破壊的コマンド、遅い PowerShell Cmdlet、トークンを浪費する巨大ファイル読み込み、ワークスペース直接上書きを自動遮断。
-  - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`）を直結。
+  - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: Git/ビルド/テスト/ファイル閲覧等のコマンド出力をコンテキスト投入前に極限まで圧縮。
+  - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`）を直結。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
   - Gated Graphify（`graphify-out/graph.json` 存在時のみ MCP/知識グラフを有効化し、不要な全リポジトリ走査を防止）。
   - 実ブラウザ自動化（`browser-agent` / Playwright）、ASTリファクタ（`modern-cli-expert`）、知識グラフ探索（`graphify-navigator`）の段階的開示スキル。
@@ -44,10 +45,6 @@ dotfiles-windows/
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ・ランタイム一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
-│   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, Graphify, Rustup, jaq, hunkdiff, herdr-sidebar, Cursor Agent CLI, 安全環境変数, ~/.local/bin シム初期化
-│   ├── 04_setup_configs.ps1        # 4. Dotfiles (Windows Terminal, Helix, Nushell, PowerShell等) & AI Agent SSOT ルールの自動配備
-│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse ライフサイクルフック)
-│   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査＆クリーンアップ (テスト, SSOT同期, グラフ健全性, ゴミ検知)
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 AI Agent ルール＆スキルの高速一括同期 (正本 -> 全グローバル/ワークスペース)
 └── configs/
@@ -63,8 +60,9 @@ dotfiles-windows/
     │   │   └── rules/graphify.mdc
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・Playwright・a11y・プロファイル自動化
-    │       ├── graphify-navigator/ # Graphify×CLI ハイブリッドナビ (gated)
-    │       └── modern-cli-expert/  # ast-grep, sd, jaq, xh, procs, difftastic 高速レシピ
+    │       ├── graphify-navigator/ # Graphify×Antigravity ハイブリッド知識グラフナビゲータ
+    │       ├── modern-cli-expert/  # ast-grep, sd, jaq, xh, procs, difftastic 高速レシピ
+    │       └── rtk-expert/         # rtk トークン削減プロキシ超高速レシピ
     ├── powershell/                 # PowerShell 5.1 / 7 共通プロファイル (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic 35NF, Catppuccin, Nushell既定, 動的プロファイル)
@@ -175,6 +173,7 @@ just install
    - `browser-agent`: 実 Google Chrome + Playwright によるログインセッション維持・動的SPAスクレイピング。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索。
+   - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
 6. **決定論的サイバネティック・ガバナー (`agent_guard.py`)**:
    - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format`, `diskpart`, `rmdir /s C:\`, `git push --force`）、低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、120行以上の未スライスファイル読み込み、ワークスペースソースファイルの直接上書きを自動遮断。
 
@@ -203,6 +202,7 @@ just install
 - **`bat`** - シンタックスハイライト付きファイルビューア（非対話プレーンモード対応）
 - **`eza`** - モダン ls / ツリー表示
 - **`jaq` / `jq`** - 超高速 JSON ストリームプロセッサ（Rust `jaq` 優先）
+- **`rtk`** - LLM トークン消費 60-90% 削減 CLI プロキシ（Git/テスト/閲覧のノイズ除去＆自動要約）
 - **`xh`** - 超高速 HTTP/API クライアント（curl 代替、JSON 自動処理）
 - **`procs`** - 高速プロセスビューア / ポート番号検索（ps 代替）
 - **`difftastic` (`difft`)** - AST 構文木構造差分ビューア

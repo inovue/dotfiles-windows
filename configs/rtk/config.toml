@@ -1,0 +1,13 @@
+# RTK (Rust Token Killer) Configuration
+# Master SSOT: Managed in configs/rtk/config.toml
+
+[hooks]
+exclude_commands = ["curl", "playwright"]
+
+[tee]
+enabled = true
+mode = "failures"
+retention_days = 3
+
+[telemetry]
+disabled = true

@@ -26,6 +26,8 @@ $masterRules = Join-Path $configsDir "agents\AGENTS.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
+$masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
+$masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
 $masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
 $masterCursorRulesDir = Join-Path $configsDir "agents\cursor\rules"
 $masterCursorHooks = Join-Path $configsDir "agents\cursor\hooks.json"
@@ -267,6 +269,12 @@ $allTargets = @(
     @{ Name = "Claude Code Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Cursor Global Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Agents Skills Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Antigravity Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "rtk-expert";           IsDir = $true },
+    @{ Name = "Claude Code Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "rtk-expert";                  IsDir = $true },
+    @{ Name = "Cursor Global RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "rtk-expert";                  IsDir = $true },
+    @{ Name = "Agents Skills RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "rtk-expert";                  IsDir = $true },
+    @{ Name = "RTK Global Config (AppData)";        Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
+    @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
     @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },

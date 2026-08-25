@@ -64,6 +64,7 @@ $toolsToCheck = @(
     @{ Cmd = "xh";       Name = "xh (HTTP client)";   Args = "--version" }
     @{ Cmd = "procs";    Name = "procs (ps viewer)";  Args = "--version" }
     @{ Cmd = "jaq";      Name = "jaq (Rust jq)";      Args = "--version" }
+    @{ Cmd = "rtk";      Name = "rtk (Rust Token Killer)"; Args = "--version" }
     @{ Cmd = "graphify"; Name = "graphify (knowledge graph)"; Args = "hook status" }
     @{ Cmd = "graphify-mcp"; Name = "graphify-mcp (MCP server)"; Args = "--help" }
     @{ Cmd = "hexyl";    Name = "hexyl (hex viewer)"; Args = "--version" }
@@ -139,6 +140,8 @@ $configFiles = @(
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Master rtk-expert Skill";                     Path = Join-Path $rootDir "configs\agents\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
     @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
     @{ Name = "Master Cursor graphify rule";                 Path = Join-Path $rootDir "configs\agents\cursor\rules\graphify.mdc" }
     @{ Name = "Master Cursor hooks";                         Path = Join-Path $rootDir "configs\agents\cursor\hooks.json" }
@@ -160,6 +163,11 @@ $configFiles = @(
     @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Cursor Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Agents Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Antigravity Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".claude\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Cursor Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Agents Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".agents\skills\rtk-expert\SKILL.md" }
+    @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
     @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
     @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
     @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
@@ -325,6 +333,18 @@ try {
         $graphQueryRes = & graphify query "deploy" --budget 1200 2>&1 | Out-String
         $graphOk = ($graphQueryRes -match "04_setup_configs" -or $graphQueryRes -match "Deploy")
         Assert-Test -Name "Graphify Knowledge Graph query execution" -Condition $graphOk -Details ($graphQueryRes.Trim().Split("`n")[0])
+    }
+
+    # RTK Token Killer evaluation
+    $rtkCmd = Get-Command rtk -ErrorAction SilentlyContinue
+    if ($rtkCmd) {
+        $rtkGainProc = Start-Process -FilePath "rtk.exe" -ArgumentList "gain" -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$env:TEMP\rtk_gain_test.txt" -RedirectStandardError "$env:TEMP\rtk_gain_err.txt"
+        $rtkOk = ($rtkGainProc.ExitCode -eq 0)
+        $rtkDetail = if (Test-Path "$env:TEMP\rtk_gain_test.txt") { (Get-Content "$env:TEMP\rtk_gain_test.txt" -Raw).Trim() } else { "rtk gain executed" }
+        Remove-Item "$env:TEMP\rtk_gain_test.txt", "$env:TEMP\rtk_gain_err.txt" -Force -ErrorAction SilentlyContinue
+        Assert-Test -Name "RTK (Rust Token Killer) gain metrics execution" -Condition $rtkOk -Details ($rtkDetail.Split("`n")[0])
+    } else {
+        Assert-Test -Name "RTK (Rust Token Killer) gain metrics execution" -Condition $false -Details "rtk command not found in PATH"
     }
 
     # Test 4.9: Deterministic Cybernetic Governor (agent_guard.py)

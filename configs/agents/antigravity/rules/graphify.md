@@ -11,22 +11,36 @@ description: Gated graphify navigation when graphify-out exists. MCP if connecte
 
 ```text
 L0  MCP   query_graph / get_node / get_neighbors / shortest_path  (if tools exist)
-L1  CLI   graphify query|path|explain --budget 1500
-L2  Locate rg -n / fd / ast-grep   (scoped paths ONLY)
-L3  Edit  replace_file_content / sd / ast-grep -U
-L4  Sync  graphify update .   (once per edit batch; AST-only)
+L1  CLI   graphify query|path|explain --budget 1500               (if MCP missing/failed)
+L2  Locate rg -n / fd / ast-grep                                   (scoped paths ONLY)
+L3  Edit  replace_file_content / sd / ast-grep -U                (atomic surgical edits)
+L4  Sync  graphify update .                                       (once per edit batch; AST-only)
 ```
 
-1. **Architecture / impact** → L0 if MCP tools exist, else L1. Prefer wiki over raw walks. `GRAPH_REPORT.md` only for broad review.
-2. **Edit anchors** → `rg -n` / `fd` / `ast-grep` on graph-scoped paths. Never `Select-String` / `Get-ChildItem -Recurse`.
-3. **Edits** → surgical one-shots; bulk via `ast-grep -U` or `fd -x sd`.
-4. **Freshness** → `graphify update .` **once** at the end of a coherent edit batch (not after every file). Skip if the graph was absent. Full `/graphify .` only when the user asks. `update` can take >10s — use WaitMs ≥ 60000 or finish edits first then update once.
-5. **Hangs** → `PAGER=cat`, `bat --paging=never`, `git --no-pager`, `-NoProfile`.
+## Task Classification & Trigger Protocol
+
+1. **System Survey & Global Overview** (README/AGENTS.md sync, architecture docs, codebase tour, dependency analysis, blast radius):
+   - **MANDATORY L0/L1 Trigger**: Always start with `query_graph`, `god_nodes`, or `get_community`. Do NOT bypass Graphify merely because a single doc file is named in the user prompt.
+2. **Multi-Component Feature / Refactor**:
+   - **MANDATORY L0/L1 Trigger**: Use `get_node` / `shortest_path` to map dependencies before touching files.
+3. **Self-Contained Pinpoint Fix** (Single line typo, static color hex change in known file):
+   - **Bypass L0/L1 directly to L2**: Use `rg -n` anchor → `replace_file_content`.
+
+## Two-Tier Hybrid Discovery
+- **Tier 1 (High-Level Topology via Graphify L0/L1)**: Identify modules, public functions, caller/callee paths, and skills in 1-2 tool calls.
+- **Tier 2 (Granular Detail via Native CLI L2)**: Use `rg -n` / `ast-grep` ONLY on the scoped files from Tier 1 for exact variable values, lists, and line anchors. NEVER read 10+ whole files sequentially with `view_file`.
+
+## Safe Workspace Editing & Batch Completion
+- **Editing**: Always use `replace_file_content` for workspace files. Never pass `ArtifactMetadata` to workspace paths.
+- **L4 Sync**: Run `graphify update .` **once** at the end of a coherent edit batch (not after every file). Skip if the graph was absent. Full `/graphify .` only when the user asks.
 
 ## Hard bans
 
-- ❌ Treating every workspace as a graphify project
+- ❌ Treating every workspace as a graphify project (respect the gate)
+- ❌ Skipping Graphify L0/L1 during whole-codebase survey or documentation update tasks
+- ❌ Sequential whole-file `view_file` cascades across 10+ files
 - ❌ Unsolicited `/graphify .` / LLM extract mid-task
 - ❌ MCP/tool retry loops — fall through L0→L1→L2 once
 - ❌ Per-file `graphify update` spam
-- ❌ Whole-repo grep for architecture when the graph exists
+- ❌ Forgetting `graphify update .` at the end of an edit batch when graph exists
+

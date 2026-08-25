@@ -87,8 +87,29 @@ Always use these `just` commands instead of constructing manual shell commands:
    - `fd -t f "pattern"` instead of `Get-ChildItem -Recurse`
    - `sd 'find' 'replace' file` instead of `sed` or string replacement scripts
    - `jaq` or `jq` instead of `ConvertFrom-Json`
-3. **UTF-8 & PowerShell (.ps1) Encoding**:
+3. **Safe Workspace File Modification**:
+   - Always use `replace_file_content` for modifying workspace files.
+   - Never use `write_to_file` with `ArtifactMetadata` on workspace files (`ArtifactMetadata` is strictly for `<appDataDir>\brain\<conversation-id>/...` artifacts).
+4. **UTF-8 & PowerShell (.ps1) Encoding**:
    - Ensure all generated code, configs, and text files are saved in UTF-8.
    - **Critical for PowerShell (.ps1)**: Windows PowerShell 5.1 (`powershell.exe`) defaults to Shift-JIS/CP932 for BOM-less files. Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent parser crashes (e.g. `TerminatorExpectedAtEndOfString`).
    - Never invoke interactive pagers or editors.
+
+---
+
+## 🧠 5. Graphify & Fast Navigation Protocol in this Workspace
+
+`dotfiles-windows` has `graphify-out/graph.json` present. Follow this protocol:
+
+1. **Task Routing (Mandatory Gate)**:
+   - **System Survey / Documentation Sync (`README.md`, `AGENTS.md`) / Architecture Analysis**:
+     **MANDATORY L0/L1 Trigger**: Call Graphify MCP (`query_graph`, `god_nodes`) or CLI (`graphify query`) FIRST to get the topological map in 1-2 calls. Do NOT cascade 10+ sequential `view_file` calls.
+   - **Isolated Pinpoint Fix (Single line typo, static hex in known file)**:
+     Bypass L0/L1 directly to L2 (`rg -n` anchor) → L3 (`replace_file_content`).
+2. **Two-Tier Hybrid Discovery**:
+   - Tier 1: Graphify L0/L1 maps components, functions, and cross-file dependencies.
+   - Tier 2: Native CLI L2 (`rg -n`, `sd`) locates exact line numbers, arrays, or variable strings inside ONLY the scoped files.
+3. **Batch Completion Sync (L4)**:
+   - Whenever code or documentation in this repository is modified in a batch, execute `graphify update .` **once at the end of the batch** to ensure the knowledge graph stays 100% fresh.
+
 

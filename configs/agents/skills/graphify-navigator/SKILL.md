@@ -14,21 +14,32 @@ Turn architecture questions into **scoped subgraph answers**, then finish with *
 
 ## When to use
 
-- "How does X work?", "What calls Y?", "Trace Z", "blast radius / impact of changing W"
-- **Only when** `graphify-out/graph.json` exists, or the user explicitly asks to build/refresh the graph
-- Avoid raw multi-file reads when the graph can answer first
+- **Repository Survey & Global Documentation Sync**: Updating `README.md`, `AGENTS.md`, or architecture documents to reflect whole-codebase reality.
+- **Architecture & Relationship Discovery**: "How does X work?", "What calls Y?", "Trace Z pipeline", "What components exist in repo?"
+- **Impact & Blast Radius Analysis**: Multi-component refactoring, changing shared types, altering runtime pipelines.
+- **Gating Rule**: **Only when** `graphify-out/graph.json` exists, or the user explicitly asks to build/refresh the graph.
 
 ## When NOT to use
 
-- No `graphify-out/graph.json` and user did not ask for a graph → use `rg` / `fd` / `ast-grep` directly
-- Ordinary pinpoint edits with a known file path → skip the graph ladder
-- Do not unsolicited-run full multimodal `/graphify .` (slow, LLM cost, hang risk)
+- No `graphify-out/graph.json` and user did not ask for a graph → use `rg` / `fd` / `ast-grep` directly.
+- Strictly self-contained pinpoint fixes (e.g. single-line typo fix, static color hex change in known file) where NO discovery of other components is required.
+- **CRITICAL**: Do NOT bypass Graphify merely because a single file (like `README.md`) is mentioned in the prompt if the task requires surveying the codebase!
+- Do not unsolicited-run full multimodal `/graphify .` (slow, LLM cost, hang risk).
+
+## Task Classification Matrix
+
+| Category | Typical Prompts | Trigger Path |
+| :--- | :--- | :--- |
+| **A. System Survey & Documentation Sync** | "Update README to reflect codebase", "Explain architecture", "Audit repo structure" | **Mandatory L0/L1 Trigger** (`query_graph` / `god_nodes`) → Scoped `rg` → `replace_file_content` → `graphify update .` |
+| **B. Multi-Component Feature / Refactor** | "Add command X across CLI and installer", "Refactor runtime setup", "Trace pipeline" | **Mandatory L0/L1 Trigger** (`get_node` / `shortest_path`) → Scoped `ast-grep` → Edit → `graphify update .` |
+| **C. Self-Contained Pinpoint Edit** | "Fix typo in line 42", "Change port 8080 to 9090 in config.toml" | **Bypass L0/L1** → Scoped `rg -n` → `replace_file_content` |
 
 ## Hot path
 
 ```text
-MCP (if tools exist) → CLI graphify query → rg/fd/ast-grep locate → edit → graphify update . (once/batch)
+MCP (if tools exist) → CLI graphify query → rg/fd/ast-grep locate (scoped) → replace_file_content → graphify update . (once/batch)
 ```
+
 
 ### 1. Prefer MCP (when connected)
 
@@ -81,3 +92,5 @@ powershell.exe -NoProfile -Command '[Environment]::GetEnvironmentVariables("User
 5. **No broad file reads**: Do not read `GRAPH_REPORT.md` or start with whole-repo `rg` for architectural discovery when the graph exists.
 6. **No interactive pagers**: Always ensure `PAGER=cat` and `--paging=never`.
 7. **Batch updates**: Run `graphify update .` **once per edit batch**, not after every single file edit.
+8. **Safe Workspace Editing**: Always use `replace_file_content` for editing workspace files. Never pass `ArtifactMetadata` to workspace file targets.
+

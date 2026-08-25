@@ -285,7 +285,7 @@ try {
     Assert-Test -Name "ast-grep AST pattern match" -Condition $astOk
 
     # Test 4.6: Mermaid ASCII Diagram Rendering
-    $mmdResult = nu -c '"graph TD\n  A[Client] --> B[Server]" | ^bunx --bun mermaid-ascii' 2>&1 | Out-String
+    $mmdResult = nu -c "''graph TD`n  A[Client] --> B[Server]'' | ^bunx --bun mermaid-ascii" 2>&1 | Out-String
     $mmdOk = $mmdResult -match "Client" -and $mmdResult -match "Server"
     Assert-Test -Name "Mermaid ASCII diagram rendering" -Condition $mmdOk -Details ($mmdResult.Trim())
 

@@ -38,7 +38,11 @@ install:
 
 # Securely configure AI Agent & Graphify API keys in Windows User Environment
 setup-keys:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
+
+# Securely configure fal.ai API key (FAL_KEY) for LP asset generator & background removal
+setup-fal:
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1 -FalOnly
 
 # Create a lightweight git checkpoint branch before risky agent edits
 checkpoint:

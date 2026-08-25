@@ -26,7 +26,7 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
   - Herdr AI TUI マルチプレクサ + `herdr-sidebar`（VS Code風ファイルツリー・Git SCMサイドバー）。
   - Lazygit + Delta（構文ハイライト付き TUI Git クライアント）。
 - 🔒 **セキュアな API キー管理**:
-  - `just setup-keys` により、リポジトリにキーを一切保存せず Windows ユーザー環境変数にのみ対話型登録。
+  - `just setup-keys` / `just setup-fal` により、リポジトリにキーを一切保存せず Windows ユーザー環境変数（`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `FAL_KEY` 等）にのみ対話型登録。
 
 ---
 

@@ -130,3 +130,23 @@ Use `hyperfine` for statistical execution performance measurement.
   ```bash
   hyperfine --warmup 3 'rg -n "pattern" src/' 'powershell -Command "Select-String ..."'
   ```
+
+---
+
+## 🎯 8. Surgical Pinpoint Locate & Anti-Omission Recipes
+
+Use compiled tools to extract exact line ranges and surrounding context without dumping whole files into context:
+
+### Recipes:
+- **Exact Line + Context Slicing (Bypasses full `view_file`)**:
+  ```bash
+  rg -n -C 3 "function_name" path/to/file.ps1
+  ```
+- **Find all symbol references in a file (Anti-Omission check before edits)**:
+  ```bash
+  rg -n "\$variableName|function_name" path/to/file.ps1
+  ```
+- **AST Node Range Extraction (Precise boundaries)**:
+  ```bash
+  ast-grep -p 'function $NAME($$$ARGS) { $$$BODY }' path/to/file.ts
+  ```

@@ -13,7 +13,7 @@
    - After modifying configurations in `configs/`:
      - Run `just deploy` to apply changes to user and application directories.
      - Run `just sync-rules` to propagate AI agent rules & skills.
-     - Run `just test` to verify complete environment and configuration integrity.
+     - Run `just test` or `just audit` to verify complete environment and configuration integrity.
 3. **Zero-Guessing Directory Map**:
    - Consult the directory map below before searching files with `fd` or `rg` to save tokens.
 
@@ -52,6 +52,7 @@ dotfiles-windows/
 │   ├── 02_install_fonts.ps1   # UDEV Gothic 35NF automatic download & font registry
 │   ├── 03_setup_runtimes.ps1  # fnm, uv, rustup, jaq, env vars, ~/.local/bin shims
 │   ├── 04_setup_configs.ps1   # Deploy configs/ to $APPDATA, profiles, and Windows Terminal
+│   ├── audit_workspace.ps1    # 4-phase unified workspace audit (Tests, SSOT, Graph, Junk)
 │   ├── setup_api_keys.ps1     # Secure standalone API key setup (Windows User Environment)
 │   └── sync_agent_rules.ps1   # Fast sync configs/agents/ to Antigravity/Claude/Cursor globals
 │
@@ -67,11 +68,18 @@ Always use these `just` commands instead of constructing manual shell commands:
 
 | Command | Purpose | When to Run |
 | :--- | :--- | :--- |
+| `just audit` | 🌟 Run 4-phase unified audit (Tests + SSOT sync + Graph health + Junk scan) | First step for any survey/audit |
 | `just test` | Run full automated test suite (CLI binaries, env vars, rules sync, UTF-8, benchmarks) | Before & after making changes |
+| `just clean` | Clean up temporary files, stale backups (*.bak), and cache artifacts | After completing edits or before committing |
 | `just deploy` | Deploy all `configs/` to user profile directories and Windows Terminal | After updating any file in `configs/` |
 | `just sync-rules` | Synchronize AI rules and skills to global paths & project mirrors | After editing `configs/agents/` |
 | `just check-rules`| Check if deployed rules match master SSOT without modifying files | During CI or pre-flight verification |
 | `just checkpoint` | Create a lightweight git checkpoint branch before risky agent edits | Before large/destructive refactoring |
+| `just rollback` | Instantly rollback to the most recent git checkpoint branch | After failed or broken agent edits |
+| `just graph <q>`| 🧠 Fast compact query on knowledge graph (e.g. `just graph "deploy"`) | Architectural / symbol discovery |
+| `just hubs` | Inspect top architectural hubs / god-nodes in codebase | High-level system overview |
+| `just neighbors <l>`| Expand relations & child components of a specific hub or file | Hub exploration & blast radius |
+| `just path <a> <b>` | Trace shortest caller/dependency path between two symbols | Dependency & refactor impact |
 | `just update-graph`| Refresh repository knowledge graph via fast AST analysis | After completing an edit batch |
 | `just install` | Run full clean setup (Packages, Fonts, Runtimes, Configs) | On fresh machine installation |
 | `just setup-keys` | Securely configure AI Agent & Graphify API keys in Windows User Environment | When adding or updating API keys |
@@ -89,5 +97,5 @@ Always use these `just` commands instead of constructing manual shell commands:
    - Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent Windows PowerShell 5.1 parser crashes.
 4. **Graphify Fast Navigation in this Workspace**:
    - `graphify-out/graph.json` is present. Follow the 2-Tier Discovery protocol:
-     - **Survey / Architecture**: Run `just test` first → `god_nodes` / `get_neighbors` (expand hubs) → scoped `rg -n` / `replace_file_content`.
+     - **Survey / Architecture**: Run `just audit` first → `god_nodes` / `get_neighbors` (expand hubs) → scoped `rg -n` / `replace_file_content`.
      - **Batch Sync**: Execute `just update-graph` once at the end of an edit batch.

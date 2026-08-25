@@ -97,3 +97,5 @@ Write-Host "==========================================================" -Foregro
 Write-Host "   API Key Setup Completed!                               " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "※ 新しく開いたターミナルやセッションから設定値が自動的に反映されます。" -ForegroundColor Yellow
+Write-Host '※ 現在のセッションですぐに反映したい場合は . $PROFILE を実行してください。' -ForegroundColor DarkGray
+Write-Host ""

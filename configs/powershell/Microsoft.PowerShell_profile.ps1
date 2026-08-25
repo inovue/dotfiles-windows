@@ -1,4 +1,4 @@
-# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---
@@ -8,7 +8,7 @@ $OutputEncoding           = [System.Text.Encoding]::UTF8
 
 # --- 2. Remove Slow & Conflicting Built-in Cmdlet Aliases ---
 # Prevents 'cat', 'ls', 'curl', etc. from executing slow .NET cmdlets instead of fast native executables.
-$aliasesToRemove = @("cat", "ls", "curl", "wget", "sc", "gc", "cp", "rm", "mv", "sort")
+$aliasesToRemove = @("cat", "ls", "curl", "wget", "sc", "gc", "cp", "rm", "mv", "sort", "diff", "ps", "kill", "tee", "sleep", "man")
 foreach ($alias in $aliasesToRemove) {
     if (Get-Alias -Name $alias -ErrorAction SilentlyContinue) {
         Remove-Item "Alias:$alias" -Force -ErrorAction SilentlyContinue

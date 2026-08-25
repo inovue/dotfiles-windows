@@ -1,7 +1,7 @@
 ---
 description: Graphify hybrid navigation protocol for Cursor agent (gated on graphify-out/)
 globs: ["*"]
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Graphify × Cursor Hybrid Protocol
@@ -10,19 +10,17 @@ alwaysApply: true
 
 ## ⚡ Deterministic Execution State Machine
 1. **Mode A (Survey / Audit / QA)**:
-   - Run `just test` first. If PASS -> 100% ground truth verified.
-   - Run `graphify god-nodes --top 10` or `graphify query "<topic>" --budget 1500`.
-   - Expand central hubs with `graphify query "<hub>" --budget 1500`.
-   - **Zero-Crawler Rule**: Never run `rg`/`fd` across scripts to re-check facts verified by `just test`.
+   - Run `just audit` first. If PASS -> 100% ground truth verified (0 junk, 0 debt).
+   - Run `just hubs` or `just graph "<topic>"`.
+   - Expand central hubs with `just neighbors "<hub>"`.
+   - **Zero-Crawler Rule**: 0 file reads allowed when `just audit` passes. Synthesize directly.
 2. **Mode B (Code Modification / Refactoring)**:
-   - Locate blast radius via `graphify path` or `graphify explain`.
-   - Locate exact edit lines via scoped `rg -n`.
+   - Locate blast radius via `just path <src> <tgt>` or `graphify explain`.
+   - Locate exact edit lines via scoped `rg -n` (max 2-3 files).
    - Edit via `replace_file_content` / `sd`.
-   - Run `just test` + `graphify update .` once per batch.
+   - Run `just deploy` (if configs) + `just audit` + `just update-graph` once per batch.
 
 ## ❌ Hard Anti-Pattern Bans
-- ❌ NEVER fall back to unanchored `rg` before querying and expanding central hubs (`god-nodes`).
-- ❌ Max 2–3 `view_file` calls per task. No terminal slicing cascades (`head`, `tail`, `Get-Content`).
+- ❌ NEVER fall back to unanchored `rg` before querying and expanding central hubs (`god-nodes` / `hubs`).
+- ❌ Max 2–3 `view_file` calls per task. 0 file reads during audits if `just audit` passes. No terminal slicing cascades (`head`, `tail`, `Get-Content`).
 - ❌ Safe editing: Never edit `CLAUDE.md` or `.cursorrules` directly (edit `configs/agents/` and run `just sync-rules`).
-
-

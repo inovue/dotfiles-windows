@@ -166,6 +166,7 @@ $configFiles = @(
     @{ Name = "PowerShell 5.1 Profile";                      Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
     @{ Name = "PowerShell 7 Profile";                        Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PowerShell") "Microsoft.PowerShell_profile.ps1" }
     @{ Name = "Script: setup_api_keys.ps1";                  Path = Join-Path $rootDir "scripts\setup_api_keys.ps1" }
+    @{ Name = "Script: audit_workspace.ps1";                 Path = Join-Path $rootDir "scripts\audit_workspace.ps1" }
 )
 
 foreach ($cf in $configFiles) {
@@ -307,6 +308,13 @@ try {
     # Test 4.7: AI Agent SSOT Rule Synchronization
     $syncCheckProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $rootDir "scripts\sync_agent_rules.ps1"), "-Check" -NoNewWindow -Wait -PassThru
     Assert-Test -Name "AI Agent SSOT Rule Synchronization (Master vs Targets)" -Condition ($syncCheckProc.ExitCode -eq 0) -Details "ExitCode: $($syncCheckProc.ExitCode)"
+
+    # Test 4.8: Graphify Knowledge Graph Fast Query Execution
+    if (Test-Path (Join-Path $rootDir "graphify-out\graph.json")) {
+        $graphQueryRes = & graphify query "deploy" --budget 1200 2>&1 | Out-String
+        $graphOk = ($graphQueryRes -match "04_setup_configs" -or $graphQueryRes -match "Deploy")
+        Assert-Test -Name "Graphify Knowledge Graph query execution" -Condition $graphOk -Details ($graphQueryRes.Trim().Split("`n")[0])
+    }
 
 } finally {
     Remove-Item -Path $tempTestDir -Recurse -Force -ErrorAction SilentlyContinue

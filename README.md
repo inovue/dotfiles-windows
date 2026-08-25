@@ -34,9 +34,8 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 
 ```text
 dotfiles-windows/
-├── AGENTS.md                       # 🧭 AIエージェント向けプロジェクトナビゲーション＆実行SSOT
-├── CLAUDE.md                       # Claude Code 用プロジェクトガイド（AGENTS.md同期）
-├── .cursorrules                    # Cursor 用プロジェクトルール（AGENTS.md同期）
+├── AGENTS.md                       # 🧭 AIエージェント向けプロジェクトガイド（唯一の常時ロード原本）
+├── CLAUDE.md                       # Claude Code 用 @AGENTS.md ポインタ（sync-rules生成、重複ミラー廃止）
 ├── justfile                        # Just タスクランナー定義（sync-rules, check-rules, deploy, test, setup-keys等）
 ├── install.ps1                     # 統合エントリポイント (全自動 or ステップ別実行, -UseSymlinks, -Force)
 ├── README.md                       # ユーザー向けドキュメント（本ファイル）

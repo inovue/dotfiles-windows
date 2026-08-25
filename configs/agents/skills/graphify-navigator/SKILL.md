@@ -101,6 +101,6 @@ sd 'oldName' 'newName' path/to/file.ps1
 5. **No Blind Pattern Guessing**: Never execute unanchored `rg` searches guessing variable or key names. Inspect graph nodes or AST first.
 6. **Deterministic Execution**: Always wrap variable-containing PowerShell one-liners in single quotes `'...'` to prevent outer shell parameter expansion.
 7. **Cap query tokens**: Always `token_budget: 1200` unless the user asks for more depth.
-8. **Batch updates**: Run `just update-graph` **once per edit batch**, not after every single file edit.
+8. **Batch updates**: Run `just update-graph` **once per edit batch**, not after every single file edit. The post-commit git hook (`just install-graph-hook` → `graphify hook install`) keeps the graph current across commits automatically; the batch update only needs to cover uncommitted work.
 9. **Safe Workspace Editing**: Always use `replace_file_content` for editing workspace files. Never pass `ArtifactMetadata` to workspace file targets.
 10. **Snippet-First Termination in Reviews**: When auditing code safety or implementation logic, if `rg -n` or `ast-grep` snippets confirm validation presence or state, conclude immediately with Read=0. Never call `view_file` sequentially just to view surrounding context.

@@ -3,11 +3,13 @@
 .SYNOPSIS
     configs/agents/ 内の SSOT ルール＆スキルをグローバルエージェント環境へ一括同期します。
 .DESCRIPTION
-    正本 (configs/agents/) から以下へ同期します:
+    正本 (configs/agents/GLOBAL_RULES.md ほか) から以下へ同期します:
     - Antigravity: ~/.gemini/config/*, ~/.agents/rules|workflows|skills, MCP merge
-    - Claude Code: ~/.claude/CLAUDE.md, ~/.claude/skills/...
+    - Claude Code: ~/.claude/CLAUDE.md, ~/.claude/skills/..., ~/.claude.json (MCP surgical merge)
     - Cursor:      %APPDATA%/Cursor/User/AGENTS.md, ~/.cursor/rules/graphify.mdc
-    - Workspace:   CLAUDE.md, .cursorrules, .agents/mcp_config.json (gitignored)
+    - Workspace:   CLAUDE.md (@AGENTS.md pointer), .agents/mcp_config.json (gitignored)
+    アンチ重複: ワークスペースの .cursorrules / .cursor/rules/graphify.mdc は
+    常時コンテキストの多重ロード源となるため存在すれば除去します。
     vendor の広義 graphify スキルは除去し、graphify-navigator を SSOT とします。
 .PARAMETER Check
     同期せず差分のみ検査（終了コード 0: 一致, 1: 差分あり）。
@@ -22,7 +24,8 @@ $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent $PSScriptRoot
 $configsDir = Join-Path $rootDir "configs"
 
-$masterRules = Join-Path $configsDir "agents\AGENTS.md"
+$masterRules = Join-Path $configsDir "agents\GLOBAL_RULES.md"
+$masterClaudeProjectPointer = Join-Path $configsDir "agents\claude\CLAUDE.project.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
@@ -238,6 +241,97 @@ function Merge-GraphifyMcpConfig {
     $script:syncedCount++
 }
 
+function Invoke-JaqUtf8 {
+    # Runs jaq and captures stdout as UTF-8 regardless of console codepage (CJK-safe).
+    param([string[]]$JaqArgs)
+    $prevEnc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        $out = (& jaq @JaqArgs | Out-String)
+    } finally {
+        [Console]::OutputEncoding = $prevEnc
+    }
+    return @{ ExitCode = $LASTEXITCODE; Output = $out }
+}
+
+function Test-ClaudeGraphifyMcpInSync {
+    # ~/.claude.json is Claude Code's live state file: huge, deeply nested, CJK text.
+    # PowerShell 5.1 ConvertFrom-Json has a ~2MB limit and mangles DateTime strings,
+    # so both the check and the merge must go through jaq only (byte-safe).
+    param([string]$TemplatePath, [string]$DestPath)
+    if (-not (Test-Path $TemplatePath)) { return $false }
+    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $want = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
+    if (-not $want) { return $true }  # graphify-mcp not installed: nothing to enforce
+    if (-not (Test-Path $DestPath)) { return $false }
+    if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) { return $false }
+
+    $srvTmp = Join-Path $env:TEMP ("graphify_mcp_want_{0}.json" -f ([Guid]::NewGuid().ToString('N')))
+    try {
+        [System.IO.File]::WriteAllText($srvTmp, ($want | ConvertTo-Json -Depth 10 -Compress), [System.Text.UTF8Encoding]::new($false))
+        $res = Invoke-JaqUtf8 -JaqArgs @('--slurpfile', 'w', $srvTmp, '(.mcpServers.graphify // null) == $w[0]', $DestPath)
+        return ($res.ExitCode -eq 0 -and $res.Output.Trim() -eq 'true')
+    } finally {
+        Remove-Item $srvTmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Merge-GraphifyMcpIntoClaudeUserConfig {
+    param([string]$TemplatePath, [string]$DestPath)
+    if (-not (Test-Path $TemplatePath)) {
+        Write-Warning "[SKIP] MCP template missing: $TemplatePath"
+        return
+    }
+    if (Test-ClaudeGraphifyMcpInSync -TemplatePath $TemplatePath -DestPath $DestPath) {
+        Write-Host "  [OK] MCP graphify already in sync -> $DestPath" -ForegroundColor DarkGray
+        $script:skippedCount++
+        return
+    }
+
+    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8).Trim() | ConvertFrom-Json
+    $graphifyServer = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
+    if (-not $graphifyServer) {
+        Write-Warning "[SKIP] graphify-mcp not found; Claude Code MCP merge skipped. Run scripts/03_setup_runtimes.ps1 then re-run sync-rules."
+        return
+    }
+    if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) {
+        Write-Warning "[SKIP] jaq not found; cannot surgically merge $DestPath."
+        return
+    }
+
+    if (-not (Test-Path $DestPath)) {
+        [System.IO.File]::WriteAllText($DestPath, "{}`n", [System.Text.UTF8Encoding]::new($false))
+    }
+
+    $srvTmp = Join-Path $env:TEMP ("graphify_mcp_server_{0}.json" -f ([Guid]::NewGuid().ToString('N')))
+    $outTmp = "$DestPath.graphify-merge.tmp"
+    try {
+        [System.IO.File]::WriteAllText($srvTmp, ($graphifyServer | ConvertTo-Json -Depth 10 -Compress), [System.Text.UTF8Encoding]::new($false))
+
+        $res = Invoke-JaqUtf8 -JaqArgs @('-c', '--slurpfile', 'g', $srvTmp, '.mcpServers = ((.mcpServers // {}) + {graphify: ($g[0])})', $DestPath)
+        if ($res.ExitCode -ne 0 -or -not $res.Output.Trim()) {
+            Write-Warning "[FAIL] jaq merge failed for $DestPath (exit $($res.ExitCode)); file left untouched."
+            return
+        }
+
+        # Validate merged output with jaq before replacing the live file (never trust a blind write).
+        # NOTE: the filter must not contain double quotes (PS 5.1 native arg passing mangles them).
+        [System.IO.File]::WriteAllText($outTmp, $res.Output.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
+        $check = Invoke-JaqUtf8 -JaqArgs @('-r', '.mcpServers.graphify.command // empty', $outTmp)
+        if ($check.ExitCode -ne 0 -or -not $check.Output.Trim()) {
+            Write-Warning "[FAIL] merged JSON validation failed for $DestPath; file left untouched."
+            return
+        }
+
+        Move-Item -Path $outTmp -Destination $DestPath -Force
+        Write-Host "  [SYNCED] MCP graphify (surgical jaq merge) -> $DestPath" -ForegroundColor Green
+        $script:syncedCount++
+    } finally {
+        Remove-Item $srvTmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path $outTmp) { Remove-Item $outTmp -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 Write-Host "`n=======================================================" -ForegroundColor Cyan
 Write-Host "   AI Agent SSOT Rule & Skill Synchronizer            " -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -250,9 +344,7 @@ $skippedCount = 0
 
 Write-Host ">> Synchronizing Global AI Agent Configurations..." -ForegroundColor Cyan
 
-$projectAgentsMd = Join-Path $rootDir "AGENTS.md"
 $projectClaudeMd = Join-Path $rootDir "CLAUDE.md"
-$projectCursorRules = Join-Path $rootDir ".cursorrules"
 
 $allTargets = @(
     @{ Name = "Antigravity Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "AGENTS.md"; IsDir = $false },
@@ -282,7 +374,6 @@ $allTargets = @(
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
-    @{ Name = "Workspace Cursor Rule (MDC)";         Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $rootDir ".cursor\rules") "graphify.mdc"; IsDir = $false },
     @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false },
     @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false },
     @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false },
@@ -291,8 +382,7 @@ $allTargets = @(
     @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Workspace Claude Code Guide";         Src = $projectAgentsMd; Dest = $projectClaudeMd;    IsDir = $false },
-    @{ Name = "Workspace Cursor Rules";              Src = $projectAgentsMd; Dest = $projectCursorRules; IsDir = $false }
+    @{ Name = "Workspace Claude Pointer (CLAUDE.md)"; Src = $masterClaudeProjectPointer; Dest = $projectClaudeMd; IsDir = $false }
 )
 
 # Broad vendor "graphify" skills conflict with SSOT graphify-navigator.
@@ -366,6 +456,44 @@ foreach ($mcpDest in $mcpTargets) {
         }
     } else {
         Merge-GraphifyMcpConfig -TemplatePath $mcpTemplate -DestPath $mcpDest
+    }
+}
+
+# Claude Code user scope (~/.claude.json): surgical jaq merge only (never PS JSON round-trip).
+$claudeUserConfig = Join-Path $env:USERPROFILE ".claude.json"
+Write-Host "`n>> Graphify MCP for Claude Code (~/.claude.json; surgical jaq merge)..." -ForegroundColor Cyan
+if ($Check) {
+    if (Test-ClaudeGraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $claudeUserConfig) {
+        Write-Host "  [OK] MCP graphify in sync -> $claudeUserConfig" -ForegroundColor DarkGray
+        $skippedCount++
+    } else {
+        Write-Host "  [DIFF] MCP graphify differs or missing -> $claudeUserConfig" -ForegroundColor Yellow
+        $hasDiff = $true
+    }
+} else {
+    Merge-GraphifyMcpIntoClaudeUserConfig -TemplatePath $mcpTemplate -DestPath $claudeUserConfig
+}
+
+# Duplicated always-on mirrors bloat every agent turn and dilute instruction priority.
+# Cursor reads AGENTS.md natively; the global ~/.cursor/rules/graphify.mdc covers this machine.
+$staleWorkspaceMirrors = @(
+    (Join-Path $rootDir ".cursorrules")
+    (Join-Path $rootDir ".cursor\rules\graphify.mdc")
+)
+Write-Host "`n>> Checking for stale duplicated workspace rule mirrors..." -ForegroundColor Cyan
+foreach ($stale in $staleWorkspaceMirrors) {
+    if (Test-Path $stale) {
+        $hasDiff = $true
+        if ($Check) {
+            Write-Host "  [DIFF] Stale duplicated mirror present: $stale" -ForegroundColor Yellow
+        } else {
+            Remove-Item -Path $stale -Force
+            Write-Host "  [REMOVED] Stale duplicated mirror: $stale" -ForegroundColor Green
+            $syncedCount++
+        }
+    } else {
+        Write-Host "  [OK] No stale mirror at $stale" -ForegroundColor DarkGray
+        $skippedCount++
     }
 }
 

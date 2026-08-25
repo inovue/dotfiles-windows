@@ -1,26 +1,27 @@
 ---
-description: Graphify hybrid navigation protocol for Cursor agent (gated on graphify-out/)
-globs: ["*"]
-alwaysApply: false
+description: Graph-first navigation protocol (always-on; active only when graphify-out/graph.json exists)
+alwaysApply: true
 ---
 
-# Graphify × Cursor Hybrid Protocol
+# Graphify × Cursor Protocol
 
-**Gate:** Apply only when `graphify-out/graph.json` exists. Otherwise use `rg` / `fd` / `ast-grep`.
+**Gate:** no `graphify-out/graph.json` → plain `rg`/`fd`/`ast-grep`; never build a graph unsolicited.
+Full MCP tool schemas & recipes live in skill `graphify-navigator` — load it when you need parameters beyond the basics below.
 
-## ⚡ Deterministic Execution State Machine
-1. **Mode A (Survey / Audit / QA)**:
-   - Run `just audit` first. If PASS -> 100% ground truth verified (0 junk, 0 debt).
-   - Run `just hubs` or `just graph "<topic>"`.
-   - Expand central hubs with `just neighbors "<hub>"`.
-   - **Zero-Crawler Rule**: 0 file reads allowed when `just audit` passes. Synthesize directly.
-2. **Mode B (Code Modification / Refactoring)**:
-   - Locate blast radius via `just path <src> <tgt>` or `graphify explain`.
-   - Locate exact edit lines via scoped `rg -n` (max 2-3 files).
-   - Edit via `replace_file_content` / `sd`.
-   - Run `just deploy` (if configs) + `just audit` + `just update-graph` once per batch.
+## Flow (hubs answer in 1-2 calls what 20 greps cannot)
 
-## ❌ Hard Anti-Pattern Bans
-- ❌ NEVER fall back to unanchored `rg` before querying and expanding central hubs (`god-nodes` / `hubs`).
-- ❌ Max 2–3 `view_file` calls per task. 0 file reads during audits if `just audit` passes. No terminal slicing cascades (`head`, `tail`, `Get-Content`).
-- ❌ Safe editing: Never edit `CLAUDE.md` or `.cursorrules` directly (edit `configs/agents/` and run `just sync-rules`).
+- **Survey / audit** → `just audit` first: a PASS is verified ground truth, so skip re-checking reads. Then `god_nodes` or `query_graph(question=…, token_budget=1200)` → ALWAYS expand hubs with `get_neighbors(label=…)` before any manual scan. Synthesize with 0 file reads when the audit passed.
+- **Modify** → scope blast radius with `shortest_path` / `get_node` (CLI: `just path`) → scoped `rg -n` on the 2-3 identified files → surgical edit → once per batch: `just deploy` (if configs) + `just audit` + `just update-graph`.
+- **Deep review** → graph anchor (`loc=Lxx` tags) → scoped `rg -n` snippets → conclude directly when snippets prove the point; slice-read (≤30 lines, ≤2 files) only genuine ambiguity.
+
+## Mid-Stream Re-Invocation (Graphify is a loop, not an entry gate)
+
+Re-query the graph before designing new functions or tasks, when syncing cross-layer files (`justfile` ↔ docs ↔ deploy scripts), and when a lookup fails (`get_node` empty → retry `query_graph(question=…)`, not grep).
+
+## Invariants
+
+- Params are strict: `query_graph(question=…)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query` / `name`. Node labels are file basenames or symbol names.
+- Always pass `token_budget: 1200` for compact inline answers.
+- Never fall back to unanchored `rg`/`fd` before hub expansion; never re-verify audit-proven facts by crawling files.
+- Freshness: the post-commit hook auto-rebuilds the graph; run `just update-graph` once per edit batch for uncommitted work.
+- SSOT: never edit generated mirrors (workspace `CLAUDE.md`, global rule copies) — edit `configs/agents/` and run `just sync-rules`.

@@ -138,10 +138,10 @@ $configFiles = @(
     # Workspace Level Files (for instant agent context)
     @{ Name = "Workspace Project Guide (AGENTS.md)";         Path = Join-Path $rootDir "AGENTS.md" }
     @{ Name = "Workspace Claude Guide (CLAUDE.md)";          Path = Join-Path $rootDir "CLAUDE.md" }
-    @{ Name = "Workspace Cursor Rules (.cursorrules)";       Path = Join-Path $rootDir ".cursorrules" }
 
     # Master SSOT Configs
-    @{ Name = "Master SSOT Rules (configs/agents/AGENTS.md)"; Path = Join-Path $rootDir "configs\agents\AGENTS.md" }
+    @{ Name = "Master SSOT Rules (configs/agents/GLOBAL_RULES.md)"; Path = Join-Path $rootDir "configs\agents\GLOBAL_RULES.md" }
+    @{ Name = "Master Claude Pointer (CLAUDE.project.md)";   Path = Join-Path $rootDir "configs\agents\claude\CLAUDE.project.md" }
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
@@ -178,7 +178,6 @@ $configFiles = @(
     @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
     @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
     @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
-    @{ Name = "Workspace Cursor Rule (.cursor/rules/graphify.mdc)"; Path = Join-Path $rootDir ".cursor\rules\graphify.mdc" }
     @{ Name = "Agents always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".agents\rules\graphify.md" }
     @{ Name = "Agents graphify workflow";                    Path = Join-Path $env:USERPROFILE ".agents\workflows\graphify.md" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
@@ -200,11 +199,29 @@ foreach ($cf in $configFiles) {
     Assert-Test -Name "Config: $($cf.Name) exists" -Condition $exists -Details "Path: $($cf.Path)"
 }
 
-# Verify SSOT Rules Compactness (prevents prompt bloat)
-$masterRulesFile = Join-Path $rootDir "configs\agents\AGENTS.md"
+# Verify SSOT Rules Compactness (prevents prompt bloat; always-on layers must stay lean)
+$masterRulesFile = Join-Path $rootDir "configs\agents\GLOBAL_RULES.md"
 if (Test-Path $masterRulesFile) {
     $rulesLineCount = (Get-Content $masterRulesFile | Measure-Object -Line).Lines
-    Assert-Test -Name "SSOT Rules Compactness (AGENTS.md < 200 lines)" -Condition ($rulesLineCount -lt 200) -Details "Current lines: $rulesLineCount"
+    Assert-Test -Name "SSOT Rules Compactness (GLOBAL_RULES.md < 100 lines)" -Condition ($rulesLineCount -lt 100) -Details "Current lines: $rulesLineCount"
+}
+$projectAgentsFile = Join-Path $rootDir "AGENTS.md"
+if (Test-Path $projectAgentsFile) {
+    $agentsLineCount = (Get-Content $projectAgentsFile | Measure-Object -Line).Lines
+    Assert-Test -Name "Project Guide Compactness (AGENTS.md < 100 lines)" -Condition ($agentsLineCount -lt 100) -Details "Current lines: $agentsLineCount"
+}
+
+# Anti-duplication invariants: duplicated always-on mirrors double-load context every turn.
+Assert-Test -Name "No duplicated workspace .cursorrules (Cursor reads AGENTS.md natively)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursorrules"))) -Details "Remove it: just sync-rules"
+Assert-Test -Name "No duplicated workspace .cursor/rules/graphify.mdc (global rule covers)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\rules\graphify.mdc"))) -Details "Remove it: just sync-rules"
+Assert-Test -Name "No stray nested configs/agents/AGENTS.md (auto-ingested by Cursor)" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\AGENTS.md"))) -Details "Master is GLOBAL_RULES.md"
+
+# Workspace CLAUDE.md must be the official @AGENTS.md bridge, not a duplicate.
+$wsClaudeMd = Join-Path $rootDir "CLAUDE.md"
+if (Test-Path $wsClaudeMd) {
+    $claudeMdRaw = [System.IO.File]::ReadAllText($wsClaudeMd, [System.Text.Encoding]::UTF8)
+    $isPointer = ($claudeMdRaw -match '@AGENTS\.md') -and (($claudeMdRaw -split "`n").Count -le 5)
+    Assert-Test -Name "Workspace CLAUDE.md is an @AGENTS.md pointer (not a duplicate)" -Condition $isPointer -Details "Length: $((($claudeMdRaw -split "`n").Count)) lines"
 }
 
 # Verify all PowerShell scripts parse cleanly in PowerShell AST and have UTF-8 BOM if non-ASCII
@@ -263,6 +280,28 @@ foreach ($mcpPath in $mcpPathsToCheck) {
     } catch {
         Assert-Test -Name "MCP graphify config parse ($mcpPath)" -Condition $false -Details "$_"
     }
+}
+
+# Claude Code user scope (~/.claude.json): jaq-only check.
+# The file is Claude Code's live state (can exceed PS 5.1 ConvertFrom-Json ~2MB limit), never parse it with PowerShell.
+$claudeUserJson = Join-Path $env:USERPROFILE ".claude.json"
+$graphifyMcpInstalledForClaude = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
+$jaqAvailable = $null -ne (Get-Command jaq -ErrorAction SilentlyContinue)
+if ($graphifyMcpInstalledForClaude -and $jaqAvailable) {
+    if (Test-Path $claudeUserJson) {
+        # NOTE: filter must avoid double quotes (PS 5.1 native arg passing mangles them); use // empty.
+        $claudeCmd = (& jaq -r '.mcpServers.graphify.command // empty' $claudeUserJson 2>&1 | Out-String).Trim()
+        $cIsAbs = ($claudeCmd -match '(?i)\.exe$' -or $claudeCmd -match '^[A-Za-z]:\\' -or $claudeCmd -match '^/')
+        $cNotUv = ($claudeCmd -notmatch '(?i)(^|[\\/])uv(\.exe)?$')
+        $cNotBare = ($claudeCmd -ne "graphify-mcp" -and $claudeCmd -ne "graphify-mcp.exe")
+        $cPathOk = if ($cIsAbs) { Test-Path $claudeCmd } else { $false }
+        Assert-Test -Name "MCP graphify uses absolute graphify-mcp (.claude.json)" -Condition ($cIsAbs -and $cNotUv -and $cNotBare -and $cPathOk) -Details "command='$claudeCmd'"
+    } else {
+        Assert-Test -Name "MCP graphify config exists (.claude.json)" -Condition $false -Details "Missing: $claudeUserJson (run just sync-rules)"
+    }
+} elseif ($graphifyMcpInstalledForClaude) {
+    Write-Host "  [SKIP] jaq not installed; cannot verify .claude.json MCP entry" -ForegroundColor DarkGray
+    $script:warnCount++
 }
 
 # UDEV Gothic NF Font Check

@@ -56,6 +56,10 @@ rollback:
 update-graph:
     @graphify update .
 
+# Install post-commit git hook that auto-rebuilds the knowledge graph on every commit
+install-graph-hook:
+    @graphify hook install
+
 # Query the knowledge graph with compact token budget (e.g. just graph "deploy")
 graph query:
     @graphify query "{{query}}" --budget 1200
@@ -66,7 +70,7 @@ hubs:
 
 # Expand neighbors and relationships of a specific component or hub
 neighbors label:
-    @graphify query "{{label}}" --budget 1200
+    @graphify explain "{{label}}"
 
 # Trace the shortest dependency/caller path between two components
 path source target:

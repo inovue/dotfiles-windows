@@ -1,4 +1,4 @@
-# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---
@@ -42,8 +42,8 @@ if ($isNonInteractive) {
 # --- 5. Interactive Session Enhancements (Human Terminal Use Only) ---
 # If Starship / Zoxide are installed, initialize them for interactive PowerShell
 if (Get-Command starship -ErrorAction SilentlyContinue) {
-    Invoke-Expression (&starship init powershell)
+    Invoke-Expression (&starship init powershell --print-full-init | Out-String)
 }
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    Invoke-Expression (&zoxide init powershell)
+    Invoke-Expression (&zoxide init powershell | Out-String)
 }

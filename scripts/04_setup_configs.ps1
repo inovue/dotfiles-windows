@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     configs/ ディレクトリ内の各種ツール設定ファイル（Dotfiles）をユーザー環境に配置します。

@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Windows モダン開発環境 (Nushell, Helix, Rust/Go CLI) 統合セットアップスクリプト
@@ -8,9 +8,12 @@
     実行するステップを指定します (1: Winget, 2: Font, 3: Runtimes, 4: Configs, All: すべて)
 .PARAMETER UseSymlinks
     設定ファイルをコピーではなくシンボリックリンクで配置します (管理者権限/開発者モード推奨)
+.PARAMETER Force
+    既にインストール済みのフォントやパッケージがあっても強制的に再取得・再インストールします
 .EXAMPLE
     .\install.ps1 -All
-    .\install.ps1 -Step 2  # フォントのみインストール
+    .\install.ps1 -Step 2         # フォントのみ（インストール済みの場合はスキップ）
+    .\install.ps1 -Step 2 -Force  # フォントを強制的に再取得して再インストール
 #>
 [CmdletBinding()]
 param(
@@ -19,7 +22,9 @@ param(
 
     [switch]$All,
 
-    [switch]$UseSymlinks
+    [switch]$UseSymlinks,
+
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,7 +70,9 @@ foreach ($s in $stepsToRun) {
             & (Join-Path $scriptsDir "01_winget_packages.ps1")
         }
         "2" {
-            & (Join-Path $scriptsDir "02_install_fonts.ps1")
+            $params = @{}
+            if ($Force) { $params["Force"] = $true }
+            & (Join-Path $scriptsDir "02_install_fonts.ps1") @params
         }
         "3" {
             & (Join-Path $scriptsDir "03_setup_runtimes.ps1")

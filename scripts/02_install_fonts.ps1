@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     yuru7/udev-gothic リポジトリから最新の UDEV Gothic NF (UDEV Gothic 35NF / Nerd Fonts 対応) を自動取得・インストールします。
@@ -7,13 +7,56 @@
     Windows のフォント管理システムに自動登録します。
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$Force
+)
 
 $ErrorActionPreference = "Stop"
+
+# UTF-8 出力エンコーディングの設定（文字化け防止）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "==========================================" -ForegroundColor Magenta
 Write-Host "  Step 2: Japanese Font (UDEV Gothic NF)  " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
+
+function Test-FontInstalled {
+    $checkFontFiles = @("UDEVGothic35NF-Regular.ttf", "UDEVGothicNF-Regular.ttf")
+    $checkRegKeys   = @("UDEVGothic35NF-Regular (TrueType)", "UDEVGothicNF-Regular (TrueType)")
+
+    # 1. ファイルの存在確認 (SystemRoot または LOCALAPPDATA)
+    $hasFile = $false
+    foreach ($fontFile in $checkFontFiles) {
+        if ((Test-Path (Join-Path "$env:SystemRoot\Fonts" $fontFile)) -or `
+            (Test-Path (Join-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts" $fontFile))) {
+            $hasFile = $true
+            break
+        }
+    }
+
+    if (-not $hasFile) {
+        return $false
+    }
+
+    # 2. レジストリ登録の確認 (HKLM または HKCU)
+    $hklmProps = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts" -ErrorAction SilentlyContinue
+    $hkcuProps = Get-ItemProperty "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts" -ErrorAction SilentlyContinue
+
+    foreach ($regKey in $checkRegKeys) {
+        if (($hklmProps -and $hklmProps.$regKey) -or ($hkcuProps -and $hkcuProps.$regKey)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+if (-not $Force -and (Test-FontInstalled)) {
+    Write-Host "`n[SKIP] UDEV Gothic NF (UDEV Gothic 35NF) is already installed." -ForegroundColor Yellow
+    Write-Host "       (Pass -Force to re-download and reinstall)" -ForegroundColor Gray
+    return
+}
 
 $repoOwner = "yuru7"
 $repoName = "udev-gothic"

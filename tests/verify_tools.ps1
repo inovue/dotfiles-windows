@@ -210,6 +210,17 @@ foreach ($mcpPath in $mcpPathsToCheck) {
     }
 }
 
+# UDEV Gothic NF Font Check
+$fontInstalled = $false
+$checkFontFiles = @("UDEVGothic35NF-Regular.ttf", "UDEVGothicNF-Regular.ttf")
+foreach ($ff in $checkFontFiles) {
+    if ((Test-Path (Join-Path "$env:SystemRoot\Fonts" $ff)) -or (Test-Path (Join-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts" $ff))) {
+        $fontInstalled = $true
+        break
+    }
+}
+Assert-Test -Name "Font: UDEV Gothic NF is installed" -Condition $fontInstalled -Details "Checked System and User Fonts"
+
 # --- 4. Functional Execution & UTF-8 Tests ---
 Write-Host "`n[4/5] Running Functional Integration & UTF-8 Tests..." -ForegroundColor White
 

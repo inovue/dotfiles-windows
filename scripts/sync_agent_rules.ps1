@@ -29,6 +29,8 @@ $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
 $masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
 $masterCursorRulesDir = Join-Path $configsDir "agents\cursor\rules"
 $masterAgentsDir = Join-Path $configsDir "agents"
+$masterHooks = Join-Path $masterAgentsDir "hooks.json"
+$masterAgentGuard = Join-Path $rootDir "scripts\agent_guard.py"
 $mcpTemplate = Join-Path $masterAntigravityDir "mcp_config.json"
 
 if (-not (Test-Path $masterRules)) {
@@ -266,6 +268,12 @@ $allTargets = @(
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
+    @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false },
+    @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false },
+    @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false },
+    @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
+    @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
+    @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Claude Code Guide";         Src = $projectAgentsMd; Dest = $projectClaudeMd;    IsDir = $false },
     @{ Name = "Workspace Cursor Rules";              Src = $projectAgentsMd; Dest = $projectCursorRules; IsDir = $false }
 )

@@ -47,7 +47,7 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                       Deterministic Agent State Machine                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ MODE A: Survey / Audit / QA (Zero-Crawler Protocol)                         │
+│ MODE A: System Survey / Env QA (Zero-Crawler Protocol)                      │
 │   Step 1: Ground Truth -> Run `just audit` (PASS = 100% verified + 0 junk)  │
 │   Step 2: Topology Hubs -> `query_graph` OR `god_nodes` -> `get_neighbors` │
 │   Step 3: Synthesis -> Present markdown report [HARD BAN: 0 file reads]     │
@@ -57,10 +57,17 @@
 │   Step 2: Locate -> Scoped `rg -n` / `ast-grep` on exact files (max 2-3)    │
 │   Step 3: Edit -> `replace_file_content` (surgical atomic replace)          │
 │   Step 4: Verify & Sync -> Run `just deploy` + `just audit` + `just update-graph` │
+│                                                                             │
+│ MODE C: Deep Code Review / Security Audit (2-Tier Hybrid Protocol)          │
+│   Step 1: Anchor -> `query_graph` (locate component hubs & `loc=Lxx` tags)  │
+│   Step 2: Filter -> Scoped `rg -n "<patterns>" <paths>` for match snippets │
+│   Step 3: Conclude -> If snippets prove safety/state: Complete (Read = 0)  │
+│   Step 4: Sliced Read -> If context required: Max 1-2 files, max 30 lines   │
+│           [HARD BAN: Sequential whole-file reading of 3+ files]             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Mode A (Survey / Audit)**:
+1. **Mode A (System Survey / QA)**:
    - **Ground Truth First**: `just audit` verifies CLI tools, env vars, SSOT sync, AST syntax, UTF-8 BOM, MCP paths, and graph topology.
    - **Zero-Crawler Ban**: If `just audit` passes, **NEVER** run `rg`, `fd`, or `view_file` across scripts to re-check already-verified facts.
    - **Mandatory 2-Step Hub-Expansion**:
@@ -72,8 +79,23 @@
    - Use Graphify `loc=LXX` tags or `rg -n -C 3` to pinpoint exact lines without reading whole files.
    - Run `replace_file_content` for surgical atomic edits.
    - Run `just deploy` (if configs) + `just audit` + `just update-graph` once per batch to guarantee zero regressions.
-3. **Strict Sliced-Read Budget**: 0 file reads for surveys if `just audit` passes. When reading for edits, always specify `StartLine`/`EndLine` (max 50 lines). Never read whole files > 100 lines.
-4. **Context Reuse**: Never re-read files already present in context.
+3. **Mode C (Deep Code / Security Audit & Review - 2-Tier Hybrid Protocol)**:
+   - **Step 1 (Spatial Anchor)**: Invoke Graphify MCP (`query_graph` / `get_neighbors`) to identify relevant function nodes and their exact AST line tags (`loc=Lxx`).
+   - **Step 2 (Instant Pattern Match)**: Run scoped `rg -n "<pattern>" <path>` to extract match snippets.
+   - **Step 3 (Snippet-First Termination - HARD RULE)**: If `rg -n` or `ast-grep` snippets confirm validation logic, defensive patterns, or implementation state, **TERMINATE TURN IMMEDIATELY WITH READ = 0**.
+   - *❌ Strict Ban on "Peace of Mind" Reads*: Never call `view_file` to read entire scripts or surrounding lines after snippets have already proven safety or code logic.
+   - **Step 4 (Exception Sliced Read)**: Only if snippet output is genuinely ambiguous, perform a strictly scoped sliced read (`StartLine`/`EndLine`, max 30 lines, max 1-2 files).
+4. **Strict Sliced-Read Budget**:
+   - Surveys / Audits: **0 file reads** permitted when `just audit` passes and `rg -n` snippets confirm implementation.
+   - Code Modifications: Max 1–2 sliced reads strictly for preparing `replace_file_content` blocks.
+   - Whole-file reads (>120 lines without `StartLine`/`EndLine`) are physically blocked by `agent_guard.py`.
+5. **Deterministic Cybernetic Governor (`agent_guard.py`)**:
+   - `PreToolUse` lifecycle hooks automatically enforce:
+     - **Safety Block**: Destructive commands (`format`, `diskpart`, `rmdir /s C:\`, `git push --force (main|master)`, `curl | iex`) are hard-blocked.
+     - **Modern CLI Invariant**: Slow cmdlets (`Get-ChildItem -Recurse`, `Select-String`) are blocked with instant native CLI alternatives.
+     - **Read Budget Invariant**: Un-sliced reads of >120 line files and cascading reads (>4 files) are blocked.
+     - **Workspace Edit Invariant**: Direct `write_to_file` with `ArtifactMetadata` on workspace source files is blocked.
+6. **Context Reuse**: Never re-read files already present in context.
 
 ---
 

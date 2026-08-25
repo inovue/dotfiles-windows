@@ -20,6 +20,12 @@ MODE B: Code Modification / Refactoring
   2. Locate (L2) -> Scoped `rg -n` / `ast-grep` on exact files only (max 2-3 files).
   3. Edit (L3) -> `replace_file_content`.
   4. Sync (L4) -> `just deploy` (if configs) + `just audit` + `graphify update .` (once per batch).
+
+MODE C: Deep Code Review / Security Audit (2-Tier Hybrid Protocol)
+  1. Anchor -> `query_graph` / `get_neighbors` (locate component hubs & AST `loc=Lxx` tags).
+  2. Filter -> Scoped `rg -n "<patterns>" <paths>` for match snippets.
+  3. Conclude (Snippet-First Termination) -> If snippets confirm safety/state: COMPLETE IMMEDIATELY (Read = 0).
+  4. Sliced Read -> If and only if snippet is ambiguous: Max 1 file, max 30 lines. [HARD BAN on whole-file reads].
 ```
 
 ## 🛠 Exact Antigravity MCP Invocation Patterns

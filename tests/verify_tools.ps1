@@ -167,6 +167,10 @@ $configFiles = @(
     @{ Name = "PowerShell 7 Profile";                        Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PowerShell") "Microsoft.PowerShell_profile.ps1" }
     @{ Name = "Script: setup_api_keys.ps1";                  Path = Join-Path $rootDir "scripts\setup_api_keys.ps1" }
     @{ Name = "Script: audit_workspace.ps1";                 Path = Join-Path $rootDir "scripts\audit_workspace.ps1" }
+    @{ Name = "Script: agent_guard.py";                      Path = Join-Path $rootDir "scripts\agent_guard.py" }
+    @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
+    @{ Name = "Workspace hooks (.agents/hooks.json)";        Path = Join-Path $rootDir ".agents\hooks.json" }
+    @{ Name = "Antigravity global hooks";                    Path = Join-Path $env:USERPROFILE ".gemini\config\hooks.json" }
 )
 
 foreach ($cf in $configFiles) {
@@ -314,6 +318,32 @@ try {
         $graphQueryRes = & graphify query "deploy" --budget 1200 2>&1 | Out-String
         $graphOk = ($graphQueryRes -match "04_setup_configs" -or $graphQueryRes -match "Deploy")
         Assert-Test -Name "Graphify Knowledge Graph query execution" -Condition $graphOk -Details ($graphQueryRes.Trim().Split("`n")[0])
+    }
+
+    # Test 4.9: Deterministic Cybernetic Governor (agent_guard.py)
+    $guardScript = Join-Path $rootDir "scripts\agent_guard.py"
+    if (Test-Path $guardScript) {
+        $testJsonFile = Join-Path $tempTestDir "guard_test.json"
+        $guardPyEsc = $guardScript.Replace('\', '/')
+        $testJsonEsc = $testJsonFile.Replace('\', '/')
+
+        # Safe command -> allow
+        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"just audit"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
+        $safeRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
+        $safeOk = ($safeRes -match '"decision":\s*"allow"')
+        Assert-Test -Name "Agent Guard allows safe command" -Condition $safeOk -Details ($safeRes.Trim())
+
+        # Dangerous command -> deny
+        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
+        $dangerRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
+        $dangerOk = ($dangerRes -match '"decision":\s*"deny"')
+        Assert-Test -Name "Agent Guard blocks destructive command" -Condition $dangerOk -Details ($dangerRes.Trim())
+
+        # Slow CLI cmdlet -> deny
+        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"Get-ChildItem -Recurse"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
+        $slowRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
+        $slowOk = ($slowRes -match '"decision":\s*"deny"')
+        Assert-Test -Name "Agent Guard blocks slow PowerShell pipeline" -Condition $slowOk -Details ($slowRes.Trim())
     }
 
 } finally {

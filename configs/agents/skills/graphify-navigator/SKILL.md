@@ -32,7 +32,8 @@ Turn architecture questions into **scoped subgraph answers**, then finish with *
 | :--- | :--- | :--- |
 | **A. System Survey & Documentation Sync** | "Update README to reflect codebase", "Explain architecture", "Audit repo structure" | **Mandatory L0/L1 Trigger** (`query_graph` / `god_nodes` / `just hubs`) → Scoped `rg` → `replace_file_content` → `just update-graph` |
 | **B. Multi-Component Feature / Refactor** | "Add command X across CLI and installer", "Refactor runtime setup", "Trace pipeline" | **Mandatory L0/L1 Trigger** (`get_node` / `shortest_path` / `just path`) → Scoped `ast-grep` → Edit → `just update-graph` |
-| **C. Self-Contained Pinpoint Edit** | "Fix typo in line 42", "Change port 8080 to 9090 in config.toml" | **Bypass L0/L1** → Scoped `rg -n` → `replace_file_content` |
+| **C. Deep Code / Security Review** | "Check security of install scripts", "Review API key handling", "Audit risk patterns" | **2-Tier Hybrid Trigger** (`query_graph` / `get_neighbors` for `loc=Lxx` anchor) → Scoped `rg -n` snippet check → Conclude (Read=0) or Sliced Read (max 30 lines) |
+| **D. Self-Contained Pinpoint Edit** | "Fix typo in line 42", "Change port 8080 to 9090 in config.toml" | **Bypass L0/L1** → Scoped `rg -n` → `replace_file_content` |
 
 ## Hot path & 2-Step Hub Expansion
  
@@ -102,3 +103,4 @@ sd 'oldName' 'newName' path/to/file.ps1
 7. **Cap query tokens**: Always `token_budget: 1200` unless the user asks for more depth.
 8. **Batch updates**: Run `just update-graph` **once per edit batch**, not after every single file edit.
 9. **Safe Workspace Editing**: Always use `replace_file_content` for editing workspace files. Never pass `ArtifactMetadata` to workspace file targets.
+10. **Snippet-First Termination in Reviews**: When auditing code safety or implementation logic, if `rg -n` or `ast-grep` snippets confirm validation presence or state, conclude immediately with Read=0. Never call `view_file` sequentially just to view surrounding context.

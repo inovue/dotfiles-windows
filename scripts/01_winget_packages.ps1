@@ -116,39 +116,14 @@ function Install-WingetPackage {
     } elseif ($alreadyInstalledCodes -contains $LASTEXITCODE) {
         Write-Host "[SKIP] $Name is already installed / up to date." -ForegroundColor Yellow
     } elseif ($LASTEXITCODE -eq -1978335146) {
-        # 0x8A150056: APPINSTALLER_CLI_ERROR_INSTALLER_PROHIBITS_ELEVATION (管理者コンテキスト禁止パッケージへの直接フォールバック)
-        Write-Host ">> [Fallback] Administrator context detected for $Name. Attempting direct installer fallback..." -ForegroundColor Cyan
-        try {
-            $showOutput = winget show --id $Id -e 2>&1
-            $installerUrl = ""
-            foreach ($line in $showOutput) {
-                if ($line -match '(https?://\S+\.(?:exe|msi|zip))') {
-                    $installerUrl = $Matches[1]
-                    break
-                }
-            }
-            if ($installerUrl) {
-                $ext = [System.IO.Path]::GetExtension($installerUrl).ToLower()
-                $fileName = "$($Id)$ext"
-                $tempFile = Join-Path $env:TEMP $fileName
-                Write-Host "   Downloading installer: $installerUrl" -ForegroundColor Gray
-                Invoke-WebRequest -Uri $installerUrl -OutFile $tempFile
-                if ($ext -eq ".msi") {
-                    $proc = Start-Process msiexec.exe -ArgumentList "/i `"$tempFile`" /qn /norestart" -Wait -PassThru
-                } else {
-                    $proc = Start-Process -FilePath $tempFile -ArgumentList "/S" -Wait -PassThru
-                }
-                Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-                if ($proc.ExitCode -eq 0) {
-                    Write-Host "[OK] $Name installed successfully via direct installer fallback." -ForegroundColor Green
-                } else {
-                    Write-Warning "[WARN] Direct installer for $Name exited with code: $($proc.ExitCode)"
-                }
-            } else {
-                Write-Warning "[WARN] $Name ($Id) requires non-elevated user context. Please run 'winget install --id $Id' in a normal user terminal."
-            }
-        } catch {
-            Write-Warning "[WARN] Failed to install $Name via direct installer fallback: $_"
+        # 0x8A150056: APPINSTALLER_CLI_ERROR_INSTALLER_PROHIBITS_ELEVATION (管理者コンテキスト禁止パッケージ)
+        # セキュリティ強化: ハッシュ未検証の直接バイナリダウンロードを排除し、winget スコープ指定で再試行
+        Write-Host ">> [Retry] Elevated context detected for $Name. Attempting install with user scope..." -ForegroundColor Cyan
+        $retryResult = winget install --id $Id -e --silent --accept-source-agreements --accept-package-agreements --scope user @sourceArgs 2>&1
+        if ($LASTEXITCODE -eq 0 -or ($alreadyInstalledCodes -contains $LASTEXITCODE)) {
+            Write-Host "[OK] $Name installed successfully with user scope." -ForegroundColor Green
+        } else {
+            Write-Warning "[NOTICE] $Name ($Id) prohibits elevated installation. Please run 'winget install --id $Id' in a normal non-admin terminal."
         }
     } else {
         Write-Warning "[WARN] $Name ($Id) returned exit code: $LASTEXITCODE"

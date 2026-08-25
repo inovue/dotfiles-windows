@@ -31,322 +31,336 @@ $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 $env:Path = "$machinePath;$userPath"
 
-# --- 1. fnm & Node.js LTS ---
-Write-Host "`n>> [1/10] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
-if (Get-Command fnm -ErrorAction SilentlyContinue) {
-    try {
-        Write-Host "   Installing Node.js LTS via fnm..." -ForegroundColor Gray
-        fnm install --lts
-        fnm default lts-latest
-        # 現在のセッションにも fnm の Node パスを反映
-        fnm env --use-on-cd | Out-String | Invoke-Expression
-        Write-Host "[OK] Node.js LTS is set as default." -ForegroundColor Green
-    } catch {
-        Write-Warning "[WARN] Failed to configure fnm: $_"
-    }
-} else {
-    Write-Host "[SKIP] fnm is not in PATH yet. Restarting terminal might be required." -ForegroundColor Yellow
-}
-
-# --- 2. uv (Python) ---
-Write-Host "`n>> [2/10] Setting up uv (Python Manager)..." -ForegroundColor Cyan
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    try {
-        Write-Host "   Installing latest stable Python via uv..." -ForegroundColor Gray
-        uv python install 3.12 3.13
-        Write-Host "[OK] Python 3.12/3.13 installed via uv." -ForegroundColor Green
-
-        # Install playwright for browser-agent
-        Write-Host "   Installing/Verifying playwright for browser automation..." -ForegroundColor Gray
-        uv pip install --system playwright 2>&1 | Out-Null
-        if (-not $?) {
-            pip install playwright 2>&1 | Out-Null
-        }
-        Write-Host "[OK] Playwright installed for browser-agent." -ForegroundColor Green
-    } catch {
-        Write-Warning "[WARN] Failed to configure uv: $_"
-    }
-} else {
-    Write-Host "[SKIP] uv is not in PATH yet." -ForegroundColor Yellow
-}
-
-# --- 3. Graphify (knowledge-graph CLI for AI assistants) ---
-# Install CLI binaries only. Always-on rules / navigator skill are owned by
-# configs/agents/ and deployed via sync_agent_rules.ps1 (just sync-rules).
-# Do NOT run `graphify install --platform ...` / `graphify antigravity install`
-# here — vendor always-on skills conflict with SSOT and force graphify on every repo.
-Write-Host "`n>> [3/10] Setting up Graphify (uv tool)..." -ForegroundColor Cyan
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    try {
-        $graphifyPresent = $false
+function Install-FnmNode {
+    Write-Host "`n>> [1/10] Setting up fnm (Fast Node Manager)..." -ForegroundColor Cyan
+    if (Get-Command fnm -ErrorAction SilentlyContinue) {
         try {
-            $toolList = uv tool list 2>&1 | Out-String
-            $graphifyPresent = ($toolList -match '(?m)^graphifyy\b')
-        } catch { }
+            Write-Host "   Installing Node.js LTS via fnm..." -ForegroundColor Gray
+            fnm install --lts
+            fnm default lts-latest
+            fnm env --use-on-cd | Out-String | Invoke-Expression
+            Write-Host "[OK] Node.js LTS is set as default." -ForegroundColor Green
+        } catch {
+            Write-Warning "[WARN] Failed to configure fnm: $_"
+        }
+    } else {
+        Write-Host "[SKIP] fnm is not in PATH yet. Restarting terminal might be required." -ForegroundColor Yellow
+    }
+}
 
-        $extras = "graphifyy[mcp,gemini,openai,anthropic]"
+function Install-UvPython {
+    Write-Host "`n>> [2/10] Setting up uv (Python Manager)..." -ForegroundColor Cyan
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        try {
+            Write-Host "   Installing latest stable Python via uv..." -ForegroundColor Gray
+            uv python install 3.12 3.13
+            Write-Host "[OK] Python 3.12/3.13 installed via uv." -ForegroundColor Green
 
-        if ($graphifyPresent) {
-            Write-Host "   graphifyy already installed; ensuring full LLM extras in virtualenv..." -ForegroundColor Gray
-            $graphifyVenv = Join-Path $env:APPDATA "uv\tools\graphifyy"
-            if (Test-Path $graphifyVenv) {
-                # Safe in-venv dependency install that avoids Windows file lock on running graphify-mcp.exe
-                uv pip install --python $graphifyVenv openai 2>&1 | Out-Null
+            Write-Host "   Installing/Verifying playwright for browser-agent..." -ForegroundColor Gray
+            uv pip install --system playwright 2>&1 | Out-Null
+            if (-not $?) {
+                pip install playwright 2>&1 | Out-Null
             }
-        } else {
-            Write-Host "   Installing $extras via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
-            uv tool install $extras 2>&1 | Out-Null
+            Write-Host "[OK] Playwright installed for browser-agent." -ForegroundColor Green
+        } catch {
+            Write-Warning "[WARN] Failed to configure uv: $_"
         }
-
-        # Ensure uv tool bin is on PATH for this session (Windows: ~/.local/bin)
-        $uvToolBin = ""
-        try { $uvToolBin = (uv tool dir --bin 2>$null).Trim() } catch { }
-        if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
-        if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
-
-        if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
-            Write-Host "[OK] graphify + graphify-mcp installed with LLM backends. Rules/skills: run ``just sync-rules`` (also via deploy)." -ForegroundColor Green
-        } else {
-            Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
-        }
-    } catch {
-        Write-Warning "[WARN] Failed to install/configure graphify: $_"
+    } else {
+        Write-Host "[SKIP] uv is not in PATH yet." -ForegroundColor Yellow
     }
-} else {
-    Write-Host "[SKIP] uv is not in PATH yet (required for graphify)." -ForegroundColor Yellow
 }
 
-# --- 4. Rustup & Cargo Modern Tools (jaq) ---
-Write-Host "`n>> [4/10] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
-if (Get-Command rustup -ErrorAction SilentlyContinue) {
+function Install-GraphifyCli {
+    Write-Host "`n>> [3/10] Setting up Graphify (uv tool)..." -ForegroundColor Cyan
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        try {
+            $graphifyPresent = $false
+            try {
+                $toolList = uv tool list 2>&1 | Out-String
+                $graphifyPresent = ($toolList -match '(?m)^graphifyy\b')
+            } catch { }
+
+            $extras = "graphifyy[mcp,gemini,openai,anthropic]"
+
+            if ($graphifyPresent) {
+                Write-Host "   graphifyy already installed; ensuring full LLM extras in virtualenv..." -ForegroundColor Gray
+                $graphifyVenv = Join-Path $env:APPDATA "uv\tools\graphifyy"
+                if (Test-Path $graphifyVenv) {
+                    uv pip install --python $graphifyVenv openai 2>&1 | Out-Null
+                }
+            } else {
+                Write-Host "   Installing $extras via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
+                uv tool install $extras 2>&1 | Out-Null
+            }
+
+            $uvToolBin = ""
+            try { $uvToolBin = (uv tool dir --bin 2>$null).Trim() } catch { }
+            if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
+            if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
+
+            if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
+                Write-Host "[OK] graphify + graphify-mcp installed with LLM backends." -ForegroundColor Green
+            } else {
+                Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
+            }
+        } catch {
+            Write-Warning "[WARN] Failed to install/configure graphify: $_"
+        }
+    } else {
+        Write-Host "[SKIP] uv is not in PATH yet (required for graphify)." -ForegroundColor Yellow
+    }
+}
+
+function Install-RustupJaq {
+    Write-Host "`n>> [4/10] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
+    if (Get-Command rustup -ErrorAction SilentlyContinue) {
+        try {
+            Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
+            rustup default stable
+            Write-Host "[OK] Rust stable toolchain configured." -ForegroundColor Green
+
+            if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) {
+                Write-Host "   Installing jaq (Rust high-speed JSON processor) via cargo..." -ForegroundColor Gray
+                cargo install jaq --locked 2>&1 | Out-Null
+                Write-Host "[OK] jaq installed via cargo." -ForegroundColor Green
+            } else {
+                Write-Host "[OK] jaq is already installed." -ForegroundColor Green
+            }
+        } catch {
+            Write-Warning "[WARN] Failed to configure rustup/cargo: $_"
+        }
+    } else {
+        Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow
+    }
+}
+
+function Update-TealdeerCache {
+    Write-Host "`n>> [5/10] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
+    if (Get-Command tldr -ErrorAction SilentlyContinue) {
+        try {
+            tldr --update
+            Write-Host "[OK] tealdeer cache updated." -ForegroundColor Green
+        } catch {
+            Write-Warning "[WARN] Failed to update tldr cache: $_"
+        }
+    } else {
+        Write-Host "[SKIP] tldr is not in PATH yet." -ForegroundColor Yellow
+    }
+}
+
+function Install-HunkMermaid {
+    Write-Host "`n>> [6/10] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
     try {
-        Write-Host "   Setting default Rust toolchain to stable..." -ForegroundColor Gray
-        rustup default stable
-        Write-Host "[OK] Rust stable toolchain configured." -ForegroundColor Green
+        if (Get-Command bun -ErrorAction SilentlyContinue) {
+            Write-Host "   Installing hunkdiff and mermaid-ascii via bun..." -ForegroundColor Gray
+            bun add -g hunkdiff mermaid-ascii 2>&1 | Out-Null
+            Write-Host "[OK] hunkdiff and mermaid-ascii installed via bun." -ForegroundColor Green
+        } elseif (Get-Command pnpm -ErrorAction SilentlyContinue) {
+            $pnpmHome = [System.Environment]::GetEnvironmentVariable("PNPM_HOME", "User")
+            if (-not $pnpmHome) {
+                $pnpmHome = Join-Path $env:LOCALAPPDATA "pnpm"
+                [System.Environment]::SetEnvironmentVariable("PNPM_HOME", $pnpmHome, "User")
+            }
+            $env:PNPM_HOME = $pnpmHome
+            $pnpmBin = Join-Path $pnpmHome "bin"
+            
+            $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+            $newPaths = @()
+            if ($currentUserPath -notlike "*$pnpmBin*") { $newPaths += $pnpmBin }
+            if ($currentUserPath -notlike "*$pnpmHome*") { $newPaths += $pnpmHome }
+            if ($newPaths.Count -gt 0) {
+                [System.Environment]::SetEnvironmentVariable("Path", ($newPaths -join ";") + ";" + $currentUserPath, "User")
+            }
 
-        # Install jaq (Rust jq alternative) if not present
-        if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) {
-            Write-Host "   Installing jaq (Rust high-speed JSON processor) via cargo..." -ForegroundColor Gray
-            cargo install jaq --locked 2>&1 | Out-Null
-            Write-Host "[OK] jaq installed via cargo." -ForegroundColor Green
+            if ($env:Path -notlike "*$pnpmBin*") { $env:Path = "$pnpmBin;$env:Path" }
+            if ($env:Path -notlike "*$pnpmHome*") { $env:Path = "$pnpmHome;$env:Path" }
+
+            pnpm setup 2>&1 | Out-Null
+            Write-Host "   Installing hunkdiff & mermaid-ascii via pnpm..." -ForegroundColor Gray
+            pnpm add -g hunkdiff mermaid-ascii
+            Write-Host "[OK] hunkdiff and mermaid-ascii installed via pnpm." -ForegroundColor Green
+        } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+            Write-Host "   Installing hunkdiff & mermaid-ascii via npm..." -ForegroundColor Gray
+            npm install -g hunkdiff mermaid-ascii
+            Write-Host "[OK] hunkdiff and mermaid-ascii installed via npm." -ForegroundColor Green
         } else {
-            Write-Host "[OK] jaq is already installed." -ForegroundColor Green
+            Write-Host "[SKIP] Node/Bun package manager not in PATH yet." -ForegroundColor Yellow
         }
     } catch {
-        Write-Warning "[WARN] Failed to configure rustup/cargo: $_"
+        Write-Warning "[WARN] Failed to install CLI utilities: $_"
     }
-} else {
-    Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 5. tealdeer (tldr) ---
-Write-Host "`n>> [5/10] Updating tealdeer (tldr) cache..." -ForegroundColor Cyan
-if (Get-Command tldr -ErrorAction SilentlyContinue) {
+function Install-HerdrPlugins {
+    Write-Host "`n>> [7/10] Checking Herdr Plugins (herdr-sidebar)..." -ForegroundColor Cyan
+    if (Get-Command herdr -ErrorAction SilentlyContinue) {
+        try {
+            $pluginList = herdr plugin list 2>&1 | Out-String
+            if ($pluginList -notmatch "herdr-sidebar") {
+                Write-Host "   Installing herdr-sidebar plugin from alexarthurs/herdr-sidebar..." -ForegroundColor Gray
+                herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar --yes 2>&1 | Out-Null
+                Write-Host "[OK] herdr-sidebar plugin installed successfully." -ForegroundColor Green
+            } else {
+                Write-Host "[OK] herdr-sidebar plugin is already installed." -ForegroundColor Green
+            }
+        } catch {
+            Write-Warning "[WARN] Failed to install/verify herdr-sidebar plugin: $_"
+        }
+    } else {
+        Write-Host "[SKIP] herdr is not in PATH yet." -ForegroundColor Yellow
+    }
+}
+
+function Install-CursorAgentCli {
+    Write-Host "`n>> [8/10] Setting up Cursor Agent CLI (agent / cursor-agent)..." -ForegroundColor Cyan
     try {
-        tldr --update
-        Write-Host "[OK] tealdeer cache updated." -ForegroundColor Green
-    } catch {
-        Write-Warning "[WARN] Failed to update tldr cache: $_"
-    }
-} else {
-    Write-Host "[SKIP] tldr is not in PATH yet." -ForegroundColor Yellow
-}
+        $agentPath = "$env:LOCALAPPDATA\cursor-agent"
+        $versionsPath = "$agentPath\versions"
+        $agentExe = "$agentPath\agent.cmd"
 
-# --- 6. Hunk & Mermaid-ASCII CLI ---
-Write-Host "`n>> [6/10] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
-try {
-    if (Get-Command bun -ErrorAction SilentlyContinue) {
-        Write-Host "   Installing hunkdiff and mermaid-ascii via bun..." -ForegroundColor Gray
-        bun add -g hunkdiff mermaid-ascii 2>&1 | Out-Null
-        Write-Host "[OK] hunkdiff and mermaid-ascii installed via bun." -ForegroundColor Green
-    } elseif (Get-Command pnpm -ErrorAction SilentlyContinue) {
-        # PNPM_HOME と bin ディレクトリの自動設定（未設定時のエラー防止）
-        $pnpmHome = [System.Environment]::GetEnvironmentVariable("PNPM_HOME", "User")
-        if (-not $pnpmHome) {
-            $pnpmHome = Join-Path $env:LOCALAPPDATA "pnpm"
-            [System.Environment]::SetEnvironmentVariable("PNPM_HOME", $pnpmHome, "User")
+        $needsInstall = $false
+        if (-not (Test-Path $agentExe)) {
+            $needsInstall = $true
         }
-        $env:PNPM_HOME = $pnpmHome
-        $pnpmBin = Join-Path $pnpmHome "bin"
-        
+
+        if ($needsInstall) {
+            Write-Host "   Downloading and installing Cursor Agent CLI..." -ForegroundColor Gray
+            $tempZip = "$env:TEMP\cursor-agent.zip"
+            $installScript = curl.exe -fsSL "https://cursor.com/install?win32=true" 2>&1 | Out-String
+            
+            $downloadUrl = "https://downloads.cursor.com/lab/2026.08.11-e8db854/"
+            $version = "2026.08.11-e8db854"
+            if ($installScript -match '\$downloadUrl\s*=\s*''([^'']+)''') { $downloadUrl = $matches[1] }
+            if ($installScript -match '\$version\s*=\s*''([^'']+)''') { $version = $matches[1] }
+
+            if (-not (Test-Path $versionsPath)) {
+                New-Item -ItemType Directory -Path $versionsPath -Force | Out-Null
+            }
+
+            $pkgUrl = "${downloadUrl}windows/x64/agent-cli-package.zip"
+            if (-not ($pkgUrl -match '^https://(?:downloads\.cursor\.com|.*\.cursor\.sh)/')) {
+                throw "Security validation failed: Invalid download domain for Cursor Agent CLI package ($pkgUrl)"
+            }
+            curl.exe -fsSL -o $tempZip $pkgUrl
+            if (-not (Test-Path $tempZip) -or (Get-Item $tempZip).Length -lt 1000000) {
+                throw "Security validation failed: Downloaded Cursor Agent CLI package is missing or corrupted."
+            }
+            Expand-Archive -Path $tempZip -DestinationPath $versionsPath -Force
+
+            $distPackagePath = Join-Path $versionsPath "dist-package"
+            $versionPath = Join-Path $versionsPath $version
+            if (Test-Path $distPackagePath) {
+                Rename-Item -Path $distPackagePath -NewName $version -Force -ErrorAction SilentlyContinue
+            }
+
+            Get-ChildItem -Path $versionPath -Filter "cursor-agent*" | Copy-Item -Destination $agentPath -Force
+            if (Test-Path "$agentPath\cursor-agent.exe") { Copy-Item -Path "$agentPath\cursor-agent.exe" -Destination "$agentPath\agent.exe" -Force }
+            if (Test-Path "$agentPath\cursor-agent.cmd") { Copy-Item -Path "$agentPath\cursor-agent.cmd" -Destination "$agentPath\agent.cmd" -Force }
+            if (Test-Path "$agentPath\cursor-agent.ps1") { Copy-Item -Path "$agentPath\cursor-agent.ps1" -Destination "$agentPath\agent.ps1" -Force }
+
+            Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+            Write-Host "[OK] Cursor Agent CLI installed successfully ($version)." -ForegroundColor Green
+        } else {
+            Write-Host "[OK] Cursor Agent CLI is already installed." -ForegroundColor Green
+        }
+
         $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-        $newPaths = @()
-        if ($currentUserPath -notlike "*$pnpmBin*") { $newPaths += $pnpmBin }
-        if ($currentUserPath -notlike "*$pnpmHome*") { $newPaths += $pnpmHome }
-        if ($newPaths.Count -gt 0) {
-            [System.Environment]::SetEnvironmentVariable("Path", ($newPaths -join ";") + ";" + $currentUserPath, "User")
+        if ($currentUserPath -notlike "*$agentPath*") {
+            [System.Environment]::SetEnvironmentVariable("Path", "$agentPath;$currentUserPath", "User")
         }
-
-        if ($env:Path -notlike "*$pnpmBin*") { $env:Path = "$pnpmBin;$env:Path" }
-        if ($env:Path -notlike "*$pnpmHome*") { $env:Path = "$pnpmHome;$env:Path" }
-
-        pnpm setup 2>&1 | Out-Null
-
-        Write-Host "   Installing hunkdiff & mermaid-ascii via pnpm..." -ForegroundColor Gray
-        pnpm add -g hunkdiff mermaid-ascii
-        Write-Host "[OK] hunkdiff and mermaid-ascii installed via pnpm." -ForegroundColor Green
-    } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
-        Write-Host "   Installing hunkdiff & mermaid-ascii via npm..." -ForegroundColor Gray
-        npm install -g hunkdiff mermaid-ascii
-        Write-Host "[OK] hunkdiff and mermaid-ascii installed via npm." -ForegroundColor Green
-    } else {
-        Write-Host "[SKIP] Node/Bun package manager not in PATH yet." -ForegroundColor Yellow
-    }
-} catch {
-    Write-Warning "[WARN] Failed to install CLI utilities: $_"
-}
-
-# --- 7. Herdr Plugins (herdr-sidebar) ---
-Write-Host "`n>> [7/10] Checking Herdr Plugins (herdr-sidebar)..." -ForegroundColor Cyan
-if (Get-Command herdr -ErrorAction SilentlyContinue) {
-    try {
-        $pluginList = herdr plugin list 2>&1 | Out-String
-        if ($pluginList -notmatch "herdr-sidebar") {
-            Write-Host "   Installing herdr-sidebar plugin from alexarthurs/herdr-sidebar..." -ForegroundColor Gray
-            herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar --yes 2>&1 | Out-Null
-            Write-Host "[OK] herdr-sidebar plugin installed successfully." -ForegroundColor Green
-        } else {
-            Write-Host "[OK] herdr-sidebar plugin is already installed." -ForegroundColor Green
+        if ($env:Path -notlike "*$agentPath*") {
+            $env:Path = "$agentPath;$env:Path"
         }
     } catch {
-        Write-Warning "[WARN] Failed to install/verify herdr-sidebar plugin: $_"
+        Write-Warning "[WARN] Failed to configure Cursor Agent CLI: $_"
     }
-} else {
-    Write-Host "[SKIP] herdr is not in PATH yet." -ForegroundColor Yellow
 }
 
-# --- 8. Cursor Agent CLI ---
-Write-Host "`n>> [8/10] Setting up Cursor Agent CLI (agent / cursor-agent)..." -ForegroundColor Cyan
-try {
-    $agentPath = "$env:LOCALAPPDATA\cursor-agent"
-    $versionsPath = "$agentPath\versions"
-    $agentExe = "$agentPath\agent.cmd"
+function Set-AgentSafetyEnvironmentVariables {
+    Write-Host "`n>> [9/10] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
+    $envVarsToSet = @{
+        "PAGER"                       = "cat"
+        "BAT_PAGER"                   = ""
+        "BAT_STYLE"                   = "plain"
+        "GIT_PAGER"                   = "cat"
+        "DELTA_PAGER"                 = "cat"
+        "PYTHONUTF8"                  = "1"
+        "POWERSHELL_TELEMETRY_OPTOUT" = "1"
+        "DOTNET_CLI_TELEMETRY_OPTOUT" = "1"
+    }
+    foreach ($key in $envVarsToSet.Keys) {
+        $val = $envVarsToSet[$key]
+        [System.Environment]::SetEnvironmentVariable($key, $val, "User")
+        Set-Item -Path "env:$key" -Value $val
+    }
+    Write-Host "[OK] Agent non-interactive pager bypass & UTF-8 variables set in User scope." -ForegroundColor Green
+}
 
-    $needsInstall = $false
-    if (-not (Test-Path $agentExe)) {
-        $needsInstall = $true
+function Build-LocalBinShims {
+    Write-Host "`n>> [10/10] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
+    $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
+    if (-not (Test-Path $localBinDir)) {
+        New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
     }
 
-    if ($needsInstall) {
-        Write-Host "   Downloading and installing Cursor Agent CLI..." -ForegroundColor Gray
-        $tempZip = "$env:TEMP\cursor-agent.zip"
-        $installScript = curl.exe -fsSL "https://cursor.com/install?win32=true" 2>&1 | Out-String
-        
-        $downloadUrl = "https://downloads.cursor.com/lab/2026.08.11-e8db854/"
-        $version = "2026.08.11-e8db854"
-        if ($installScript -match '\$downloadUrl\s*=\s*''([^'']+)''') { $downloadUrl = $matches[1] }
-        if ($installScript -match '\$version\s*=\s*''([^'']+)''') { $version = $matches[1] }
-
-        if (-not (Test-Path $versionsPath)) {
-            New-Item -ItemType Directory -Path $versionsPath -Force | Out-Null
-        }
-
-        $pkgUrl = "${downloadUrl}windows/x64/agent-cli-package.zip"
-        curl.exe -fsSL -o $tempZip $pkgUrl
-        Expand-Archive -Path $tempZip -DestinationPath $versionsPath -Force
-
-        $distPackagePath = Join-Path $versionsPath "dist-package"
-        $versionPath = Join-Path $versionsPath $version
-        if (Test-Path $distPackagePath) {
-            Rename-Item -Path $distPackagePath -NewName $version -Force -ErrorAction SilentlyContinue
-        }
-
-        Get-ChildItem -Path $versionPath -Filter "cursor-agent*" | Copy-Item -Destination $agentPath -Force
-        if (Test-Path "$agentPath\cursor-agent.exe") { Copy-Item -Path "$agentPath\cursor-agent.exe" -Destination "$agentPath\agent.exe" -Force }
-        if (Test-Path "$agentPath\cursor-agent.cmd") { Copy-Item -Path "$agentPath\cursor-agent.cmd" -Destination "$agentPath\agent.cmd" -Force }
-        if (Test-Path "$agentPath\cursor-agent.ps1") { Copy-Item -Path "$agentPath\cursor-agent.ps1" -Destination "$agentPath\agent.ps1" -Force }
-
-        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
-        Write-Host "[OK] Cursor Agent CLI installed successfully ($version)." -ForegroundColor Green
-    } else {
-        Write-Host "[OK] Cursor Agent CLI is already installed." -ForegroundColor Green
-    }
-
-    # Ensure PATH contains $agentPath
     $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-    if ($currentUserPath -notlike "*$agentPath*") {
-        [System.Environment]::SetEnvironmentVariable("Path", "$agentPath;$currentUserPath", "User")
+    if ($currentUserPath -notlike "*$localBinDir*") {
+        $updatedUserPath = "$localBinDir;" + $currentUserPath
+        [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
+        Write-Host "[OK] Added $localBinDir to User PATH." -ForegroundColor Green
+    } else {
+        Write-Host "[OK] $localBinDir is already in User PATH." -ForegroundColor Green
     }
-    if ($env:Path -notlike "*$agentPath*") {
-        $env:Path = "$agentPath;$env:Path"
+    if ($env:Path -notlike "*$localBinDir*") {
+        $env:Path = "$localBinDir;$env:Path"
     }
-} catch {
-    Write-Warning "[WARN] Failed to configure Cursor Agent CLI: $_"
-}
 
-# --- 9. AI Agent Environment Variables & Non-Interactive Safety ---
-Write-Host "`n>> [9/10] Configuring AI Agent Safety & Performance Environment Variables..." -ForegroundColor Cyan
-$envVarsToSet = @{
-    "PAGER"                     = "cat"
-    "BAT_PAGER"                 = ""
-    "BAT_STYLE"                 = "plain"
-    "GIT_PAGER"                 = "cat"
-    "DELTA_PAGER"               = "cat"
-    "PYTHONUTF8"                = "1"
-    "POWERSHELL_TELEMETRY_OPTOUT" = "1"
-    "DOTNET_CLI_TELEMETRY_OPTOUT" = "1"
-}
-foreach ($key in $envVarsToSet.Keys) {
-    $val = $envVarsToSet[$key]
-    [System.Environment]::SetEnvironmentVariable($key, $val, "User")
-    Set-Item -Path "env:$key" -Value $val
-}
-Write-Host "[OK] Agent non-interactive pager bypass & UTF-8 variables set in User scope." -ForegroundColor Green
+    $shimSourceDirs = @(
+        "C:\Program Files\coreutils\bin",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
+        "$env:USERPROFILE\.cargo\bin",
+        "$env:LOCALAPPDATA\cursor-agent"
+    )
 
-# --- 10. ~/.local/bin & Coreutils Shim Directory ---
-Write-Host "`n>> [10/10] Setting up ~/.local/bin shim directory in PATH..." -ForegroundColor Cyan
-$localBinDir = Join-Path $env:USERPROFILE ".local\bin"
-if (-not (Test-Path $localBinDir)) {
-    New-Item -Path $localBinDir -ItemType Directory -Force | Out-Null
-}
-
-$currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-if ($currentUserPath -notlike "*$localBinDir*") {
-    $updatedUserPath = "$localBinDir;" + $currentUserPath
-    [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
-    Write-Host "[OK] Added $localBinDir to User PATH." -ForegroundColor Green
-} else {
-    Write-Host "[OK] $localBinDir is already in User PATH." -ForegroundColor Green
-}
-if ($env:Path -notlike "*$localBinDir*") {
-    $env:Path = "$localBinDir;$env:Path"
-}
-
-# Link Coreutils, Cargo, and WinGet modern CLI executables into ~/.local/bin
-$shimSourceDirs = @(
-    "C:\Program Files\coreutils\bin",
-    "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
-    "$env:USERPROFILE\.cargo\bin",
-    "$env:LOCALAPPDATA\cursor-agent"
-)
-
-# Search WinGet Packages for ast-grep, sd, chafa, glow and other tools if not already linked
-$wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
-if (Test-Path $wingetPkgDir) {
-    $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe", "Chafa.exe", "chafa.exe", "glow.exe" -ErrorAction SilentlyContinue
-    foreach ($f in $foundExes) {
-        $shimPath = Join-Path $localBinDir $f.Name
-        if (-not (Test-Path $shimPath)) {
-            Copy-Item -Path $f.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue
+    $wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
+    if (Test-Path $wingetPkgDir) {
+        $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe", "Chafa.exe", "chafa.exe", "glow.exe" -ErrorAction SilentlyContinue
+        foreach ($f in $foundExes) {
+            $shimPath = Join-Path $localBinDir $f.Name
+            if (-not (Test-Path $shimPath)) {
+                Copy-Item -Path $f.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue
+            }
         }
     }
-}
 
-foreach ($srcDir in $shimSourceDirs) {
-    if (Test-Path $srcDir) {
-        $exes = Get-ChildItem -Path $srcDir -Include "*.exe", "*.cmd" -File -ErrorAction SilentlyContinue
-        foreach ($exe in $exes) {
-            $shimPath = Join-Path $localBinDir $exe.Name
-            if (-not (Test-Path $shimPath)) {
-                try {
-                    New-Item -ItemType HardLink -Path $shimPath -Target $exe.FullName -Force -ErrorAction SilentlyContinue | Out-Null
-                } catch {
-                    Copy-Item -Path $exe.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue | Out-Null
+    foreach ($srcDir in $shimSourceDirs) {
+        if (Test-Path $srcDir) {
+            $exes = Get-ChildItem -Path $srcDir -Include "*.exe", "*.cmd" -File -ErrorAction SilentlyContinue
+            foreach ($exe in $exes) {
+                $shimPath = Join-Path $localBinDir $exe.Name
+                if (-not (Test-Path $shimPath)) {
+                    try {
+                        New-Item -ItemType HardLink -Path $shimPath -Target $exe.FullName -Force -ErrorAction SilentlyContinue | Out-Null
+                    } catch {
+                        Copy-Item -Path $exe.FullName -Destination $shimPath -Force -ErrorAction SilentlyContinue | Out-Null
+                    }
                 }
             }
         }
     }
+    Write-Host "[OK] Modern CLI and Coreutils shims verified in $localBinDir." -ForegroundColor Green
 }
-Write-Host "[OK] Modern CLI and Coreutils shims verified in $localBinDir." -ForegroundColor Green
+
+# --- 順次実行 ---
+Install-FnmNode
+Install-UvPython
+Install-GraphifyCli
+Install-RustupJaq
+Update-TealdeerCache
+Install-HunkMermaid
+Install-HerdrPlugins
+Install-CursorAgentCli
+Set-AgentSafetyEnvironmentVariables
+Build-LocalBinShims
 
 Write-Host "`n[DONE] Runtime setup step finished." -ForegroundColor Green

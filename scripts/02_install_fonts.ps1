@@ -74,12 +74,19 @@ try {
     }
 
     $downloadUrl = $asset.browser_download_url
+    if (-not ($downloadUrl -match '^https://(?:github\.com/yuru7/udev-gothic/releases/download/|objects\.githubusercontent\.com/)')) {
+        throw "Security validation failed: Invalid download URL domain for font asset ($downloadUrl)"
+    }
     $zipFileName = $asset.name
     $tempZipPath = Join-Path $env:TEMP $zipFileName
     $tempExtractDir = Join-Path $env:TEMP "UDEVGothic_NF_Extracted"
 
     Write-Host ">> Downloading $($asset.name)..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZipPath
+
+    if (-not (Test-Path $tempZipPath) -or (Get-Item $tempZipPath).Length -lt 1000000) {
+        throw "Security validation failed: Downloaded font package is missing or corrupted."
+    }
 
     if (Test-Path $tempExtractDir) {
         Remove-Item $tempExtractDir -Recurse -Force

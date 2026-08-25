@@ -94,7 +94,7 @@ def mm [
   <div class='mermaid'>
 __MERMAID_CONTENT__
   </div>
-  <script>mermaid.initialize({startOnLoad: true, theme: 'dark', securityLevel: 'loose'});</script>
+  <script>mermaid.initialize({startOnLoad: true, theme: 'dark', securityLevel: 'strict'});</script>
 </body>
 </html>"
         $template | str replace "__MERMAID_CONTENT__" $content | save -f $tmp_html

@@ -1,4 +1,4 @@
-﻿# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
+# PowerShell Profile for Windows (PowerShell 7 & Windows PowerShell 5.1)
 # dotfiles-windows: Optimized for Speed, Stability & AI Agent Non-Interactive Execution
 
 # --- 1. UTF-8 Output & Console Encoding ---
@@ -15,15 +15,24 @@ foreach ($alias in $aliasesToRemove) {
     }
 }
 
-# --- 3. Default Environment Variables (Pagers & Non-Interactive Safety) ---
-$env:PAGER                     = "cat"
-$env:BAT_PAGER                 = ""
-$env:BAT_STYLE                 = "plain"
-$env:GIT_PAGER                 = "cat"
-$env:DELTA_PAGER               = "cat"
-$env:PYTHONUTF8                = "1"
+# --- 3. Default Environment Variables (Pagers, Non-Interactive Safety & AI Key Bridge) ---
+$env:PAGER                       = "cat"
+$env:BAT_PAGER                   = ""
+$env:BAT_STYLE                   = "plain"
+$env:GIT_PAGER                   = "cat"
+$env:DELTA_PAGER                 = "cat"
+$env:PYTHONUTF8                  = "1"
 $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+
+# Bridge User Registry AI/LLM keys if missing in process table (transparent subshell resolution)
+$aiKeys = @("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "KIMI_API_KEY", "MOONSHOT_API_KEY")
+foreach ($k in $aiKeys) {
+    if (-not [System.Environment]::GetEnvironmentVariable($k, "Process")) {
+        $v = [System.Environment]::GetEnvironmentVariable($k, "User")
+        if ($v) { [System.Environment]::SetEnvironmentVariable($k, $v, "Process") }
+    }
+}
 
 # --- 4. Fast Non-Interactive Guard for AI Agents & Automation ---
 # Subprocesses spawned by Antigravity, Cursor, Claude Code, etc. return immediately here.

@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     インストールされたランタイム・CLIツールの初期化・セットアップを行います。
@@ -84,12 +84,18 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
             $graphifyPresent = ($toolList -match '(?m)^graphifyy\b')
         } catch { }
 
+        $extras = "graphifyy[mcp,gemini,openai,anthropic]"
+
         if ($graphifyPresent) {
-            Write-Host "   graphifyy already installed; upgrading via uv tool..." -ForegroundColor Gray
-            uv tool upgrade "graphifyy" 2>&1 | Out-Null
+            Write-Host "   graphifyy already installed; ensuring full LLM extras in virtualenv..." -ForegroundColor Gray
+            $graphifyVenv = Join-Path $env:APPDATA "uv\tools\graphifyy"
+            if (Test-Path $graphifyVenv) {
+                # Safe in-venv dependency install that avoids Windows file lock on running graphify-mcp.exe
+                uv pip install --python $graphifyVenv openai 2>&1 | Out-Null
+            }
         } else {
-            Write-Host "   Installing graphifyy[mcp] via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
-            uv tool install "graphifyy[mcp]" 2>&1 | Out-Null
+            Write-Host "   Installing $extras via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
+            uv tool install $extras 2>&1 | Out-Null
         }
 
         # Ensure uv tool bin is on PATH for this session (Windows: ~/.local/bin)
@@ -98,15 +104,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
         if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
 
-        # Upgrade can drop extras; re-install with [mcp] if graphify-mcp is missing
-        if (-not (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
-            Write-Host "   graphify-mcp missing after upgrade; reinstalling graphifyy[mcp]..." -ForegroundColor Gray
-            uv tool install "graphifyy[mcp]" --force 2>&1 | Out-Null
-            if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
-        }
-
         if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
-            Write-Host "[OK] graphify + graphify-mcp installed. Rules/skills: run ``just sync-rules`` (also via deploy)." -ForegroundColor Green
+            Write-Host "[OK] graphify + graphify-mcp installed with LLM backends. Rules/skills: run ``just sync-rules`` (also via deploy)." -ForegroundColor Green
         } else {
             Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
         }

@@ -17,6 +17,13 @@
 3. **Deterministic UTF-8 Text Processing**:
    - Assume all code and text files are UTF-8. Avoid tools that output legacy Windows codepages (Shift-JIS/CP932) or add unexpected UTF-16 BOMs.
 
+4. **Turn Completion & Zero-Silent-Exit Protocol**:
+   - Every tool execution sequence MUST conclude with a clear, structured markdown response or actionable findings to the user. Never terminate an agent turn silently with only tool step results.
+
+5. **Deterministic Windows Execution & Safe Process Lifecycle**:
+   - Wrap variable-containing PowerShell one-liners in single quotes (`powershell.exe -NoProfile -Command '...'`) to prevent caller-shell variable expansion.
+   - Never run destructive binary reinstallations (`uv tool install --force`) against active, locked background processes (e.g., live MCP servers); use `uv pip install --python <venv_path> <package>` for in-place dependency updates.
+
 ---
 
 ## 🛠 2. Tool Replacement Matrix & Preferred Commands
@@ -54,6 +61,9 @@ Use the following modern tools for file system inspection, searching, refactorin
 - ❌ **NEVER** leave pagers enabled on `git diff` or `git log`. Always use `git --no-pager diff` or set `GIT_PAGER=cat`.
 - ❌ **NEVER** use interactive editors (`vi`, `vim`, `nano`, `helix`) or launch interactive TUI tools (`lazygit`, `herdr`, `btm`) in automated agent subshells.
 - ❌ **NEVER** run PowerShell without `-NoProfile -NonInteractive -ExecutionPolicy Bypass` in agent commands. Profile loading introduces latency, telemetry delays, and potential subshell hangs.
+- ❌ **NEVER** pass unescaped variables inside double-quoted `powershell.exe -Command "..."` strings from pwsh. Always wrap in single quotes `'...'` or use `.ps1` script files.
+- ❌ **NEVER** run `uv tool install --force` while target tool binaries (such as `graphify-mcp.exe`) are actively held open by live MCP servers.
+- ❌ **NEVER** end a turn without presenting the tool results and answering the user's intent.
 
 ---
 
@@ -81,6 +91,9 @@ Use the following modern tools for file system inspection, searching, refactorin
    - Legacy Windows PowerShell 5.1 (`powershell.exe`) defaults to Shift-JIS (CP932) for BOM-less files. Any `.ps1` script containing non-ASCII / Japanese / CJK characters **MUST be saved as UTF-8 with BOM (`utf-8-sig`)** to prevent parser crashes (e.g. `TerminatorExpectedAtEndOfString`).
    - Standard code/data files (Rust, JS/TS, Python, JSON, YAML, Markdown) remain UTF-8 without BOM.
    - When creating or editing `.ps1` scripts with Japanese text, ensure BOM is preserved and verify AST parsing via `just test`.
+
+5. **Transparent User Environment & API Key Bridge**:
+   - When running CLI tools that depend on external API keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`), automatically query and bridge Windows User Registry keys (`[Environment]::GetEnvironmentVariables('User')`) into the process table before execution if not already present in the current subshell snapshot.
 
 
 ---

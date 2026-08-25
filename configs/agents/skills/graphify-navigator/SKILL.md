@@ -65,19 +65,19 @@ sd 'oldName' 'newName' path/to/file.ps1
 ## Bootstrap / refresh (user-requested only)
 
 ```powershell
-# Fast code-only graph (no LLM) — preferred bootstrap
+# 1. Fast code-only graph (no LLM, 100% AST extraction) — preferred default bootstrap
 graphify update .
 
-# Full multimodal pipeline — only when the user explicitly asks
-# /graphify .
+# 2. Full deep semantic extraction (AST + LLM via OpenRouter/Gemini/OpenAI) — user-requested
+powershell.exe -NoProfile -Command '[Environment]::GetEnvironmentVariables("User").GetEnumerator() | ForEach-Object { [Environment]::SetEnvironmentVariable($_.Key, $_.Value, "Process") }; graphify extract .'
 ```
 
 ## Stability rules
 
-1. Cap query tokens: always `--budget 1500` unless the user asks for more depth.
-2. Do not read `GRAPH_REPORT.md` unless doing a broad architecture review.
-3. Do not start with whole-repo `rg` for architectural discovery when the graph exists.
-4. Do not hang on pagers — use non-interactive flags / `PAGER=cat`.
-5. Missing graph + no user request to build → skip graphify entirely (normal CLI).
-6. MCP unavailable → CLI once → scoped `rg`/`fd`. Never stall on missing tools.
-7. Run `graphify update .` **once per edit batch**, not after every file. It can exceed 10s.
+1. **Turn Completion**: Always present a structured markdown answer/dashboard to the user after running graphify tools; never end a turn silently on a tool call.
+2. **Deterministic Execution**: Always wrap variable-containing PowerShell one-liners in single quotes `'...'` to prevent outer shell parameter expansion.
+3. **Safe MCP Lifecycle**: Never run `uv tool install --force` while `graphify-mcp` is running. Use `uv pip install --python "$env:APPDATA\uv\tools\graphifyy" <package>` for dependency updates.
+4. **Cap query tokens**: Always `--budget 1500` unless the user asks for more depth.
+5. **No broad file reads**: Do not read `GRAPH_REPORT.md` or start with whole-repo `rg` for architectural discovery when the graph exists.
+6. **No interactive pagers**: Always ensure `PAGER=cat` and `--paging=never`.
+7. **Batch updates**: Run `graphify update .` **once per edit batch**, not after every single file edit.

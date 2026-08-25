@@ -102,13 +102,15 @@ Always use these `just` commands instead of constructing manual shell commands:
 `dotfiles-windows` has `graphify-out/graph.json` present. Follow this protocol:
 
 1. **Task Routing (Mandatory Gate)**:
-   - **System Survey / Documentation Sync (`README.md`, `AGENTS.md`) / Architecture Analysis**:
-     **MANDATORY L0/L1 Trigger**: Call Graphify MCP (`query_graph`, `god_nodes`) or CLI (`graphify query`) FIRST to get the topological map in 1-2 calls. Do NOT cascade 10+ sequential `view_file` calls.
+   - **System Survey / Documentation Verification / Architecture Analysis**:
+     - **Ground Truth First**: Run `just test` first for immediate proof of 80+ parameters across tools, configs, and scripts.
+     - **MANDATORY L0/L1 Trigger**: Call Graphify MCP (`query_graph`, `god_nodes`) or immediately fall back to CLI (`graphify query "<topic>" --budget 1500` / `graphify god-nodes --top 10`) if MCP fails. Do NOT cascade whole-file `view_file` calls.
    - **Isolated Pinpoint Fix (Single line typo, static hex in known file)**:
      Bypass L0/L1 directly to L2 (`rg -n` anchor) → L3 (`replace_file_content`).
-2. **Two-Tier Hybrid Discovery**:
+2. **Two-Tier Hybrid Discovery & Strict Budget**:
    - Tier 1: Graphify L0/L1 maps components, functions, and cross-file dependencies.
    - Tier 2: Native CLI L2 (`rg -n`, `sd`) locates exact line numbers, arrays, or variable strings inside ONLY the scoped files.
+   - **Strict Read Budget**: Max **2–3 `view_file` calls per task**. NEVER read 4+ whole files sequentially.
 3. **Batch Completion Sync (L4)**:
    - Whenever code or documentation in this repository is modified in a batch, execute `graphify update .` **once at the end of the batch** to ensure the knowledge graph stays 100% fresh.
 

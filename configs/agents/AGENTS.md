@@ -10,17 +10,21 @@
    - Always prefer **compiled, native Rust/Go CLI utilities** (`rg`, `fd`, `sd`, `ast-grep`, `bat`, `jaq`/`jq`, `xh`, `procs`, `difft`, `uutils-coreutils`) over slow, interpreted commands or heavy PowerShell cmdlets.
    - Streaming raw byte streams is 10x to 100x faster and consumes a fraction of the memory compared to PowerShell .NET object pipelines.
 
-2. **Non-Interactive & Zero-Hang Guarantee**:
+2. **Strict Read Budget & Zero-Cascade Guarantee**:
+   - Limit `view_file` calls to a maximum of **2–3 scoped files per task**.
+   - NEVER sequentially read whole files across 4+ files. For repository surveys, architecture investigations, or documentation verification, use **Graphify (L0 MCP / L1 CLI) + Scoped `rg -n` + `just test`** instead.
+
+3. **Non-Interactive & Zero-Hang Guarantee**:
    - Never allow commands to invoke interactive pagers (`less`, `more`, interactive `bat`, interactive `git diff`).
    - Always supply non-interactive / bypass flags (`--paging=never`, `--no-pager`, `-y`, `--yes`, `--force`) when executing terminal tools.
 
-3. **Deterministic UTF-8 Text Processing**:
+4. **Deterministic UTF-8 Text Processing**:
    - Assume all code and text files are UTF-8. Avoid tools that output legacy Windows codepages (Shift-JIS/CP932) or add unexpected UTF-16 BOMs.
 
-4. **Turn Completion & Zero-Silent-Exit Protocol**:
+5. **Turn Completion & Zero-Silent-Exit Protocol**:
    - Every tool execution sequence MUST conclude with a clear, structured markdown response or actionable findings to the user. Never terminate an agent turn silently with only tool step results.
 
-5. **Deterministic Windows Execution & Safe Process Lifecycle**:
+6. **Deterministic Windows Execution & Safe Process Lifecycle**:
    - Wrap variable-containing PowerShell one-liners in single quotes (`powershell.exe -NoProfile -Command '...'`) to prevent caller-shell variable expansion.
    - Never run destructive binary reinstallations (`uv tool install --force`) against active, locked background processes (e.g., live MCP servers); use `uv pip install --python <venv_path> <package>` for in-place dependency updates.
 
@@ -50,11 +54,13 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 ---
 
+- ❌ **NEVER** sequentially read multiple whole files with `view_file` (Budget: max 2–3 files). For surveys or multi-file tasks, use Graphify (L0 MCP / L1 CLI) + `rg -n` + `just test`.
+- ❌ **NEVER** abandon Graphify when L0 MCP fails. Immediately execute L1 CLI (`graphify query "<topic>" --budget 1500` or `graphify god-nodes --top 10`).
+- ❌ **NEVER** manually read multiple source files to verify project status when an automated test suite (`just test`) exists. Run `just test` first.
 - ❌ **NEVER** use `write_to_file` with `ArtifactMetadata` on workspace project files. `ArtifactMetadata` is strictly for `<appDataDir>\brain\<conversation-id>/...` artifacts. Always use `replace_file_content` for editing/overwriting workspace files.
 - ❌ **NEVER** pipe `Get-Content` into `Select-String` (e.g. `Get-Content file.txt | Select-String "foo"`). This loads the entire file into .NET objects in memory. Always use `rg "foo" file.txt`.
 - ❌ **NEVER** use `Get-ChildItem -Recurse -Filter *.ext`. Always use `fd -e ext`.
 - ❌ **NEVER** use `read_url_content` on GitHub repository web pages (e.g. `https://github.com/user/repo`). This returns 300KB+ of heavy HTML/JS/CSS, wastes tokens, and truncates the README. Use `gh repo view` or `git clone --depth 1` instead.
-- ❌ **NEVER** sequentially read multiple whole files with `view_file` when surveying a repository or updating global documentation. Use Graphify MCP/CLI (`query_graph`, `god_nodes`) first when `graphify-out/graph.json` exists, then pinpoint with `rg -n`.
 - ❌ **NEVER** re-read (`view_file`) the same file multiple times across turns when the content is already in your conversation context. Reuse existing context or pinpoint lines with `rg -n`.
 - ❌ **NEVER** manually edit mirrored documentation files (`CLAUDE.md`, `.cursorrules`, etc.) individually. Always edit the master SSOT (`configs/agents/AGENTS.md` for global rules, `AGENTS.md` for workspace rules) and run `just sync-rules`.
 - ❌ **NEVER** finish an edit batch in a graph-enabled repository without running `graphify update .`.
@@ -120,40 +126,49 @@ Use the following modern tools for file system inspection, searching, refactorin
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                       Ultra-Fast Agent Execution Protocol                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ 1. Zero-Hang Execution: Use `WaitMsBeforeAsync: 10000` & `-NoProfile`       │
-│ 2. Two-Tier Hybrid Discovery: Graphify Topology -> Scoped Native CLI        │
-│ 3. Safe Workspace Editing: Use `replace_file_content` (No ArtifactMetadata) │
-│ 4. Atomic SSOT Edit: Edit configs/ master files -> run `just deploy/sync`   │
-│ 5. Batch Completion: Run `graphify update .` once per edit batch            │
+│ 1. Ground Truth First: Run `just test` for instant verification             │
+│ 2. Two-Tier Discovery: Graphify Topology (L0/L1) -> Scoped CLI (L2)         │
+│ 3. Strict Read Budget: Max 2–3 `view_file` calls (No whole-file cascades)   │
+│ 4. Safe Workspace Editing: Use `replace_file_content` (No ArtifactMetadata) │
+│ 5. Atomic SSOT Edit: Edit configs/ master files -> run `just deploy/sync`   │
+│ 6. Batch Completion: Run `graphify update .` once per edit batch            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Two-Tier Hybrid Discovery (Graphify Topology + Native CLI Granularity)**:
-   - **Tier 1 (High-Level Topology via Graphify L0/L1)**: When surveying a codebase, documenting system architecture, updating `README.md` / `AGENTS.md`, or exploring multi-component flows, ALWAYS use Graphify first (`query_graph`, `god_nodes`, `graphify query`) if `graphify-out/graph.json` exists. This reveals modules, functions, caller/callee trees, and skills in 1-2 tool calls.
-   - **Tier 2 (Granular Detail via Native CLI L2)**: Use `rg -n`, `sd`, or `ast-grep` ONLY within the scoped files discovered in Tier 1 to locate specific string literals, variable lists, or line anchors. NEVER read 10+ whole files sequentially with `view_file`.
+1. **Automated Ground Truth Validation (Test First for Audits & Surveys)**:
+   - When asked to audit, check, or survey whether documentation/configurations match current reality, **ALWAYS run `just test` (or the project test suite) FIRST**.
+   - A passing test suite provides immediate proof of system integrity across 80+ parameters in seconds, eliminating the need to manually read dozens of source files.
 
-2. **Safe Workspace Editing Protocol (`replace_file_content` vs `write_to_file`)**:
+2. **Two-Tier Hybrid Discovery (Graphify Topology + Native CLI Granularity)**:
+   - **Tier 1 (High-Level Topology via Graphify L0/L1)**: When surveying a codebase, documenting system architecture, updating `README.md` / `AGENTS.md`, or exploring multi-component flows, ALWAYS use Graphify first (`query_graph`, `god_nodes`, `graphify query`) if `graphify-out/graph.json` exists. This reveals modules, functions, caller/callee trees, and skills in 1-2 tool calls.
+   - **Tier 2 (Granular Detail via Native CLI L2)**: Use `rg -n`, `sd`, or `ast-grep` ONLY within the scoped files discovered in Tier 1 to locate specific string literals, variable lists, or line anchors. NEVER read 4+ whole files sequentially with `view_file`.
+
+3. **Strict 3-File Read Budget & Zero-Cascade Guarantee**:
+   - Limit `view_file` calls to a maximum of **2–3 scoped files per task**.
+   - NEVER issue cascading sequential `view_file` calls across multiple files. Combine Graphify topology + `rg -n` anchor lines + automated tests instead.
+
+4. **Safe Workspace Editing Protocol (`replace_file_content` vs `write_to_file`)**:
    - For all workspace files, **ALWAYS use `replace_file_content`**.
    - `write_to_file` with `ArtifactMetadata` is strictly reserved for `<appDataDir>\brain\<conversation-id>/...` artifacts. Passing `ArtifactMetadata` to workspace project paths will cause a permission validation failure and agent rework.
    - For full-file replacement of workspace files, use `replace_file_content` targeting lines `1..N`.
 
-3. **Fast Remote Repository Investigation**:
+5. **Fast Remote Repository Investigation**:
    - When given a GitHub URL (e.g. `https://github.com/owner/repo`):
      - **Inspect metadata/README**: Run `gh repo view owner/repo` (or fetch raw README via `https://raw.githubusercontent.com/owner/repo/HEAD/README.md`).
      - **Deep codebase inspection**: Clone shallowly to scratch space: `git clone --depth 1 https://github.com/owner/repo.git ./scratch/repo_inspect` and search locally via `fd` / `rg`. This is 10x faster and more reliable than multiple GitHub API calls.
 
-4. **Eliminate Duplicate Reads (Context Reuse)**:
+6. **Eliminate Duplicate Reads (Context Reuse)**:
    - Do NOT issue `view_file` on a file you have already inspected in the conversation.
    - If exact line numbers are needed for `replace_file_content`, run a 1-line `rg -n "anchor"` command rather than loading the entire file again.
 
-5. **Atomic Modification & SSOT-First Workflow**:
+7. **Atomic Modification & SSOT-First Workflow**:
    - Combine multiple related edits in a single pass rather than making fragmented, repetitive tool calls to the same file.
    - Modify the single master source in `configs/` and immediately run `just deploy` or `just sync-rules` rather than manually editing mirrored target files.
 
-6. **Always Use `-NoProfile` for PowerShell Invocations**:
+8. **Always Use `-NoProfile` for PowerShell Invocations**:
    - When running PowerShell scripts or inline commands, always supply `-NoProfile -NonInteractive -ExecutionPolicy Bypass` (e.g. `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ...` or `pwsh -NoProfile ...`). This prevents module loading and telemetry delays that cause CLI timeouts.
 
-7. **Synchronous Execution & Active Hang Recovery**:
+9. **Synchronous Execution & Active Hang Recovery**:
    - For CLI commands expected to finish quickly (< 10 seconds), always allocate the full synchronous wait limit (`WaitMsBeforeAsync: 10000`).
    - If a background command unexpectedly hangs (e.g. network/API stall), immediately terminate it with `manage_task kill` and switch to a deterministic native alternative.
 
@@ -177,15 +192,17 @@ Use the following modern tools for file system inspection, searching, refactorin
 
 | Task Category | Examples | Trigger Rule | Execution Path |
 | :--- | :--- | :--- | :--- |
-| **A. System Survey & Global Overview** | README/AGENTS.md sync, architecture docs, codebase tour, dependency analysis, impact/blast radius | **Mandatory L0/L1 Trigger**<br>(Do NOT bypass just because a single doc file is named in prompt) | `query_graph` / `god_nodes` → Scoped `rg -n` → `replace_file_content` → `graphify update .` |
-| **B. Multi-Component Feature / Refactor** | Adding a CLI command, modifying shared types, altering runtime pipeline | **Mandatory L0/L1 Trigger** | `get_node` / `shortest_path` → Scoped `ast-grep` / `rg` → Edits → `graphify update .` |
+| **A. System Survey & Global Overview** | README/AGENTS.md sync, architecture docs, codebase tour, dependency analysis, impact/blast radius | **Mandatory L0/L1 Trigger**<br>(Do NOT bypass just because a single doc file is named in prompt) | `query_graph` / `god_nodes` (or `graphify query` on error) → Scoped `rg -n` → `replace_file_content` → `graphify update .` |
+| **B. Multi-Component Feature / Refactor** | Adding a CLI command, modifying shared types, altering runtime pipeline | **Mandatory L0/L1 Trigger** | `get_node` / `shortest_path` (or `graphify path` on error) → Scoped `ast-grep` / `rg` → Edits → `graphify update .` |
 | **C. Self-Contained Pinpoint Fix** | Typo fix on known line, isolated syntax bug, static color hex change | **Bypass L0/L1** (Direct to L2) | `rg -n` anchor → `replace_file_content` → `graphify update .` (if batch modified code) |
 
-### 🪜 The Graphify Execution Ladder
+### 🪜 The Graphify Execution Ladder & Immediate Fallback
 
 ```text
-L0  MCP   query_graph / get_node / get_neighbors / shortest_path  (if tools exist)
-L1  CLI   graphify query|path|explain --budget 1500               (if MCP missing/failed)
+L0  MCP   query_graph / get_node / get_neighbors / shortest_path  (try first if MCP tools exist)
+          │
+          └── [On ANY error / failure / tool absent] ──► IMMEDIATELY fall back to L1:
+L1  CLI   graphify query "<topic>" --budget 1500  /  graphify god-nodes --top 10
 L2  Locate rg -n / fd / ast-grep                                   (scoped paths ONLY)
 L3  Edit  replace_file_content / sd / ast-grep -U                (atomic surgical edits)
 L4  Sync  graphify update .                                       (once per edit batch; AST-only)

@@ -3,7 +3,7 @@
     "graphify": {
       "command": "graphify-mcp",
       "args": [
-        "${workspace.path}/graphify-out/graph.json"
+        "graphify-out/graph.json"
       ],
       "env": {
         "PYTHONUTF8": "1",

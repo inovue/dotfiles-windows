@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     configs/agents/ 内の SSOT ルール＆スキルをグローバルエージェント環境へ一括同期します。
@@ -126,10 +126,10 @@ function New-MaterializedGraphifyServer {
     }
     # Strip uv-tool-run arg prefixes if a stale template somehow still has them
     if ($argsList -contains "tool" -and $argsList -contains "run") {
-        $argsList = @('${workspace.path}/graphify-out/graph.json')
+        $argsList = @('graphify-out/graph.json')
     }
     if ($argsList.Count -eq 0) {
-        $argsList = @('${workspace.path}/graphify-out/graph.json')
+        $argsList = @('graphify-out/graph.json')
     }
 
     $envObj = [PSCustomObject]@{

@@ -15,9 +15,9 @@ L0 MCP (only if tools exist) → L1 graphify query|path|explain --budget 1500
 ```
 
 - **Task Routing**:
-  - **Survey / Doc / Architecture**: Mandatory L0/L1 first (do NOT bypass just because a single doc file is named in prompt).
+  - **Survey / Doc / Architecture Audit**: Mandatory `just test` (for instant 80+ ground-truth checks) + L0/L1 first (do NOT bypass just because a single doc file is named in prompt).
   - **Pinpoint Fix**: Bypass L0/L1 directly to L2 (`rg -n`).
-- **Two-Tier Discovery**: Tier 1 (Topology via L0/L1) → Tier 2 (Granular values via `rg -n` only on scoped files). Never read 10+ whole files sequentially.
+- **Two-Tier Discovery & Strict Budget**: Tier 1 (Topology via L0/L1) → Tier 2 (Granular values via `rg -n` only on scoped files). Max 2–3 `view_file` calls per task. Never read 4+ whole files sequentially.
 - Cursor often has no graphify MCP → default L1 (`graphify query "<q>" --budget 1500`); never retry-loop missing tools.
 - **L4 Sync**: Run `graphify update .` once at end of a coherent edit batch (not after every file). Skip if graph was absent.
 - Never run full multimodal `/graphify .` unless the user asks.

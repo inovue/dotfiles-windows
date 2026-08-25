@@ -47,21 +47,23 @@ When the `graphify` MCP server exposes tools in this session:
 
 | Intent | Tool |
 | :--- | :--- |
-| Open question | `query_graph` |
-| One concept | `get_node` |
+| Open question / Survey | `query_graph` |
+| One concept / Module | `get_node` |
 | Neighborhood | `get_neighbors` |
 | A → B relation | `shortest_path` |
+| God nodes / Hubs | `god_nodes` |
 
-If MCP tools are missing or fail once → go to CLI. Do not retry-loop.
+> [!IMPORTANT]
+> **Immediate L1 Fallback Mandate**: If MCP tools fail with an error or are missing, **IMMEDIATELY fall back to the CLI commands below**. NEVER give up on Graphify or fall back to cascading whole-file `view_file` reads!
 
 ### 2. CLI fallback (when graph exists)
 
 ```powershell
 graphify query "how does deploy work?" --budget 1500
+graphify god-nodes --top 10
 graphify path "Install-WingetPackage" "Deploy"
 graphify explain "sync_agent_rules"
 graphify update .          # once per edit batch; WaitMs >= 60000 if needed
-graphify god-nodes --top 15
 ```
 
 ### 3. Pinpoint locate + edit (after graph scoping)

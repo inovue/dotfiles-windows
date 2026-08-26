@@ -12,7 +12,7 @@
 - **Encoding**: all code UTF-8. Any `.ps1` containing CJK text MUST be saved UTF-8 **with BOM** — Windows PowerShell 5.1 misparses BOM-less non-ASCII files.
 - **SSOT flow**: edit masters under `dotfiles-windows/configs/agents/`, then run `just sync-rules`. Deployed mirrors (global AGENTS.md / CLAUDE.md / rule files) are generated; direct edits get overwritten.
 - **Reads are a budget, not a reflex**: prefer graph queries and scoped `rg -n` snippets. When snippets already prove the answer, stop. Slice-read (max ~30 lines) only genuinely ambiguous spots; never re-read files already in context.
-- **Guarantees live in hooks**: `agent_guard.py` blocks destructive commands, slow cmdlets, and cascading reads at 100% enforcement — safety never relies on prose alone.
+- **Guarantees live in hooks**: `agent_guard.py` v2 hard-blocks destructive commands; slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, and read-budget overruns get a ONE-STRIKE guidance deny (exact fix suggested; retrying the same target always passes — the guard can never deadlock the loop). Whole-file reads up to 300 lines are allowed: one read beats three slices.
 - **Finish with structure**: end turns with a concise structured markdown answer, never bare tool output.
 
 ## Graph-First Navigation (when `graphify-out/graph.json` exists)

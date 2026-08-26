@@ -44,12 +44,16 @@ dotfiles-windows/
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ・ランタイム一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
+│   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, rustup, jaq, rtk, graphify 等のランタイム・CLIセットアップ
+│   ├── 04_setup_configs.ps1        # 4. Dotfiles（Terminal, Helix, Nushell, Profiles）の配備
+│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse フック)
+│   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査・クリーンアップスクリプト
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 AI Agent ルール＆スキルの高速一括同期 (正本 -> 全グローバル/ワークスペース)
 └── configs/
     ├── agents/                     # 🌟 AIエージェント単一マスタールール (SSOT)
-    │   ├── AGENTS.md               # グローバル共通ルール (CLI置換表, 非対話, UTF-8, ゼロハング)
-    │   ├── hooks.json              # Antigravity 用 PreToolUse ライフサイクルフック設定
+    │   ├── GLOBAL_RULES.md         # グローバル共通ルール正本 (CLI置換表, 非対話, UTF-8, ゼロハング)
+    │   ├── hooks.json              # Antigravity / Cursor 用 PreToolUse ライフサイクルフック設定
     │   ├── antigravity/            # Antigravity MCP テンプレ + always-on rules/workflows (graphify)
     │   │   ├── mcp_config.json
     │   │   ├── rules/graphify.md
@@ -57,6 +61,9 @@ dotfiles-windows/
     │   ├── cursor/                 # Cursor always-on rules & hooks (graphify.mdc, hooks.json)
     │   │   ├── hooks.json
     │   │   └── rules/graphify.mdc
+    │   ├── claude/                 # Claude Code 用設定・プロジェクトポインタ
+    │   │   ├── CLAUDE.project.md
+    │   │   └── settings.json
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・Playwright・a11y・プロファイル自動化
     │       ├── graphify-navigator/ # Graphify×Antigravity ハイブリッド知識グラフナビゲータ
@@ -76,6 +83,8 @@ dotfiles-windows/
     │   └── starship.toml
     ├── lazygit/                    # Lazygit TUI + Delta 構文ハイライト連携設定
     │   └── config.yml
+    ├── rtk/                        # rtk 設定 (トークン削減・除外設定)
+    │   └── config.toml
     └── herdr/                      # Herdr 設定 (Nushell既定, Catppuccin, IME対策, herdr-sidebar連携)
         └── config.toml
 ```
@@ -101,8 +110,14 @@ dotfiles-windows/
 | `just neighbors <l>`| 特定ハブ・ファイルの近傍コンポーネントと関係性を展開 | ハブ展開・変更波及範囲確認 |
 | `just path <a> <b>` | 2つのコンポーネント間の最短呼び出し/依存パスを探索 | 依存関係・リファクタ影響調査 |
 | `just update-graph`| 高速 AST 解析によりナレッジグラフ（`graphify-out/`）を更新 | 編集バッチ完了時 |
+| `just install-graph-hook`| コミット時に自動で知識グラフを再構築する post-commit フックを登録 | リポジトリ初回クローン時 |
+| `just rtk-gain` | 📊 rtk のトークン削減統計ダッシュボードを表示 | トークン節約効果の確認 |
+| `just rtk-history` | 直近のコマンド実行履歴とトークン削減率の内訳を表示 | 直近の節約履歴確認 |
+| `just rtk-discover`| 削減可能な見落としコマンドを履歴から自動検出 | エージェント最適化の確認 |
+| `just update-rtk` | rtk を最新リリースに更新し、ルール再同期とテストを実行 | rtk アップデート時 |
 | `just install` | 環境構築（パッケージ、フォント、ランタイム、設定）を一括実行 | 新規マシン構築時 |
 | `just setup-keys` | 🔑 AI Agent & Graphify 用 API キーを Windows ユーザー環境変数に対話型登録 | APIキー初回設定・更新時 |
+| `just setup-fal` | 🎨 fal.ai API キー（`FAL_KEY`）を Windows ユーザー環境変数に対話型登録 | 画像生成機能利用時 |
 
 ---
 
@@ -173,8 +188,10 @@ just install
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索。
    - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
-6. **決定論的サイバネティック・ガバナー (`agent_guard.py`)**:
-   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format`, `diskpart`, `rmdir /s C:\`, `git push --force`）、低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、120行以上の未スライスファイル読み込み、ワークスペースソースファイルの直接上書きを自動遮断。
+6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v2 — 安定性最優先設計)**:
+   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format`, `diskpart`, `rmdir /s C:\`, `git push --force`）を無条件ハード遮断。
+   - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
+   - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時は常にフェイルオープン（allow）。
 
 ---
 

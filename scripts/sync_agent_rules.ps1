@@ -89,6 +89,29 @@ function Sync-DirectoryMirror {
     Copy-Item -Path (Join-Path $SrcDir '*') -Destination $DestDir -Recurse -Force
 }
 
+function Get-HookContentWithGuardPath {
+    # hooks.json master references the guard via workspace-relative path
+    # ("python scripts/agent_guard.py"), which only resolves when CWD is this
+    # repo root. Deployed copies must point to their co-deployed guard via an
+    # absolute path, or every hook invocation fails in other workspaces.
+    param([string]$SrcFile, [string]$GuardPath)
+    $content = [System.IO.File]::ReadAllText($SrcFile, [System.Text.Encoding]::UTF8)
+    $guardFwd = $GuardPath.Replace('\', '/')
+    return $content.Replace('python scripts/agent_guard.py', "python $guardFwd")
+}
+
+function Test-TextContentIdentical {
+    param([string]$Content, [string]$File)
+    if (-not (Test-Path $File)) { return $false }
+    try {
+        $t1 = $Content.Replace("`r`n", "`n").TrimEnd()
+        $t2 = [System.IO.File]::ReadAllText($File, [System.Text.Encoding]::UTF8).Replace("`r`n", "`n").TrimEnd()
+        return ($t1 -eq $t2)
+    } catch {
+        return $false
+    }
+}
+
 function Get-NormalizedJsonText {
     param([string]$JsonText)
     if (-not $JsonText) { return "" }
@@ -374,13 +397,14 @@ $allTargets = @(
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
-    @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false },
-    @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false },
-    @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false },
-    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false },
-    @{ Name = "Workspace Cursor Hooks";              Src = $masterCursorHooks; Dest = Join-Path (Join-Path $rootDir ".cursor") "hooks.json"; IsDir = $false },
+    @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py" },
+    @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py" },
+    @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py" },
+    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py" },
+    @{ Name = "Workspace Cursor Hooks";              Src = $masterCursorHooks; Dest = Join-Path (Join-Path $rootDir ".cursor") "hooks.json"; IsDir = $false; GuardPath = $masterAgentGuard },
     @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
+    @{ Name = "Cursor Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Claude Pointer (CLAUDE.md)"; Src = $masterClaudeProjectPointer; Dest = $projectClaudeMd; IsDir = $false }
 )
@@ -408,9 +432,16 @@ foreach ($target in $allTargets) {
         continue
     }
 
+    $generatedContent = $null
+    if ($target.GuardPath) {
+        $generatedContent = Get-HookContentWithGuardPath -SrcFile $target.Src -GuardPath $target.GuardPath
+    }
+
     $isIdentical = $false
     if ($target.IsDir) {
         $isIdentical = Test-DirectoriesIdentical -SrcDir $target.Src -DestDir $target.Dest
+    } elseif ($null -ne $generatedContent) {
+        $isIdentical = Test-TextContentIdentical -Content $generatedContent -File $target.Dest
     } else {
         $isIdentical = Test-TextFilesIdentical -File1 $target.Src -File2 $target.Dest
     }
@@ -428,7 +459,11 @@ foreach ($target in $allTargets) {
             } else {
                 $destDir = Split-Path -Parent $target.Dest
                 if (-not (Test-Path $destDir)) { New-Item -Path $destDir -ItemType Directory -Force | Out-Null }
-                Copy-Item -Path $target.Src -Destination $target.Dest -Force
+                if ($null -ne $generatedContent) {
+                    [System.IO.File]::WriteAllText($target.Dest, $generatedContent, [System.Text.UTF8Encoding]::new($false))
+                } else {
+                    Copy-Item -Path $target.Src -Destination $target.Dest -Force
+                }
             }
             Write-Host "  [SYNCED] $($target.Name) -> $($target.Dest)" -ForegroundColor Green
             $syncedCount++

@@ -191,6 +191,7 @@ $configFiles = @(
     @{ Name = "Workspace hooks (.agents/hooks.json)";        Path = Join-Path $rootDir ".agents\hooks.json" }
     @{ Name = "Antigravity global hooks";                    Path = Join-Path $env:USERPROFILE ".gemini\config\hooks.json" }
     @{ Name = "Cursor Global hooks";                         Path = Join-Path $env:USERPROFILE ".cursor\hooks.json" }
+    @{ Name = "Cursor Global agent guard";                   Path = Join-Path $env:USERPROFILE ".cursor\scripts\agent_guard.py" }
     @{ Name = "Workspace Cursor hooks (.cursor/hooks.json)"; Path = Join-Path $rootDir ".cursor\hooks.json" }
 )
 
@@ -393,30 +394,67 @@ try {
         Assert-Test -Name "RTK (Rust Token Killer) gain metrics execution" -Condition $false -Details "rtk command not found in PATH"
     }
 
-    # Test 4.9: Deterministic Cybernetic Governor (agent_guard.py)
+    # Test 4.9: Deterministic Cybernetic Governor (agent_guard.py v2 - stability-first)
     $guardScript = Join-Path $rootDir "scripts\agent_guard.py"
     if (Test-Path $guardScript) {
         $testJsonFile = Join-Path $tempTestDir "guard_test.json"
         $guardPyEsc = $guardScript.Replace('\', '/')
         $testJsonEsc = $testJsonFile.Replace('\', '/')
+        # Random session id: one-strike state must never leak across test suite runs
+        $guardConv = "test_conv_$(Get-Random)"
+
+        function Invoke-GuardHook {
+            param([string]$PayloadJson)
+            [System.IO.File]::WriteAllText($testJsonFile, $PayloadJson, [System.Text.Encoding]::UTF8)
+            return (python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String)
+        }
 
         # Safe command -> allow
-        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"just audit"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
-        $safeRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
-        $safeOk = ($safeRes -match '"decision":\s*"allow"')
-        Assert-Test -Name "Agent Guard allows safe command" -Condition $safeOk -Details ($safeRes.Trim())
+        $safeRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"just audit`"}},`"conversationId`":`"$guardConv`"}"
+        Assert-Test -Name "Agent Guard allows safe command" -Condition ($safeRes -match '"decision":\s*"allow"') -Details ($safeRes.Trim())
 
-        # Dangerous command -> deny
-        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
-        $dangerRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
-        $dangerOk = ($dangerRes -match '"decision":\s*"deny"')
-        Assert-Test -Name "Agent Guard blocks destructive command" -Condition $dangerOk -Details ($dangerRes.Trim())
+        # Dangerous command -> deny ALWAYS (no one-strike escape)
+        $dangerPayload = "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rm -rf /`"}},`"conversationId`":`"$guardConv`"}"
+        $dangerRes1 = Invoke-GuardHook $dangerPayload
+        $dangerRes2 = Invoke-GuardHook $dangerPayload
+        $dangerOk = ($dangerRes1 -match '"decision":\s*"deny"') -and ($dangerRes2 -match '"decision":\s*"deny"')
+        Assert-Test -Name "Agent Guard hard-blocks destructive command (repeatable)" -Condition $dangerOk -Details ($dangerRes2.Trim())
 
-        # Slow CLI cmdlet -> deny
-        [System.IO.File]::WriteAllText($testJsonFile, '{"toolCall":{"name":"run_command","args":{"CommandLine":"Get-ChildItem -Recurse"}},"conversationId":"test_conv"}', [System.Text.Encoding]::UTF8)
-        $slowRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String
-        $slowOk = ($slowRes -match '"decision":\s*"deny"')
-        Assert-Test -Name "Agent Guard blocks slow PowerShell pipeline" -Condition $slowOk -Details ($slowRes.Trim())
+        # Slow CLI cmdlet -> one-strike: deny once, then allow (anti-deadlock)
+        $slowPayload = "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"Get-ChildItem -Recurse`"}},`"conversationId`":`"$guardConv`"}"
+        $slowRes1 = Invoke-GuardHook $slowPayload
+        $slowRes2 = Invoke-GuardHook $slowPayload
+        Assert-Test -Name "Agent Guard denies slow cmdlet once (guidance)" -Condition ($slowRes1 -match '"decision":\s*"deny"') -Details ($slowRes1.Trim())
+        Assert-Test -Name "Agent Guard one-strike: slow cmdlet retry passes" -Condition ($slowRes2 -match '"decision":\s*"allow"') -Details ($slowRes2.Trim())
+
+        # rtk token proxy enforcement -> deny once with exact rtk-prefixed suggestion
+        if (Get-Command rtk -ErrorAction SilentlyContinue) {
+            $rtkRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"git log -n 10 --oneline`"}},`"conversationId`":`"$guardConv`"}"
+            $rtkOk = ($rtkRes -match '"decision":\s*"deny"') -and ($rtkRes -match 'rtk git log')
+            Assert-Test -Name "Agent Guard enforces rtk prefix on noisy git commands" -Condition $rtkOk -Details ($rtkRes.Trim())
+        }
+
+        # Small whole-file read (<=300 lines) -> allow (slicing it would cost MORE calls)
+        $smallFile = Join-Path $tempTestDir "guard_small.txt"
+        [System.IO.File]::WriteAllText($smallFile, (("line`n") * 250), [System.Text.Encoding]::UTF8)
+        $smallEsc = $smallFile.Replace('\', '/')
+        $smallRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"view_file`",`"args`":{`"AbsolutePath`":`"$smallEsc`"}},`"conversationId`":`"$guardConv`"}"
+        Assert-Test -Name "Agent Guard allows unsliced read up to 300 lines" -Condition ($smallRes -match '"decision":\s*"allow"') -Details ($smallRes.Trim())
+
+        # Large whole-file read (>300 lines) -> one-strike: deny once, then allow
+        $bigFile = Join-Path $tempTestDir "guard_big.txt"
+        [System.IO.File]::WriteAllText($bigFile, (("line`n") * 400), [System.Text.Encoding]::UTF8)
+        $bigEsc = $bigFile.Replace('\', '/')
+        $bigPayload = "{`"toolCall`":{`"name`":`"view_file`",`"args`":{`"AbsolutePath`":`"$bigEsc`"}},`"conversationId`":`"$guardConv`"}"
+        $bigRes1 = Invoke-GuardHook $bigPayload
+        $bigRes2 = Invoke-GuardHook $bigPayload
+        Assert-Test -Name "Agent Guard denies unsliced read over 300 lines once" -Condition ($bigRes1 -match '"decision":\s*"deny"') -Details ($bigRes1.Trim())
+        Assert-Test -Name "Agent Guard one-strike: large read retry passes" -Condition ($bigRes2 -match '"decision":\s*"allow"') -Details ($bigRes2.Trim())
+
+        # Malformed payload -> fail-open allow (agent loop must never lock up)
+        [System.IO.File]::WriteAllText($testJsonFile, '{not valid json', [System.Text.Encoding]::UTF8)
+        $failRes = python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8')); exit(p.returncode)" 2>&1 | Out-String
+        Assert-Test -Name "Agent Guard fails open on malformed payload" -Condition ($failRes -match '"decision":\s*"allow"') -Details ($failRes.Trim())
     }
 
 } finally {

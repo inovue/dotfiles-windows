@@ -3,7 +3,7 @@
   "hooks": {
     "preToolUse": [
       {
-        "matcher": "Shell|Bash|Read|Write|Edit|Grep|Glob|Task|run_command|view_file|write_to_file|replace_file_content|ReadFile|read_file|WriteFile|write_file|EditFile|edit_file|grep_search|codebase_search|GlobFileSearch",
+        "matcher": "Shell|Bash|Read|Write|Edit|Grep|Glob|Task|run_command|view_file|write_to_file|replace_file_content|ReadFile|read_file|WriteFile|write_file|EditFile|edit_file|grep_search|codebase_search|GlobFileSearch|CallDynamicTool|call_dynamic_tool|use_mcp_tool|query_graph|get_node|get_neighbors|god_nodes|shortest_path|graph_stats|get_community|MCP:|mcp__",
         "command": "python scripts/agent_guard.py",
         "timeout": 5
       },

@@ -80,6 +80,27 @@ neighbors label:
 path source target:
     @graphify path "{{source}}" "{{target}}"
 
+# Session start: refresh lessons from work-memory (deterministic) and print them
+lessons:
+    @graphify reflect --if-stale
+    @if (Test-Path graphify-out/reflections/LESSONS.md) { Get-Content graphify-out/reflections/LESSONS.md } else { Write-Host 'No lessons yet - save results with `just remember` to seed the loop.' -ForegroundColor DarkGray }
+
+# Save a Q&A result to work-memory (becomes a graph node on next update)
+remember question answer outcome="useful":
+    @graphify save-result --question "{{question}}" --answer "{{answer}}" --type query --outcome {{outcome}}
+
+# Check whether semantic re-extraction is pending (needs_update flag, cron-safe)
+check-semantic:
+    @graphify check-update .
+
+# Watch the workspace: auto AST updates; semantic escalation via GRAPHIFY_SEMANTIC_AUTO=1
+watch:
+    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/graph_watch.ps1
+
+# Full semantic re-extraction incl. docs/memory (headless LLM; keys via `just setup-keys`)
+update-semantic:
+    @graphify extract .
+
 # Summarize session-log.jsonl deny rate and read-after-edit (thrash) rate
 session-report:
     @python scripts/report_session_log.py
@@ -99,5 +120,12 @@ rtk-discover:
 # Update RTK to the latest release, re-sync agent rules, and run verification
 update-rtk:
     @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/03_setup_runtimes.ps1 -OnlyRtk -Force
+    @just sync-rules
+    @just test
+
+# Update graphify engine, refresh git hooks, re-sync agent rules, and verify
+update-graphify:
+    @uv tool install --upgrade --with watchdog "graphifyy[mcp]"
+    @graphify hook install
     @just sync-rules
     @just test

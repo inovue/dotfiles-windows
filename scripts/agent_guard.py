@@ -61,6 +61,30 @@ Multi-harness ACI (v4.2):
  - KNOWN LIMIT: concurrent Antigravity sessions that omit a session key still
                 share the repo+window fallback id. One-strike + merge keeps the
                 harm to at most one extra retry, not a deadlock.
+
+Graph-contact resilience (v4.3 after Cursor field report 2026-08-26):
+ - MCP UNWRAP : dynamic-tool wrappers (CallDynamicTool et al.) are unwrapped to
+                the inner MCP tool name, so query_graph/get_node record graph
+                contact even when the harness hides them behind a generic tool.
+                Official Cursor beforeMCPExecution schema is also accepted:
+                bare tool_name, mcp_server_name, JSON-string tool_input, and
+                preToolUse matcher form MCP:<tool_name>.
+ - QUERY-LOG  : Cursor Agent often routes MCP through CallDynamicTool, so
+                beforeMCPExecution may not fire. Graph contact is ALSO accepted
+                from a fresh graphify query-log record (GRAPHIFY_QUERY_LOG /
+                default ~/.cache/graphify-queries.log, written by graphify-mcp)
+                whose corpus path resolves inside this repo. Deterministic,
+                fail-silent. GRAPHIFY_QUERY_LOG_DISABLE still wins.
+ - OUT-OF-REPO: writes outside the repo root (e.g. ~/.cursor/plans plan files,
+                brain artifacts) no longer trip the edit gate, the edited flag,
+                or the batch-end contract.
+ - SAVE-RESULT: batch-end additionally nudges `just remember` (graphify
+                save-result) once when graph queries ran but no result was
+                saved — advisory text only, never a new block condition.
+ - ATOMIC STATE: save_state writes tmp + os.replace. Parallel hook processes
+                interleaving a plain open("w") write corrupt the JSON, and the
+                next load_state silently resets the session (wiping contact and
+                strikes) — observed live on 2026-08-26.
 """
 import sys
 import json
@@ -69,6 +93,7 @@ import os
 import time
 import hashlib
 import tempfile
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from shutil import which
@@ -177,6 +202,10 @@ AUDIT_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rtk\s+)?just\s+audit\b",
     re.IGNORECASE,
 )
+SAVE_RESULT_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:graphify\s+save-result\b|just\s+remember\b)",
+    re.IGNORECASE,
+)
 UNANCHORED_SEARCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rg\b|fd\b|grep\b)",
     re.IGNORECASE,
@@ -186,6 +215,12 @@ GRAPH_TOOL_MARKERS = (
     "query_graph", "get_node", "get_neighbors", "god_nodes",
     "shortest_path", "graph_stats", "get_community",
 )
+# Harness-generic MCP wrappers: the real tool name lives in the arguments
+# (Cursor's CallDynamicTool passes {namespace, toolName, arguments}).
+DYNAMIC_TOOL_WRAPPERS = {
+    "calldynamictool", "call_dynamic_tool", "use_mcp_tool", "usemcptool",
+    "call_mcp_tool", "callmcptool", "mcp_tool_call", "mcptoolcall",
+}
 SEARCH_TOOLS = {
     "grep", "grep_search", "glob", "glob_file_search",
     "codebase_search", "find_by_name",
@@ -271,7 +306,11 @@ def resolve_conv_id(payload: dict) -> str:
 
 
 def _canon_tool(name: str) -> str:
-    return (name or "").lower().replace("-", "_").replace(" ", "_")
+    n = (name or "").lower().replace("-", "_").replace(" ", "_")
+    # Cursor preToolUse matcher form is MCP:<tool_name> (official hooks docs).
+    if n.startswith("mcp:"):
+        n = n[4:]
+    return n
 
 
 def _raw_tool_name(payload: dict, tool_call: dict) -> str:
@@ -281,6 +320,18 @@ def _raw_tool_name(payload: dict, tool_call: dict) -> str:
         or payload.get("mcp_tool") or payload.get("mcpTool")
         or payload.get("mcp_tool_name") or ""
     )
+
+
+def _arg_get(args: dict, *keys: str):
+    """Case-insensitive dict lookup (Antigravity uses ToolName/ServerName)."""
+    if not isinstance(args, dict) or not keys:
+        return None
+    lower = {str(k).lower(): v for k, v in args.items()}
+    for k in keys:
+        v = lower.get(k.lower())
+        if v is not None and v != "":
+            return v
+    return None
 
 
 def extract_tool_name(payload: dict, tool_call: dict) -> str:
@@ -293,7 +344,7 @@ def _graph_lookup_name(payload: dict, tool_call: dict) -> str:
     raw = _raw_tool_name(payload, tool_call)
     server = (
         payload.get("server") or payload.get("mcp_server")
-        or payload.get("mcpServer") or ""
+        or payload.get("mcpServer") or payload.get("mcp_server_name") or ""
     )
     return _canon_tool(f"{server} {raw}".strip())
 
@@ -412,6 +463,102 @@ def is_graph_tool(name: str) -> bool:
     return any(marker in n for marker in GRAPH_TOOL_MARKERS)
 
 
+# --- v4.3 graph-contact fallback (query log) -------------------------------------
+def _query_log_path():
+    """Resolve the graphify query log for READING. Upstream querylog.py treats
+    the log as opt-in because WRITING it records proprietary queries; the guard
+    only reads. The hook process has no GRAPHIFY_QUERY_LOG* env of its own
+    (only the graphify-mcp child does, via mcp_config.json), so default to the
+    upstream default path when it exists. Explicit DISABLE still wins."""
+    if os.environ.get("GRAPHIFY_QUERY_LOG_DISABLE", "").lower() in ("1", "true", "yes"):
+        return None
+    override = os.environ.get("GRAPHIFY_QUERY_LOG", "").strip()
+    if override:
+        return Path(override).expanduser()
+    default = Path.home() / ".cache" / "graphify-queries.log"
+    return default if default.is_file() else None
+
+
+def external_graph_contact(window_seconds: float = STATE_TTL_SECONDS) -> bool:
+    """MCP graph queries can bypass harness hooks (Cursor's beforeMCPExecution
+    does not fire). graphify-mcp appends JSONL records to the opt-in query log;
+    a fresh record whose corpus path resolves inside this repo is deterministic
+    evidence of graph contact. Fail-silent: any error returns False."""
+    try:
+        path = _query_log_path()
+        if path is None or not path.is_file():
+            return False
+        root = find_repo_root()
+        if root is None:
+            return False
+        now = time.time()
+        if now - path.stat().st_mtime > window_seconds:
+            return False
+        root_key = os.path.normcase(str(root.resolve()))
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            tail = f.readlines()[-50:]
+        for line in reversed(tail):
+            try:
+                rec = json.loads(line.lstrip("\ufeff").strip())
+            except Exception:
+                continue
+            corpus_raw = str(rec.get("corpus") or "")
+            if not corpus_raw:
+                continue
+            try:
+                # Resolve to collapse ".." segments; require a directory
+                # boundary so sibling repos (repo-evil) can never match.
+                corpus = os.path.normcase(str(Path(corpus_raw).resolve()))
+            except Exception:
+                continue
+            if not (corpus == root_key or corpus.startswith(root_key + os.sep)):
+                continue
+            try:
+                ts = str(rec.get("ts") or "").replace("Z", "+00:00")
+                age = now - datetime.fromisoformat(ts).timestamp()
+            except Exception:
+                continue  # unparseable/missing ts: never accept a stale tail line
+            # Lower bound rejects future-dated (forged) records; 60s covers
+            # benign clock skew between the MCP server and hook processes.
+            if -60 <= age <= window_seconds:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def has_graph_contact(state: dict) -> bool:
+    """Session flag first; fall back to query-log evidence (and cache it)."""
+    if state.get("graph_contact"):
+        return True
+    if external_graph_contact():
+        state["graph_contact"] = True
+        return True
+    return False
+
+
+def _in_repo(target) -> bool:
+    """Writes outside the repo root (plan files under ~/.cursor/plans, brain
+    artifacts, temp scratch) must not trip the edit gate or batch-end contract.
+    Conservative: unknown targets or resolution failures count as in-repo."""
+    target = str(target or "")
+    if not target or target == "unknown":
+        return True
+    root = find_repo_root()
+    if root is None:
+        return True
+    try:
+        p = Path(target)
+        # Relative paths are workspace-relative by harness convention → in-repo.
+        if not p.is_absolute():
+            return True
+        p_key = os.path.normcase(str(p.resolve()))
+        root_key = os.path.normcase(str(root.resolve()))
+        return p_key == root_key or p_key.startswith(root_key + os.sep)
+    except Exception:
+        return True
+
+
 def normalize_event(payload: dict) -> str:
     raw = str(
         payload.get("hook_event_name")
@@ -441,6 +588,10 @@ def gc_stale_state_files() -> None:
         for f in _state_dir().glob("session_*.json"):
             if now - f.stat().st_mtime > STATE_GC_SECONDS:
                 f.unlink(missing_ok=True)
+        # Orphan atomic-write temp files from crashed hook processes (v4.3).
+        for f in _state_dir().glob("session_*.tmp*"):
+            if now - f.stat().st_mtime > STATE_TTL_SECONDS:
+                f.unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -455,6 +606,7 @@ def fresh_state() -> dict:
         "edit_files": [],
         "did_update_graph": False,
         "did_audit": False,
+        "did_save_result": False,
         "last_edit": None,
         "logged_keys": False,
     }
@@ -491,7 +643,8 @@ def _merge_states(disk: dict, incoming: dict) -> dict:
     strikes = dict(disk.get("strikes") or {})
     strikes.update(incoming.get("strikes") or {})
     out["strikes"] = strikes
-    for flag in ("graph_contact", "edited", "did_update_graph", "did_audit", "logged_keys"):
+    for flag in ("graph_contact", "edited", "did_update_graph", "did_audit",
+                 "did_save_result", "logged_keys"):
         out[flag] = bool(disk.get(flag)) or bool(incoming.get(flag))
     # Ephemeral metric flag: the writer of this save owns the value.
     out["thrash_hit"] = bool(incoming.get("thrash_hit"))
@@ -532,15 +685,25 @@ def load_state(conv_id: str) -> dict:
 
 
 def save_state(conv_id: str, state: dict) -> None:
+    """Union-merge then ATOMIC write (v4.3): parallel hook processes writing the
+    same file non-atomically can interleave JSON, and a corrupted file makes the
+    next load_state fall back to fresh_state — silently wiping graph_contact and
+    one-strike history mid-session (observed 2026-08-26). tmp + os.replace is
+    atomic on the same volume, so readers only ever see a complete document."""
     try:
         path = get_state_file(conv_id)
         disk = _read_state_file(path) if path.exists() else None
         merged = _merge_states(disk, state) if isinstance(disk, dict) else dict(state)
         merged["ts"] = merged.get("ts") or time.time()
-        with open(path, "w", encoding="utf-8") as f:
+        tmp = path.with_suffix(f".tmp{os.getpid()}")
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(merged, f, ensure_ascii=False)
+        os.replace(tmp, path)
     except Exception:
-        pass
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def first_strike(state: dict, key: str) -> bool:
@@ -563,6 +726,8 @@ def record_shell_graph_events(cmd: str, state: dict) -> None:
         state["graph_contact"] = True
     if AUDIT_RE.search(cmd):
         state["did_audit"] = True
+    if SAVE_RESULT_RE.search(cmd):
+        state["did_save_result"] = True
 
 
 # --- Inspectors -----------------------------------------------------------------
@@ -601,7 +766,7 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
             return allow()
 
     # Gate 4 (v4): unanchored search before any graph query.
-    if graph_exists() and not state.get("graph_contact") and UNANCHORED_SEARCH_RE.search(cmd):
+    if graph_exists() and UNANCHORED_SEARCH_RE.search(cmd) and not has_graph_contact(state):
         if first_strike(state, "graph-gate:search"):
             save_state(conv_id, state)
             return deny(
@@ -617,7 +782,7 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
 def inspect_search_tool(conv_id: str) -> dict:
     """Grep/Glob/codebase_search without prior graph contact (v4 graph-gate)."""
     state = load_state(conv_id)
-    if graph_exists() and not state.get("graph_contact"):
+    if graph_exists() and not has_graph_contact(state):
         if first_strike(state, "graph-gate:search"):
             save_state(conv_id, state)
             return deny(
@@ -730,12 +895,18 @@ def _edit_target(args: dict) -> str:
 
 def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) -> dict:
     """v4 edit-gate: require graph contact before the first edit; pinpoint = one file."""
+    target = _edit_target(args)
+
+    # v4.3: out-of-repo writes (plan files, brain artifacts) are not workspace
+    # edits — no gate, no edited flag, no batch-end contract.
+    if not _in_repo(target):
+        return allow()
+
     if metadata_check:
         md_result = inspect_write_to_file(args)
         if md_result.get("decision") == "deny":
             return md_result
 
-    target = _edit_target(args)
     state = load_state(conv_id)
     files = list(state.get("edit_files") or [])
     unique = []
@@ -743,7 +914,7 @@ def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) ->
         if f not in unique:
             unique.append(f)
 
-    if graph_exists() and not state.get("graph_contact"):
+    if graph_exists() and not has_graph_contact(state):
         if not unique:
             if first_strike(state, "edit-gate"):
                 save_state(conv_id, state)
@@ -790,6 +961,13 @@ def inspect_batch_end(conv_id: str) -> dict:
             + " not run. Run them before reporting done. "
             "just audit PASS proves no regression, not that a fix works (Done contract)."
         )
+        # v4.3 advisory (never a block condition by itself): feed the work-memory loop.
+        if state.get("graph_contact") and not state.get("did_save_result"):
+            msg += (
+                " Graph queries also ran this session — run `just remember "
+                "\"<question>\" \"<answer>\"` (graphify save-result) so the next "
+                "update turns this session's findings into graph nodes."
+            )
         if first_strike(state, "batch-end"):
             result["reason"] = msg
             result["followup_message"] = msg
@@ -807,7 +985,15 @@ def _extract_args(payload: dict, tool_call: dict) -> dict:
         tool_call.get("args") or tool_call.get("arguments") or tool_call.get("parameters")
         or payload.get("args") or payload.get("tool_input") or payload.get("input") or {}
     )
-    if not args:
+    # Cursor beforeMCPExecution: tool_input is a JSON-params STRING, not an object
+    # (cursor.com/docs/hooks). Parsing failure must not skip inspect_graph_tool.
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+            args = parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            args = {}
+    if not isinstance(args, dict):
         args = {}
     if not args.get("CommandLine") and not args.get("command"):
         for key in ("command", "CommandLine", "cmd"):
@@ -837,6 +1023,14 @@ def main() -> None:
         tool_name = extract_tool_name(payload, tool_call)
         graph_name = _graph_lookup_name(payload, tool_call)
         args = _extract_args(payload, tool_call)
+
+        # v4.3: unwrap CallDynamicTool and Antigravity call_mcp_tool (PascalCase keys).
+        if tool_name in DYNAMIC_TOOL_WRAPPERS and isinstance(args, dict):
+            inner = _canon_tool(str(_arg_get(args, "toolName", "tool_name") or ""))
+            if inner:
+                ns = _canon_tool(str(_arg_get(args, "namespace", "server", "ServerName") or ""))
+                tool_name = inner
+                graph_name = f"{ns}_{inner}" if ns else inner
         conv_id = resolve_conv_id(payload)
         hook_event = normalize_event(payload)
 

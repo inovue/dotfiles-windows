@@ -11,7 +11,7 @@
         ]
       },
       {
-        "matcher": "Bash|Read|Edit|MultiEdit|NotebookEdit|Write|Grep|Glob",
+        "matcher": "Bash|Read|Edit|MultiEdit|NotebookEdit|Write|Grep|Glob|mcp__graphify__.*|mcp__user-graphify__.*",
         "hooks": [
           {
             "type": "command",

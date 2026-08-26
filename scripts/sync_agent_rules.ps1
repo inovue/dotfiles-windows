@@ -477,6 +477,7 @@ foreach ($target in $allTargets) {
 $mcpTargets = @(
     (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
     (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
+    (Join-Path $env:USERPROFILE ".agents\mcp_config.json")
     (Join-Path $env:USERPROFILE ".cursor\mcp.json")
     (Join-Path $rootDir ".agents\mcp_config.json")
     (Join-Path $rootDir ".cursor\mcp.json")

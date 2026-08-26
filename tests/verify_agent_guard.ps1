@@ -57,6 +57,9 @@ try {
     $v4Log = Join-Path $tempTestDir "session-log.jsonl"
     $env:AGENT_GUARD_GRAPH_ROOT = $v4Root
     $env:AGENT_GUARD_LOG = $v4Log
+    # Hermetic: never let a real ~/.cache/graphify-queries.log leak graph contact
+    # into gate tests (v4.3 default-path fallback). The qlog tests lift this.
+    $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
 
     # --- P0: fallback conv_id is stable without conversationId (ppid must not be used)
     $fbRoot = Join-Path $tempTestDir "fallback_root"
@@ -121,7 +124,8 @@ try {
         toolCall       = @{ name = "query_graph"; args = @{ question = "hubs" } }
         conversationId = $thrashConv
     }
-    $targetFile = Join-Path $tempTestDir "edited.txt"
+    # Inside the graph root: absolute paths outside the repo are edit-gate-exempt (v4.3)
+    $targetFile = Join-Path $v4Root "edited.txt"
     [System.IO.File]::WriteAllText($targetFile, "hello`n", [System.Text.Encoding]::UTF8)
     $targetEsc = $targetFile.Replace('\', '/')
     $null = Invoke-GuardHook @{
@@ -263,9 +267,199 @@ print(prev)
     $winCarry = Invoke-GuardHook @{ toolCall = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } } }
     Assert-Test -Name "v4.2 fallback window carry-over: prev-window strike makes rg retry-pass" -Condition ($winCarry -match '"decision":\s*"allow"') -Details ($winCarry.Trim())
 
+    # =====================================================================
+    # v4.3: MCP wrapper unwrap / query-log fallback / out-of-repo writes /
+    #       batch-end save-result nudge (Cursor field report 2026-08-26)
+    # =====================================================================
+    $v43Root = Join-Path $tempTestDir "v43_root"
+    New-Item -Path (Join-Path $v43Root "graphify-out") -ItemType Directory -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $v43Root "graphify-out\graph.json"), '{"nodes":[],"links":[]}', [System.Text.Encoding]::UTF8)
+    $env:AGENT_GUARD_GRAPH_ROOT = $v43Root
+    $env:AGENT_GUARD_LOG = (Join-Path $tempTestDir "v43-log.jsonl")
+
+    # --- v4.3: CallDynamicTool wrapper carrying query_graph records graph contact
+    $wrapConv = "v43-wrap-$(Get-Random)"
+    $wrapRes = Invoke-GuardHook @{
+        toolCall       = @{ name = "CallDynamicTool"; args = @{ namespace = "user-graphify"; toolName = "query_graph"; arguments = @{ question = "how does deploy work" } } }
+        conversationId = $wrapConv
+    }
+    $wrapEdit = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "a.ps1") } }
+        conversationId = $wrapConv
+    }
+    Assert-Test -Name "v4.3 CallDynamicTool(query_graph) is allowed" -Condition ($wrapRes -match '"decision":\s*"allow"') -Details ($wrapRes.Trim())
+    Assert-Test -Name "v4.3 wrapper-recorded graph contact allows first edit (no strike)" -Condition ($wrapEdit -match '"decision":\s*"allow"') -Details ($wrapEdit.Trim())
+
+    # --- v4.3: official Cursor beforeMCPExecution schema (docs 2026-08)
+    # tool_input is a JSON-params STRING; server is mcp_server_name
+    $officialConv = "v43-official-$(Get-Random)"
+    $officialRes = Invoke-GuardHook @{
+        hook_event_name = "beforeMCPExecution"
+        tool_name       = "query_graph"
+        tool_input      = '{"question":"deploy","token_budget":1200}'
+        mcp_server_name = "user-graphify"
+        conversationId  = $officialConv
+    }
+    $officialEdit = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "official.ps1") } }
+        conversationId = $officialConv
+    }
+    Assert-Test -Name "v4.3 official beforeMCPExecution JSON-string tool_input is allowed" -Condition ($officialRes -match '"decision":\s*"allow"') -Details ($officialRes.Trim())
+    Assert-Test -Name "v4.3 official schema records graph contact (no extract_args crash)" -Condition ($officialEdit -match '"decision":\s*"allow"') -Details ($officialEdit.Trim())
+
+    # preToolUse matcher form MCP:<tool_name>
+    $colonConv = "v43-colon-$(Get-Random)"
+    $colonRes = Invoke-GuardHook @{
+        toolCall       = @{ name = "MCP:query_graph"; args = @{ question = "hubs" } }
+        conversationId = $colonConv
+    }
+    $colonEdit = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "colon.ps1") } }
+        conversationId = $colonConv
+    }
+    Assert-Test -Name "v4.3 preToolUse MCP:query_graph records graph contact" -Condition ($colonRes -match '"decision":\s*"allow"' -and $colonEdit -match '"decision":\s*"allow"') -Details ($colonEdit.Trim())
+
+    # --- v4.3: Claude Code mcp__graphify__query_graph PreToolUse records contact
+    $ccConv = "v43-claude-mcp-$(Get-Random)"
+    $env:CLAUDE_PROJECT_DIR = $v43Root
+    $ccMcp = Invoke-GuardProc @{
+        hook_event_name = "PreToolUse"
+        tool_name       = "mcp__graphify__query_graph"
+        tool_input      = @{ question = "deploy"; token_budget = 1200 }
+        conversationId  = $ccConv
+    }
+    $ccEdit = Invoke-GuardProc @{
+        hook_event_name = "PreToolUse"
+        tool_name       = "Edit"
+        tool_input      = @{ path = (Join-Path $v43Root "claude.ps1") }
+        conversationId  = $ccConv
+    }
+    Assert-Test -Name "v4.3 Claude mcp__graphify__query_graph PreToolUse is allowed" -Condition ($ccMcp.stdout -match '"permissionDecision":\s*"allow"' -and [int]$ccMcp.code -eq 0) -Details ($ccMcp.stdout)
+    Assert-Test -Name "v4.3 Claude MCP contact allows first Edit (no strike)" -Condition ($ccEdit.stdout -match '"permissionDecision":\s*"allow"' -and [int]$ccEdit.code -eq 0) -Details ($ccEdit.stdout)
+    Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+
+    # --- v4.3: Antigravity call_mcp_tool PascalCase ToolName/ServerName
+    $agyConv = "v43-agy-mcp-$(Get-Random)"
+    $agyMcp = Invoke-GuardHook @{
+        toolCall       = @{ name = "call_mcp_tool"; args = @{ ServerName = "graphify"; ToolName = "query_graph"; Arguments = @{ question = "deploy" } } }
+        conversationId = $agyConv
+    }
+    $agyEdit = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "agy.ps1") } }
+        conversationId = $agyConv
+    }
+    Assert-Test -Name "v4.3 Antigravity call_mcp_tool(ToolName=query_graph) is allowed" -Condition ($agyMcp -match '"decision":\s*"allow"') -Details ($agyMcp.Trim())
+    Assert-Test -Name "v4.3 Antigravity PascalCase unwrap records graph contact" -Condition ($agyEdit -match '"decision":\s*"allow"') -Details ($agyEdit.Trim())
+
+    # --- v4.3: fresh query-log record (corpus inside repo) counts as graph contact
+    $qlogFile = Join-Path $tempTestDir "graphify-queries.log"
+    $qlogCorpus = (Join-Path $v43Root "graphify-out\graph.json").Replace('\', '\\')
+    $qlogTs = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss+00:00")
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"$qlogTs`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$qlogCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    Remove-Item Env:GRAPHIFY_QUERY_LOG_DISABLE -ErrorAction SilentlyContinue
+    $env:GRAPHIFY_QUERY_LOG = $qlogFile
+    $qlogConv = "v43-qlog-$(Get-Random)"
+    $qlogSearch = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConv
+    }
+    Assert-Test -Name "v4.3 query-log fallback: unanchored rg allowed on FIRST attempt" -Condition ($qlogSearch -match '"decision":\s*"allow"') -Details ($qlogSearch.Trim())
+
+    # stale/foreign corpus must NOT count as contact
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"$qlogTs`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"C:\\other\\repo\\graphify-out\\graph.json`"}`n", [System.Text.UTF8Encoding]::new($false))
+    $qlogConv2 = "v43-qlog2-$(Get-Random)"
+    $qlogDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConv2
+    }
+    Assert-Test -Name "v4.3 query-log fallback: foreign-corpus record still denies" -Condition ($qlogDeny -match '"decision":\s*"deny"') -Details ($qlogDeny.Trim())
+
+    # sibling-prefix corpus (repo-evil) must NOT count as contact (boundary check)
+    $siblingCorpus = ($v43Root + "-evil\graphify-out\graph.json").Replace('\', '\\')
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"$qlogTs`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$siblingCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    $qlogConv3 = "v43-qlog3-$(Get-Random)"
+    $siblingDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConv3
+    }
+    Assert-Test -Name "v4.3 query-log fallback: sibling-prefix corpus (repo-evil) still denies" -Condition ($siblingDeny -match '"decision":\s*"deny"') -Details ($siblingDeny.Trim())
+
+    # unparseable ts must NOT be accepted even when the file mtime is fresh
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"not-a-timestamp`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$qlogCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    $qlogConv4 = "v43-qlog4-$(Get-Random)"
+    $badTsDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConv4
+    }
+    Assert-Test -Name "v4.3 query-log fallback: unparseable ts still denies (no mtime shortcut)" -Condition ($badTsDeny -match '"decision":\s*"deny"') -Details ($badTsDeny.Trim())
+
+    # future-dated ts (forged record) must NOT count as contact
+    $futureTs = (Get-Date).ToUniversalTime().AddHours(2).ToString("yyyy-MM-ddTHH:mm:ss+00:00")
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"$futureTs`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$qlogCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    $qlogConv5 = "v43-qlog5-$(Get-Random)"
+    $futureDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConv5
+    }
+    Assert-Test -Name "v4.3 query-log fallback: future-dated ts still denies" -Condition ($futureDeny -match '"decision":\s*"deny"') -Details ($futureDeny.Trim())
+    Remove-Item Env:GRAPHIFY_QUERY_LOG -ErrorAction SilentlyContinue
+    $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
+
+    # --- v4.3: out-of-repo write (plan file) skips edit gate and batch-end contract
+    $planConv = "v43-plan-$(Get-Random)"
+    $planTarget = Join-Path $tempTestDir "outside_repo\test.plan.md"
+    $planWrite = Invoke-GuardHook @{
+        toolCall       = @{ name = "write_to_file"; args = @{ TargetFile = $planTarget } }
+        conversationId = $planConv
+    }
+    $planStop = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $planConv
+    }
+    Assert-Test -Name "v4.3 out-of-repo write allowed without graph contact (no edit-gate strike)" -Condition ($planWrite -match '"decision":\s*"allow"') -Details ($planWrite.Trim())
+    Assert-Test -Name "v4.3 out-of-repo write does not trigger batch-end warning on stop" -Condition ($planStop -notmatch 'Batch End') -Details ($planStop.Trim())
+
+    # --- v4.3: batch-end nudges save-result when graph queries ran but none saved
+    $srConv = "v43-sr-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just hubs" } }
+        conversationId = $srConv
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "b.ps1") } }
+        conversationId = $srConv
+    }
+    $srStop = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $srConv
+    }
+    Assert-Test -Name "v4.3 batch-end includes save-result nudge (just remember)" -Condition ($srStop -match 'just remember') -Details ($srStop.Trim())
+
+    # after `just remember` ran, the nudge disappears (new conv, save-result recorded)
+    $srConv2 = "v43-sr2-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just hubs" } }
+        conversationId = $srConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "c.ps1") } }
+        conversationId = $srConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = 'just remember "q" "a"' } }
+        conversationId = $srConv2
+    }
+    $srStop2 = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $srConv2
+    }
+    Assert-Test -Name "v4.3 batch-end omits nudge after just remember ran" -Condition ($srStop2 -notmatch 'just remember') -Details ($srStop2.Trim())
+
     Remove-Item Env:AGENT_GUARD_GRAPH_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:AGENT_GUARD_LOG -ErrorAction SilentlyContinue
     Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:GRAPHIFY_QUERY_LOG -ErrorAction SilentlyContinue
+    Remove-Item Env:GRAPHIFY_QUERY_LOG_DISABLE -ErrorAction SilentlyContinue
 } finally {
     Remove-Item -Path $tempTestDir -Recurse -Force -ErrorAction SilentlyContinue
 }

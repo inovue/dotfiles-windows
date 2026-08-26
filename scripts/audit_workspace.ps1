@@ -199,7 +199,38 @@ if (Test-Path $graphJson) {
             Write-Host "  -> Session log: $($slogLines.Count) events, $graphN graph-contact, $denyN denies" -ForegroundColor Gray
         }
 
-        Write-Host "  -> Fast Exploration: ``just graph query`` | ``just hubs`` | ``just neighbors label``" -ForegroundColor DarkGray
+        # Semantic freshness: code-only updates cannot clear docs/image changes (needs_update flag)
+        try {
+            $checkOut = (& graphify check-update . 2>&1 | Out-String)
+            if ($LASTEXITCODE -ne 0 -or $checkOut -match "(?i)needs[_ -]?update|pending") {
+                Write-Warning "[WARN] Semantic re-extraction pending (docs/images/memory changed). Run ``just update-semantic`` (or ``just watch`` with GRAPHIFY_SEMANTIC_AUTO=1)."
+            } else {
+                Write-Host "  -> Semantic freshness: no pending re-extraction (check-update clean)" -ForegroundColor Gray
+            }
+        } catch {
+            Write-Host "  -> Semantic freshness: check-update unavailable ($_)" -ForegroundColor DarkGray
+        }
+
+        # Work-memory loop: saved results not yet folded into the graph + lessons staleness
+        $memDir = Join-Path $rootDir "graphify-out\memory"
+        $lessonsFile = Join-Path $rootDir "graphify-out\reflections\LESSONS.md"
+        if (Test-Path $memDir) {
+            $memFiles = @(Get-ChildItem -Path $memDir -File -ErrorAction SilentlyContinue)
+            $pendingMem = @($memFiles | Where-Object { $_.LastWriteTimeUtc -gt $graphItem.LastWriteTimeUtc })
+            if ($pendingMem.Count -gt 0) {
+                Write-Host "  -> Work-memory: $($pendingMem.Count)/$($memFiles.Count) saved result(s) newer than graph.json (folded on next ``just update-graph``)" -ForegroundColor Gray
+            } else {
+                Write-Host "  -> Work-memory: $($memFiles.Count) saved result(s), all folded into graph" -ForegroundColor Gray
+            }
+            $newestMem = $memFiles | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+            if ($newestMem -and (-not (Test-Path $lessonsFile) -or (Get-Item $lessonsFile).LastWriteTimeUtc -lt $newestMem.LastWriteTimeUtc)) {
+                Write-Warning "[WARN] LESSONS.md is stale vs latest saved result. Run ``just lessons`` (reflect --if-stale)."
+            }
+        } else {
+            Write-Host "  -> Work-memory: empty (seed with ``just remember`` after answering architecture questions)" -ForegroundColor DarkGray
+        }
+
+        Write-Host "  -> Fast Exploration: ``just graph query`` | ``just hubs`` | ``just neighbors label`` | ``just lessons``" -ForegroundColor DarkGray
         if ($phase3Failed) {
             $auditFailed = $true
             Write-Warning "[FAIL] Phase 3: Knowledge graph health checks failed."

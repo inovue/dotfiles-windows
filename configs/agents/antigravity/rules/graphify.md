@@ -25,6 +25,8 @@ Re-query the graph before designing new functions or tasks, when syncing cross-l
 - Params are strict: `query_graph(question=…)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query` / `name`. Node labels are file basenames or symbol names.
 - Always pass `token_budget: 1200` for compact inline answers.
 - Never fall back to unanchored `rg`/`fd` before hub expansion; never re-verify audit-proven facts by crawling files.
-- Freshness: the post-commit hook (`just install-graph-hook`) auto-rebuilds the graph; run `just update-graph` once per edit batch for uncommitted work.
+- Freshness: the post-commit hook (`just install-graph-hook`) auto-rebuilds the graph; run `just update-graph` once per edit batch for uncommitted work. `just check-semantic` reports pending semantic re-extraction; clear with `just update-semantic` or `just watch` (`GRAPHIFY_SEMANTIC_AUTO=1` = auto-LLM).
+- Memory loop: session start `just lessons`; after answering an architecture/impact question `just remember "<q>" "<a>"` (wrong earlier answer: `graphify save-result --outcome corrected`). Saved results become graph nodes on the next update.
+- Wide nav: if `graphify-out/wiki/index.md` exists, use it for broad orientation before hub expansion.
 - SSOT: never edit generated mirrors — edit `configs/agents/` and run `just sync-rules`.
 - Hooks are walls: `agent_guard.py` v4 one-strike-denies unanchored search and first/multi-file edits when the graph exists but no graph query has been recorded this session.

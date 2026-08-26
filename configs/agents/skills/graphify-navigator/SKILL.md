@@ -76,12 +76,30 @@ Turn architecture questions into **scoped subgraph answers**, then finish with *
 ### 2. Fast `just` CLI shortcuts (when in terminal loop)
 
 ```powershell
+just lessons               # session start: reflect --if-stale + print LESSONS.md
 just graph "how does deploy work?"
 just hubs
 just neighbors "scripts_sync_agent_rules"
 just path "04_setup_configs.ps1" "Deploy-WindowsTerminalConfig()"
-just update-graph          # once per edit batch
+just update-graph          # once per edit batch (AST-only, no LLM)
+just remember "<question>" "<answer>"   # after answering an architecture question
+just check-semantic        # is semantic re-extraction pending? (needs_update flag)
 ```
+
+## References (sidecar — load on demand, do not inline)
+
+| Trigger | Reference |
+| :--- | :--- |
+| Graph query returned 0 hits / cross-language vocab / >2000 nodes | `references/query.md` (constrained query expansion) |
+| Saving results, reflect, LESSONS, outcome vocabulary | `references/memory.md` (work-memory loop) |
+| update vs check-update vs watch vs extract, git hooks, LLM backends | `references/update.md` (freshness) |
+
+## Memory loop (semantic nodes accumulate automatically)
+
+- **Session start**: `just lessons` — skim past outcomes before the first query.
+- **After an architecture/impact answer**: `just remember "<q>" "<a>"` (full control: `graphify save-result --nodes … --outcome useful`).
+- **Own earlier answer proven wrong**: `graphify save-result --outcome corrected --correction "<truth>"`.
+- Saved results become graph nodes on the next update — the loop is closed by `just update-graph`/git hooks.
 
 ### 3. Pinpoint locate + edit (after graph scoping)
 

@@ -4,8 +4,9 @@
     dotfiles-windows 統合ワークスペース監査・クリーンアップスクリプト
 .DESCRIPTION
     1. 環境・CLI・安全環境変数・AST・UTF-8 BOM の網羅的検証 (verify_tools.ps1)
+       およびセキュリティ回帰 (verify_security.ps1)
     2. AI Agent SSOT ルール＆スキルの同期状態検査 (sync_agent_rules.ps1 -Check)
-    3. ナレッジグラフ (graphify-out/graph.json) の健全性・孤立ノード・トポロジーハブ検査
+    3. ナレッジグラフ (graphify-out/graph.json) の健全性・鮮度・孤立率・トポロジーハブ検査
     4. 一時ファイル・バックアップファイル・Git 作業ツリーのクリーン度検査 / クリーンアップ (-Clean)
 .PARAMETER Clean
     一時ファイル、古いバックアップ (*.bak)、キャッシュファイルを消去します。
@@ -23,6 +24,8 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = Split-Path -Parent $PSScriptRoot
 $testsScript = Join-Path $rootDir "tests\verify_tools.ps1"
+$secScript  = Join-Path $rootDir "tests\verify_security.ps1"
+$guardTestScript = Join-Path $rootDir "tests\verify_agent_guard.ps1"
 $syncScript  = Join-Path $rootDir "scripts\sync_agent_rules.ps1"
 $graphJson   = Join-Path $rootDir "graphify-out\graph.json"
 
@@ -66,7 +69,35 @@ if ($testProc.ExitCode -ne 0) {
     Write-Warning "[FAIL] Environment verification tests failed (ExitCode: $($testProc.ExitCode))."
     $auditFailed = $true
 } else {
-    Write-Host "[PASS] Phase 1: Environment verification suite passed (96+ checks)." -ForegroundColor Green
+    Write-Host "[PASS] Phase 1a: Environment verification suite passed." -ForegroundColor Green
+}
+
+Write-Host "`n[Audit Phase 1b/4] Running Security Regression Suite..." -ForegroundColor White
+if (Test-Path $secScript) {
+    $secProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $secScript -NoNewWindow -Wait -PassThru
+    if ($secProc.ExitCode -ne 0) {
+        Write-Warning "[FAIL] Security regression tests failed (ExitCode: $($secProc.ExitCode))."
+        $auditFailed = $true
+    } else {
+        Write-Host "[PASS] Phase 1b: Security regression suite passed." -ForegroundColor Green
+    }
+} else {
+    Write-Warning "[FAIL] tests/verify_security.ps1 is missing."
+    $auditFailed = $true
+}
+
+Write-Host "`n[Audit Phase 1c/4] Running Agent Guard v4.1 Regression Suite..." -ForegroundColor White
+if (Test-Path $guardTestScript) {
+    $guardProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript -NoNewWindow -Wait -PassThru
+    if ($guardProc.ExitCode -ne 0) {
+        Write-Warning "[FAIL] Agent Guard v4.1 tests failed (ExitCode: $($guardProc.ExitCode))."
+        $auditFailed = $true
+    } else {
+        Write-Host "[PASS] Phase 1c: Agent Guard v4.1 regression suite passed." -ForegroundColor Green
+    }
+} else {
+    Write-Warning "[FAIL] tests/verify_agent_guard.ps1 is missing."
+    $auditFailed = $true
 }
 
 # --- Phase 2: AI Agent SSOT Rule Synchronization ---
@@ -112,8 +143,69 @@ if (Test-Path $graphJson) {
             $hubNames = ($topHubs | ForEach-Object { "$($_.name) ($($_.count) edges)" }) -join ", "
             Write-Host "  -> Top Architectural Hubs: $hubNames" -ForegroundColor Gray
         }
+
+        $nodeN = 0
+        [void][int]::TryParse("$nodeCount", [ref]$nodeN)
+        $orphanN = @($orphanList).Count
+        $orphanRate = if ($nodeN -gt 0) { [math]::Round(100.0 * $orphanN / $nodeN, 1) } else { 0 }
+        $orphanLimit = 40
+        Write-Host "  -> Orphan rate: $orphanRate% (fail if > $orphanLimit%)" -ForegroundColor Gray
+
+        $phase3Failed = $false
+        if ($orphanRate -gt $orphanLimit) {
+            Write-Warning "[FAIL] Orphan rate $orphanRate% exceeds $orphanLimit%. Re-run ``just update-graph`` or inspect disconnected nodes."
+            $phase3Failed = $true
+        }
+
+        $watchDirs = @(
+            (Join-Path $rootDir "configs"),
+            (Join-Path $rootDir "scripts"),
+            (Join-Path $rootDir "tests")
+        )
+        $latestSrc = Get-ChildItem -Path $watchDirs -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+        foreach ($extra in @("justfile", "AGENTS.md", "install.ps1")) {
+            $p = Join-Path $rootDir $extra
+            if (Test-Path $p) {
+                $item = Get-Item $p
+                if (-not $latestSrc -or $item.LastWriteTimeUtc -gt $latestSrc.LastWriteTimeUtc) {
+                    $latestSrc = $item
+                }
+            }
+        }
+        $graphItem = Get-Item $graphJson
+        if ($latestSrc -and $latestSrc.LastWriteTimeUtc -gt $graphItem.LastWriteTimeUtc.AddSeconds(5)) {
+            Write-Warning "[FAIL] graph.json is stale vs $($latestSrc.Name) (source $($latestSrc.LastWriteTimeUtc.ToString('o')) > graph $($graphItem.LastWriteTimeUtc.ToString('o'))). Run ``just update-graph``."
+            $phase3Failed = $true
+        } else {
+            Write-Host "  -> Graph freshness: graph.json is current vs configs/scripts/tests" -ForegroundColor Gray
+        }
+
+        $slog = Join-Path $rootDir "graphify-out\session-log.jsonl"
+        if (Test-Path $slog) {
+            $slogLines = @(Get-Content -Path $slog -ErrorAction SilentlyContinue)
+            $denyN = 0
+            $graphN = 0
+            foreach ($line in $slogLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $ev = $line | ConvertFrom-Json
+                    if ($ev.denied) { $denyN++ }
+                    if ($ev.graph_contact) { $graphN++ }
+                } catch {}
+            }
+            Write-Host "  -> Session log: $($slogLines.Count) events, $graphN graph-contact, $denyN denies" -ForegroundColor Gray
+        }
+
         Write-Host "  -> Fast Exploration: ``just graph query`` | ``just hubs`` | ``just neighbors label``" -ForegroundColor DarkGray
-        Write-Host "[PASS] Phase 3: Knowledge graph topology is healthy and verified." -ForegroundColor Green
+        if ($phase3Failed) {
+            $auditFailed = $true
+            Write-Warning "[FAIL] Phase 3: Knowledge graph health checks failed."
+        } else {
+            Write-Host "[PASS] Phase 3: Knowledge graph topology is healthy and verified." -ForegroundColor Green
+        }
     } catch {
         Write-Warning "[WARN] Failed to evaluate graph.json: $_"
     }

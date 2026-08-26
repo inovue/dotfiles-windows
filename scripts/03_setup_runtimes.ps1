@@ -25,6 +25,8 @@ $ErrorActionPreference = "Continue"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+. (Join-Path $PSScriptRoot "Assert-PinnedHash.ps1")
+
 Write-Host "==========================================" -ForegroundColor Magenta
 Write-Host "  Step 3: Runtime & Tool Initialization   " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
@@ -200,7 +202,9 @@ function Install-RtkCli {
                     throw "Security validation failed: Downloaded RTK package is missing or corrupted."
                 }
                 $rtkSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
-                Write-Host "   [SHA256 Integrity Verified] RTK: $rtkSha256" -ForegroundColor DarkGray
+                Write-Host "   [SHA256] RTK: $rtkSha256" -ForegroundColor DarkGray
+                $rtkPinName = if ($latestTag) { "rtk:$latestTag" } else { "rtk:latest" }
+                Assert-PinnedHash -Name $rtkPinName -FilePath $tempZip
                 Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
                 $extractedExe = Get-ChildItem -Path $tempExtract -Filter "rtk.exe" -Recurse | Select-Object -First 1
                 if ($extractedExe) {
@@ -212,6 +216,7 @@ function Install-RtkCli {
                 }
             }
         } catch {
+            if ("$_" -match 'SHA256') { throw }
             Write-Warning "[WARN] Failed to download pre-built RTK release: $_"
         }
 
@@ -344,7 +349,8 @@ function Install-CursorAgentCli {
                 throw "Security validation failed: Downloaded Cursor Agent CLI package is missing or corrupted."
             }
             $cursorSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
-            Write-Host "   [SHA256 Integrity Verified] Cursor Agent CLI: $cursorSha256" -ForegroundColor DarkGray
+            Write-Host "   [SHA256] Cursor Agent CLI: $cursorSha256" -ForegroundColor DarkGray
+            Assert-PinnedHash -Name "cursor-agent:$version" -FilePath $tempZip
             Expand-Archive -Path $tempZip -DestinationPath $versionsPath -Force
 
             $distPackagePath = Join-Path $versionsPath "dist-package"
@@ -372,6 +378,7 @@ function Install-CursorAgentCli {
             $env:Path = "$agentPath;$env:Path"
         }
     } catch {
+        if ("$_" -match 'SHA256') { throw }
         Write-Warning "[WARN] Failed to configure Cursor Agent CLI: $_"
     }
 }

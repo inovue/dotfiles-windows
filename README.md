@@ -40,12 +40,14 @@ dotfiles-windows/
 ├── install.ps1                     # 統合エントリポイント (全自動 or ステップ別実行, -UseSymlinks, -Force)
 ├── README.md                       # ユーザー向けドキュメント（本ファイル）
 ├── tests/
-│   └── verify_tools.ps1            # 環境・モダンCLI・エージェント設定・ベンチマークの網羅的自動テスト
+│   ├── verify_tools.ps1            # 環境・モダンCLI・エージェント設定・ベンチマークの網羅的自動テスト
+│   └── verify_security.ps1         # 🛡️ セキュリティ回帰テスト（URL検証、SHA256ピン、XSS、パストラバーサル）
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ・ランタイム一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, rustup, jaq, rtk, graphify 等のランタイム・CLIセットアップ
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles（Terminal, Helix, Nushell, Profiles）の配備
+│   ├── Assert-PinnedHash.ps1       # 🔒 バイナリダウンロードの SHA256 ピン & TOFU 整合性検証
 │   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse フック)
 │   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査・クリーンアップスクリプト
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
@@ -154,7 +156,7 @@ just install
 | `just setup-keys` | AI Agent & Graphify 用 API キーの安全な対話型登録 (`.\scripts\setup_api_keys.ps1`) |
 | `just audit` | 🌟 4フェーズ統合監査（テスト+SSOT同期+グラフ健全性+ゴミ検知）の実行 (`.\scripts\audit_workspace.ps1`) |
 | `just clean` | 一時ファイル・古いバックアップ（`*.bak`）・キャッシュの一括消去 (`.\scripts\audit_workspace.ps1 -Clean`) |
-| `just test` | 環境全体の整合性・ツール動作確認・ベンチマークテスト (`.\tests\verify_tools.ps1`) |
+| `just test` | 環境全体の整合性・ツール動作確認・セキュリティ回帰テスト (`.\tests\verify_tools.ps1` + `verify_security.ps1`) |
 
 ---
 
@@ -188,9 +190,10 @@ just install
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索。
    - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
-6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v3 — 安定性最優先 + 難読化耐性)**:
+6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v4 — 安定性最優先 + 難読化耐性 + Graph-First ガバナンス)**:
    - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format` / `Format-Volume`, `diskpart`, ドライブルート・ユーザープロファイル直下の再帰削除, `git push --force`（`--force-with-lease` は許可）, `powershell -enc` エンコード実行, Base64 デコード実行, ダウンロード＆実行のパイプ形式・引数形式）を無条件ハード遮断。
    - 難読化耐性: バッククォート/キャレット除去後の正規化変体も再スキャンし（`` i`ex `` 対策）、lookahead によりフラグ順序（`rd /q /s` = `rd /s /q`, `-f` = `--force`）に依存しないマッチングを実現。
+   - **v4 Graph-First ゲート**: ナレッジグラフ（`graphify-out/graph.json`）存在時に、グラフ未参照での無差別検索（非アンカーの `rg`/`fd`/Grep）や初回ファイル編集を検知し、グラフ探索（`just hubs`/`query_graph`）へ誘導する One-strike ガイダンス遮断を適用。セッション終了時には `just update-graph` + `just audit` の実行漏れを警告。
    - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
    - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時はフェイルオープン（allow）だが、生ペイロードに破壊パターンが見える場合はフォールバックスキャンで deny（guarded fail-open）。
 

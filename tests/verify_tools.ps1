@@ -187,6 +187,8 @@ $configFiles = @(
     @{ Name = "Script: setup_api_keys.ps1";                  Path = Join-Path $rootDir "scripts\setup_api_keys.ps1" }
     @{ Name = "Script: audit_workspace.ps1";                 Path = Join-Path $rootDir "scripts\audit_workspace.ps1" }
     @{ Name = "Script: agent_guard.py";                      Path = Join-Path $rootDir "scripts\agent_guard.py" }
+    @{ Name = "Script: Assert-PinnedHash.ps1";               Path = Join-Path $rootDir "scripts\Assert-PinnedHash.ps1" }
+    @{ Name = "Test: verify_security.ps1";                   Path = Join-Path $rootDir "tests\verify_security.ps1" }
     @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
     @{ Name = "Workspace hooks (.agents/hooks.json)";        Path = Join-Path $rootDir ".agents\hooks.json" }
     @{ Name = "Antigravity global hooks";                    Path = Join-Path $env:USERPROFILE ".gemini\config\hooks.json" }
@@ -409,6 +411,8 @@ try {
             return (python -c "import subprocess; p = subprocess.run(['python', '$guardPyEsc'], input=open('$testJsonEsc', 'rb').read(), capture_output=True); print(p.stdout.decode('utf-8'))" 2>&1 | Out-String)
         }
 
+        $env:AGENT_GUARD_LOG = (Join-Path $tempTestDir "guard-session-log.jsonl")
+
         # Safe command -> allow
         $safeRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"just audit`"}},`"conversationId`":`"$guardConv`"}"
         Assert-Test -Name "Agent Guard allows safe command" -Condition ($safeRes -match '"decision":\s*"allow"') -Details ($safeRes.Trim())
@@ -501,6 +505,63 @@ try {
             if ((Invoke-GuardHook $p) -notmatch '"decision":\s*"allow"') { $safeBlocked += $cmd }
         }
         Assert-Test -Name "Agent Guard v3 false-positive battery (safe commands pass)" -Condition ($safeBlocked.Count -eq 0) -Details ($(if ($safeBlocked) { "blocked: $($safeBlocked -join ', ')" } else { "all $($safeCases.Count) safe commands allowed" }))
+
+        # v4: graph-first walls (isolated GRAPH_ROOT so tests do not depend on this repo's graph)
+        $v4Root = Join-Path $tempTestDir "v4_graph_root"
+        $v4GraphDir = Join-Path $v4Root "graphify-out"
+        New-Item -Path $v4GraphDir -ItemType Directory -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $v4GraphDir "graph.json"), '{"nodes":[],"links":[]}', [System.Text.Encoding]::UTF8)
+        $v4Log = Join-Path $tempTestDir "session-log.jsonl"
+        $env:AGENT_GUARD_GRAPH_ROOT = $v4Root
+        $env:AGENT_GUARD_LOG = $v4Log
+        $v4Conv = "test_v4_$(Get-Random)"
+
+        $rgPayload = "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n Set-SecureUserEnvVar scripts/`"}},`"conversationId`":`"$v4Conv`"}"
+        $rgDeny = Invoke-GuardHook $rgPayload
+        $rgRetry = Invoke-GuardHook $rgPayload
+        Assert-Test -Name "Agent Guard v4 graph-gate denies unanchored rg before graph query" -Condition ($rgDeny -match '"decision":\s*"deny"' -and $rgDeny -match 'Graph-First') -Details ($rgDeny.Trim())
+        Assert-Test -Name "Agent Guard v4 graph-gate one-strike: rg retry passes" -Condition ($rgRetry -match '"decision":\s*"allow"') -Details ($rgRetry.Trim())
+
+        $v4Conv2 = "test_v4_ok_$(Get-Random)"
+        $pathOk = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"just path agent_guard.py verify_tools.ps1`"}},`"conversationId`":`"$v4Conv2`"}"
+        $rgAfter = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n Assert-Test tests/verify_tools.ps1`"}},`"conversationId`":`"$v4Conv2`"}"
+        Assert-Test -Name "Agent Guard v4 allows scoped rg after just path" -Condition ($pathOk -match '"decision":\s*"allow"' -and $rgAfter -match '"decision":\s*"allow"') -Details ($rgAfter.Trim())
+
+        $mcpConv = "test_v4_mcp_$(Get-Random)"
+        $mcpRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"query_graph`",`"args`":{`"question`":`"deploy`"}},`"conversationId`":`"$mcpConv`"}"
+        $edit1 = Invoke-GuardHook "{`"toolCall`":{`"name`":`"replace_file_content`",`"args`":{`"path`":`"scripts/agent_guard.py`"}},`"conversationId`":`"$mcpConv`"}"
+        Assert-Test -Name "Agent Guard v4 records MCP query_graph and allows subsequent edit" -Condition ($mcpRes -match '"decision":\s*"allow"' -and $edit1 -match '"decision":\s*"allow"') -Details ($edit1.Trim())
+
+        $editConv = "test_v4_edit_$(Get-Random)"
+        $editDeny = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$editConv`"}"
+        $editRetry = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$editConv`"}"
+        $edit2Deny = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/bar.ps1`"}},`"conversationId`":`"$editConv`"}"
+        Assert-Test -Name "Agent Guard v4 edit-gate denies first edit without graph query" -Condition ($editDeny -match '"decision":\s*"deny"') -Details ($editDeny.Trim())
+        Assert-Test -Name "Agent Guard v4 edit-gate pinpoint: same-file retry passes" -Condition ($editRetry -match '"decision":\s*"allow"') -Details ($editRetry.Trim())
+        Assert-Test -Name "Agent Guard v4 edit-gate denies second file without graph query" -Condition ($edit2Deny -match '"decision":\s*"deny"') -Details ($edit2Deny.Trim())
+
+        $grepConv = "test_v4_grep_$(Get-Random)"
+        $grepDeny = Invoke-GuardHook "{`"toolCall`":{`"name`":`"Grep`",`"args`":{`"pattern`":`"TODO`"}},`"conversationId`":`"$grepConv`"}"
+        Assert-Test -Name "Agent Guard v4 graph-gate denies Grep tool before graph query" -Condition ($grepDeny -match '"decision":\s*"deny"') -Details ($grepDeny.Trim())
+
+        $stopConv = "test_v4_stop_$(Get-Random)"
+        $null = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$stopConv`"}"
+        $null = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$stopConv`"}"
+        $stopRes = Invoke-GuardHook "{`"hook_event_name`":`"stop`",`"conversationId`":`"$stopConv`"}"
+        Assert-Test -Name "Agent Guard v4 batch-end warns when edits lack update-graph/audit" -Condition ($stopRes -match 'followup_message' -and $stopRes -match 'just update-graph') -Details ($stopRes.Trim())
+
+        $emptyRoot = Join-Path $tempTestDir "v4_nograph"
+        New-Item -Path $emptyRoot -ItemType Directory -Force | Out-Null
+        $env:AGENT_GUARD_GRAPH_ROOT = $emptyRoot
+        $noGraphConv = "test_v4_nograph_$(Get-Random)"
+        $rgNoGraph = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n foo`"}},`"conversationId`":`"$noGraphConv`"}"
+        Assert-Test -Name "Agent Guard v4 graph-gate skipped when graph.json is absent" -Condition ($rgNoGraph -match '"decision":\s*"allow"') -Details ($rgNoGraph.Trim())
+
+        $logOk = (Test-Path $v4Log) -and ((Get-Item $v4Log).Length -gt 0)
+        Assert-Test -Name "Agent Guard v4 append-only session-log.jsonl is written" -Condition $logOk -Details $v4Log
+
+        Remove-Item Env:AGENT_GUARD_GRAPH_ROOT -ErrorAction SilentlyContinue
+        Remove-Item Env:AGENT_GUARD_LOG -ErrorAction SilentlyContinue
     }
 
 } finally {

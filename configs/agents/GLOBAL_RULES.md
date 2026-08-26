@@ -12,14 +12,18 @@
 - **Encoding**: all code UTF-8. Any `.ps1` containing CJK text MUST be saved UTF-8 **with BOM** — Windows PowerShell 5.1 misparses BOM-less non-ASCII files.
 - **SSOT flow**: edit masters under `dotfiles-windows/configs/agents/`, then run `just sync-rules`. Deployed mirrors (global AGENTS.md / CLAUDE.md / rule files) are generated; direct edits get overwritten.
 - **Reads are a budget, not a reflex**: prefer graph queries and scoped `rg -n` snippets. When snippets already prove the answer, stop. Slice-read (max ~30 lines) only genuinely ambiguous spots; never re-read files already in context.
-- **Guarantees live in hooks**: `agent_guard.py` v3 hard-blocks destructive commands with obfuscation resistance (escape-stripped rescans, flag-order-agnostic lookaheads, encoded `-enc` exec, download-and-execute in pipe AND argument form, bare profile/drive-root wipes; fail-open still raw-scans broken payloads for destructive text). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, and read-budget overruns get a ONE-STRIKE guidance deny (exact fix suggested; retrying the same target always passes — the guard can never deadlock the loop). Whole-file reads up to 300 lines are allowed: one read beats three slices.
+- **Edit verification**: treat an edit tool's success snippet as verification; do not re-read the same file immediately after. Re-read only on edit failure, ambiguous result, or external rewrite (hook/formatter).
+- **Content-addressed edits**: prefer old/new string edits. When only a line-numbered tool is available, apply same-file multi-edits Bottom-Up (highest line first) so remaining line numbers stay valid.
+- **Guarantees live in hooks**: `agent_guard.py` v4.2 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`. Retry always passes — the guard can never deadlock the loop.
 - **Finish with structure**: end turns with a concise structured markdown answer, never bare tool output.
 
 ## Graph-First Navigation (when `graphify-out/graph.json` exists)
 
 - **Gate**: no graph → plain `rg`/`fd`/`ast-grep`; never build a graph unsolicited.
 - **Survey / audit**: run `just audit` first — a PASS is ground truth (100+ checks incl. graph health), so skip re-verification reads. Then discover hubs (`god_nodes` / `just hubs`) and ALWAYS expand them (`get_neighbors` / `just neighbors`) before any manual scan.
-- **Modify**: scope blast radius (`shortest_path` / `get_node` / `just path`) → scoped `rg -n` on the identified files → surgical edit → `just update-graph` once per batch.
+- **Modify**: `just checkpoint` (required when ≥3 files or security-related) → blast radius (`shortest_path` / `get_node` / `just path`) → scoped `rg -n` on the identified files → surgical edit → `just deploy` (if configs) → `just update-graph` → `just audit`.
+- **Done contract**: a change called a "fix" is not done until a fail→pass executable check is added and run in the same batch. `just audit` PASS proves no regression, not that the fix works.
+- **Independent review**: multi-file or security batches are not done until a fresh-context reviewer (Bugbot / reviewer subagent) is given only the diff + this Done contract and reports zero findings.
 - **Review**: graph anchor (`loc=Lxx` tags) → scoped `rg -n` snippets → conclude from snippets when they suffice (Read = 0).
 - **Re-invoke mid-stream**: before designing a new function/task, when syncing cross-layer files, and when a symbol lookup fails — Graphify is a continuous loop, not a one-shot entry gate.
 - **Strict params**: `query_graph(question=…, token_budget=1200)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query`/`name`. Full schemas: skill `graphify-navigator`.

@@ -150,3 +150,40 @@ Use compiled tools to extract exact line ranges and surrounding context without 
   ```bash
   ast-grep -p 'function $NAME($$$ARGS) { $$$BODY }' path/to/file.ts
   ```
+
+---
+
+## 9. Multi-Chunk Atomic File Patching (counted replace, no line-shift)
+
+Same-file multi-edits must not rely on line numbers. `sd` replaces every match and exits 0 even on 0 matches — that is silent corruption unless the count is asserted.
+
+### Recipe: counted `sd` (literal or regex)
+
+```bash
+rg -c --fixed-strings 'old_chunk' path/to/file.py
+sd --preview --fixed-strings 'old_chunk' 'new_chunk' path/to/file.py
+sd --fixed-strings 'old_chunk' 'new_chunk' path/to/file.py
+rg -c --fixed-strings 'old_chunk' path/to/file.py
+```
+
+PowerShell assert (fail closed if the count is wrong):
+
+```powershell
+$n = (rg -c --fixed-strings 'old_chunk' path/to/file.py).Trim()
+if ($n -ne '1') { throw "expected 1 match, got $n" }
+sd --fixed-strings 'old_chunk' 'new_chunk' path/to/file.py
+```
+
+Python one-liner (literal, unique-or-N, non-zero exit on mismatch):
+
+```powershell
+python -c "from pathlib import Path; import sys; p=Path(sys.argv[1]); old,new,want=sys.argv[2],sys.argv[3],int(sys.argv[4]); t=p.read_text(encoding='utf-8'); n=t.count(old); raise SystemExit(f'count={n} expected={want}') if n!=want else p.write_text(t.replace(old,new,want), encoding='utf-8')" path/to/file.py "old_chunk" "new_chunk" 1
+```
+
+### Recipe: AST-level structural replace (preferred when syntax matches)
+
+```bash
+ast-grep -p 'fetch($URL, { method: "POST", body: $BODY })' -r 'apiClient.post($URL, $BODY)' -U --lang ts path/to/file.ts
+```
+
+Windows: quote patterns for PowerShell (single-quoted literals). Any `.ps1` containing CJK must stay UTF-8 with BOM.

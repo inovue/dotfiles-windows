@@ -17,6 +17,8 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+. (Join-Path $PSScriptRoot "Assert-PinnedHash.ps1")
+
 Write-Host "==========================================" -ForegroundColor Magenta
 Write-Host "  Step 2: Japanese Font (UDEV Gothic NF)  " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
@@ -89,7 +91,9 @@ try {
     }
 
     $fontSha256 = (Get-FileHash -Path $tempZipPath -Algorithm SHA256).Hash
-    Write-Host "   [SHA256 Integrity Verified] $fontSha256" -ForegroundColor DarkGray
+    Write-Host "   [SHA256] $fontSha256" -ForegroundColor DarkGray
+    $fontPinName = if ($release.tag_name) { "udev-gothic:$($release.tag_name)" } else { "udev-gothic:$zipFileName" }
+    Assert-PinnedHash -Name $fontPinName -FilePath $tempZipPath
 
     if (Test-Path $tempExtractDir) {
         Remove-Item $tempExtractDir -Recurse -Force

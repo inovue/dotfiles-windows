@@ -23,6 +23,8 @@ deploy:
 # Run the comprehensive test suite to verify CLI tools, environment variables, and rules
 test:
     @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
+    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
+    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_agent_guard.ps1
 
 # Run the 4-phase unified workspace audit (Tests, SSOT sync, Graph topology, Junk scan)
 audit:
@@ -52,9 +54,11 @@ checkpoint:
 rollback:
     @$latest = (git branch --list 'checkpoint-*' | ForEach-Object { $_.Trim().TrimStart('* ') } | Sort-Object -Descending | Select-Object -First 1); if ($latest) { git reset --hard $latest; Write-Host "[OK] Rolled back to latest checkpoint: $latest" -ForegroundColor Green } else { Write-Warning 'No checkpoint branches found to rollback to.' }
 
-# Refresh knowledge graph (AST code-only update)
+# Refresh knowledge graph (AST code-only update). Stamp graph.json mtime even
+# when topology is unchanged, so audit freshness compares against this batch.
 update-graph:
     @graphify update .
+    @if (Test-Path graphify-out/graph.json) { (Get-Item graphify-out/graph.json).LastWriteTime = Get-Date }
 
 # Install post-commit git hook that auto-rebuilds the knowledge graph on every commit
 install-graph-hook:
@@ -75,6 +79,10 @@ neighbors label:
 # Trace the shortest dependency/caller path between two components
 path source target:
     @graphify path "{{source}}" "{{target}}"
+
+# Summarize session-log.jsonl deny rate and read-after-edit (thrash) rate
+session-report:
+    @python scripts/report_session_log.py
 
 # Show RTK LLM token reduction analytics dashboard
 rtk-gain:

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Agent Guard v3: Stability-First Deterministic Governor (PreToolUse lifecycle hook).
+Agent Guard v4.2: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
 
-Validates tool invocations, enforces safety invariants, and limits token waste,
-while guaranteeing the agent loop can NEVER deadlock or spin on guard denials.
+Validates tool invocations, enforces safety invariants, limits token waste,
+and mechanically requires graph contact before unanchored search or multi-file
+edits when graphify-out/graph.json exists.
 
 Stability invariants (v2 hardening after Antigravity CLI field report):
  1. GUARDED FAIL-OPEN: any internal error yields {"decision": "allow"} and exit code 0,
@@ -30,12 +31,43 @@ Obfuscation resistance (v3 hardening after security review):
  - NOT a sandbox: a determined injected payload can still evade any regex layer.
    OS-level containment (non-admin agent account, harness approval flow) remains
    the real boundary; this guard is a seatbelt against agent mistakes.
+
+Graph-first walls (v4):
+ - GRAPH-GATE : if graph.json exists and no graph query has been recorded this
+                session, unanchored rg/fd/Grep is one-strike denied.
+ - EDIT-GATE  : first edit without graph contact is one-strike denied; retry of
+                the same file is the pinpoint escape. A second file without
+                graph contact is one-strike denied per path.
+ - BATCH-END  : stop/sessionEnd injects a one-shot follow-up if edits happened
+                without `just update-graph` and `just audit`.
+ - SESSION LOG: append-only JSONL at graphify-out/session-log.jsonl (ground truth
+                for later performance review; never a substitute for tests).
+ - CONV-ID (v4.1): payload session keys first; never getppid() (Windows hook
+                wrappers get a new PID per call and broke one-strike). Fallback
+                is repo-root + TTL window. Deny/allow emit user_message.
+ - THRASH (v4.1): read-after-edit within 120s is allow + guidance, never deny.
+
+Multi-harness ACI (v4.2):
+ - DETECT     : cursor_version → Cursor; CLAUDE_PROJECT_DIR / permission_mode
+                → Claude Code; else Antigravity (legacy decision/permission JSON).
+ - CLAUDE OUT : PreToolUse emits only hookSpecificOutput.permissionDecision;
+                deny also writes the reason to stderr and exits 2 so a schema
+                drift cannot fail-open. Stop uses decision:block (once).
+                stop_hook_active short-circuits to prevent a stop loop.
+ - STATE MERGE: save_state re-reads the file and unions strikes/reads/edit_files
+                (OR for flags) so parallel hook processes cannot clobber one-strike.
+ - FALLBACK   : win{N}_{digest} loads win{N-1}_{digest} when the current window
+                file is missing and the previous file is still inside TTL.
+ - KNOWN LIMIT: concurrent Antigravity sessions that omit a session key still
+                share the repo+window fallback id. One-strike + merge keeps the
+                harm to at most one extra retry, not a deadlock.
 """
 import sys
 import json
 import re
 import os
 import time
+import hashlib
 import tempfile
 from itertools import islice
 from pathlib import Path
@@ -47,6 +79,7 @@ MAX_READ_BUDGET = 8             # unique files per session window (resets on edi
 SLICE_HINT_SIZE = 300           # suggested slice height in deny guidance
 STATE_TTL_SECONDS = 2 * 60 * 60
 STATE_GC_SECONDS = 24 * 60 * 60
+THRASH_WINDOW_SECONDS = 120     # read-after-edit soft guidance window
 
 # 1. Critical destructive patterns (Hard Deny, no one-strike escape).
 # Matched case-insensitively against the raw command AND an escape-stripped
@@ -130,16 +163,263 @@ RTK_NOISY_PATTERN = re.compile(
     r"(?:^|[;&|]\s*)(git\s+(?:status|log|diff|show)\b[^;&|\n]*)", re.IGNORECASE
 )
 
+# 4. Graph-first command classifiers (v4)
+GRAPH_CONTACT_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+(?:path|graph|hubs|neighbors|update-graph)\b|"
+    r"graphify\s+(?:query|path|god-nodes|explain|update)\b)",
+    re.IGNORECASE,
+)
+GRAPH_UPDATE_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+update-graph\b|graphify\s+update\b)",
+    re.IGNORECASE,
+)
+AUDIT_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?just\s+audit\b",
+    re.IGNORECASE,
+)
+UNANCHORED_SEARCH_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rg\b|fd\b|grep\b)",
+    re.IGNORECASE,
+)
 
-def allow(reason: str = "") -> dict:
-    res = {"decision": "allow"}
+GRAPH_TOOL_MARKERS = (
+    "query_graph", "get_node", "get_neighbors", "god_nodes",
+    "shortest_path", "graph_stats", "get_community",
+)
+SEARCH_TOOLS = {
+    "grep", "grep_search", "glob", "glob_file_search",
+    "codebase_search", "find_by_name",
+}
+SHELL_TOOLS = {
+    "run_command", "bash", "execute_command", "powershell",
+    "terminal", "exec", "shell",
+}
+READ_TOOLS = {
+    "view_file", "readfile", "read_file", "view", "cat", "get_content", "read",
+}
+WRITE_TOOLS = {
+    "write_to_file", "writefile", "write_file", "write", "create_file",
+}
+EDIT_TOOLS = {
+    "replace_file_content", "editfile", "edit_file", "edit",
+    "str_replace_editor", "strreplace", "apply_patch", "applypatch",
+    "multiedit", "multi_edit", "notebookedit", "notebook_edit",
+    "search_replace",
+}
+STOP_EVENTS = {"stop", "sessionend", "sessionstart"}  # sessionstart ignored in inspect
+
+
+def allow(reason: str = "", *, agent_message: str = "") -> dict:
+    res = {"decision": "allow", "permission": "allow"}
     if reason:
         res["reason"] = reason
+    if agent_message:
+        res["agent_message"] = agent_message
+        res["user_message"] = agent_message
+        res["additional_context"] = agent_message
     return res
 
 
 def deny(reason: str) -> dict:
-    return {"decision": "deny", "reason": reason}
+    return {
+        "decision": "deny",
+        "permission": "deny",
+        "reason": reason,
+        "agent_message": reason,
+        "user_message": reason,
+    }
+
+
+_CONV_ID_KEYS = (
+    "conversationId", "conversation_id",
+    "session_id", "sessionId",
+    "composerId", "composer_id",
+    "chat_id", "chatId",
+    "agent_id", "agentId",
+)
+
+
+def _id_from_map(m) -> str:
+    if not isinstance(m, dict):
+        return ""
+    for key in _CONV_ID_KEYS:
+        val = m.get(key)
+        if val:
+            return str(val)
+    return ""
+
+
+def _stable_fallback_id() -> str:
+    """Repo-root + TTL window. Cursor wraps each hook in a short-lived
+    shell, so os.getppid() changes every call and cannot key session state."""
+    root = find_repo_root()
+    root_key = str(root).lower() if root else (os.getcwd() or "unknown")
+    window = int(time.time() // STATE_TTL_SECONDS)
+    digest = hashlib.sha256(root_key.encode("utf-8")).hexdigest()[:12]
+    return f"win{window}_{digest}"
+
+
+def resolve_conv_id(payload: dict) -> str:
+    found = _id_from_map(payload)
+    if found:
+        return found
+    for nest in ("session", "conversation", "context", "metadata"):
+        found = _id_from_map(payload.get(nest) or {})
+        if found:
+            return found
+    return _stable_fallback_id()
+
+
+def _canon_tool(name: str) -> str:
+    return (name or "").lower().replace("-", "_").replace(" ", "_")
+
+
+def _raw_tool_name(payload: dict, tool_call: dict) -> str:
+    return (
+        tool_call.get("name") or tool_call.get("tool_name")
+        or payload.get("name") or payload.get("tool_name") or payload.get("toolName")
+        or payload.get("mcp_tool") or payload.get("mcpTool")
+        or payload.get("mcp_tool_name") or ""
+    )
+
+
+def extract_tool_name(payload: dict, tool_call: dict) -> str:
+    """Canonical tool name without MCP server prefix, so SHELL/EDIT sets match."""
+    return _canon_tool(_raw_tool_name(payload, tool_call))
+
+
+def _graph_lookup_name(payload: dict, tool_call: dict) -> str:
+    """Server-prefixed name used only for is_graph_tool matching."""
+    raw = _raw_tool_name(payload, tool_call)
+    server = (
+        payload.get("server") or payload.get("mcp_server")
+        or payload.get("mcpServer") or ""
+    )
+    return _canon_tool(f"{server} {raw}".strip())
+
+
+def detect_harness(payload=None) -> str:
+    p = payload if isinstance(payload, dict) else {}
+    if p.get("cursor_version"):
+        return "cursor"
+    if os.environ.get("CLAUDE_PROJECT_DIR") or ("permission_mode" in p):
+        return "claude"
+    return "antigravity"
+
+
+def emit_result(result: dict, harness: str, hook_event: str) -> None:
+    """Write harness-specific JSON and exit. Claude deny uses exit 2 as a
+    schema-proof block; Cursor/Antigravity keep the v4.1 superset JSON."""
+    denied = result.get("decision") == "deny" or result.get("permission") == "deny"
+    reason = result.get("reason") or result.get("agent_message") or ""
+    if harness == "claude":
+        if hook_event in ("stop", "sessionend"):
+            msg = result.get("followup_message") or result.get("reason") or ""
+            if msg and (result.get("followup_message") or result.get("decision") == "block"):
+                print(json.dumps({"decision": "block", "reason": msg}))
+            else:
+                print("{}")
+            sys.exit(0)
+        out = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny" if denied else "allow",
+                "permissionDecisionReason": reason,
+            }
+        }
+        print(json.dumps(out))
+        if denied:
+            print(reason, file=sys.stderr)
+            sys.exit(2)
+        sys.exit(0)
+    print(json.dumps(result))
+    sys.exit(0)
+
+
+def _norm_path(p: str) -> str:
+    if not p:
+        return ""
+    try:
+        return os.path.normcase(os.path.abspath(p))
+    except Exception:
+        return p.replace("\\", "/").lower()
+
+
+# --- Repo / graph discovery ----------------------------------------------------
+def find_repo_root():
+    """Walk cwd (then the guard's parent tree) for graph.json or this repo's justfile.
+    AGENT_GUARD_GRAPH_ROOT overrides discovery (used by the test suite)."""
+    override = os.environ.get("AGENT_GUARD_GRAPH_ROOT")
+    if override:
+        p = Path(override)
+        return p if p.exists() else None
+    starts = []
+    try:
+        starts.append(Path.cwd().resolve())
+    except Exception:
+        pass
+    try:
+        starts.append(Path(__file__).resolve().parent.parent)
+    except Exception:
+        pass
+    seen = set()
+    for start in starts:
+        cur = start
+        for _ in range(10):
+            key = str(cur)
+            if key in seen:
+                break
+            seen.add(key)
+            if (cur / "graphify-out" / "graph.json").is_file():
+                return cur
+            if (cur / "justfile").is_file() and (cur / "configs" / "agents").is_dir():
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+    return None
+
+
+def graph_exists() -> bool:
+    root = find_repo_root()
+    return bool(root and (root / "graphify-out" / "graph.json").is_file())
+
+
+def session_log_path():
+    override = os.environ.get("AGENT_GUARD_LOG")
+    if override:
+        return Path(override)
+    root = find_repo_root()
+    if not root:
+        return None
+    return root / "graphify-out" / "session-log.jsonl"
+
+
+def append_session_log(entry: dict) -> None:
+    try:
+        path = session_log_path()
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def is_graph_tool(name: str) -> bool:
+    n = (name or "").lower().replace("-", "_")
+    return any(marker in n for marker in GRAPH_TOOL_MARKERS)
+
+
+def normalize_event(payload: dict) -> str:
+    raw = str(
+        payload.get("hook_event_name")
+        or payload.get("hookEventName")
+        or payload.get("event")
+        or ""
+    ).lower()
+    return re.sub(r"[-_]", "", raw)
 
 
 # --- Session state (TTL + garbage collection) ----------------------------------
@@ -166,30 +446,99 @@ def gc_stale_state_files() -> None:
 
 
 def fresh_state() -> dict:
-    return {"ts": time.time(), "reads": [], "strikes": {}}
+    return {
+        "ts": time.time(),
+        "reads": [],
+        "strikes": {},
+        "graph_contact": False,
+        "edited": False,
+        "edit_files": [],
+        "did_update_graph": False,
+        "did_audit": False,
+        "last_edit": None,
+        "logged_keys": False,
+    }
+
+
+def _read_state_file(path: Path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _fallback_window_parts(conv_id: str):
+    m = re.match(r"^win(\d+)_([0-9a-fA-F]+)$", conv_id or "")
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)
+
+
+def _union_list(a, b):
+    seen = []
+    for x in list(a or []) + list(b or []):
+        if x not in seen:
+            seen.append(x)
+    return seen
+
+
+def _merge_states(disk: dict, incoming: dict) -> dict:
+    """Union-merge so a parallel hook cannot clobber strikes / flags."""
+    out = dict(incoming)
+    out["reads"] = _union_list(disk.get("reads"), incoming.get("reads"))
+    out["edit_files"] = _union_list(disk.get("edit_files"), incoming.get("edit_files"))
+    strikes = dict(disk.get("strikes") or {})
+    strikes.update(incoming.get("strikes") or {})
+    out["strikes"] = strikes
+    for flag in ("graph_contact", "edited", "did_update_graph", "did_audit", "logged_keys"):
+        out[flag] = bool(disk.get(flag)) or bool(incoming.get(flag))
+    # Ephemeral metric flag: the writer of this save owns the value.
+    out["thrash_hit"] = bool(incoming.get("thrash_hit"))
+    d_le = disk.get("last_edit") if isinstance(disk.get("last_edit"), dict) else {}
+    i_le = incoming.get("last_edit") if isinstance(incoming.get("last_edit"), dict) else {}
+    d_ts = float(d_le.get("ts") or 0)
+    i_ts = float(i_le.get("ts") or 0)
+    if d_ts > i_ts:
+        out["last_edit"] = d_le
+    else:
+        out["last_edit"] = i_le or d_le or None
+    try:
+        out["ts"] = min(float(disk.get("ts") or time.time()),
+                        float(incoming.get("ts") or time.time()))
+    except (TypeError, ValueError):
+        out["ts"] = incoming.get("ts") or time.time()
+    return out
 
 
 def load_state(conv_id: str) -> dict:
     state_file = get_state_file(conv_id)
     if state_file.exists():
-        try:
-            with open(state_file, "r", encoding="utf-8") as f:
-                state = json.load(f)
-            # TTL guard: a stale session (or shared fallback file) must never
-            # carry an exhausted read budget into a new session.
-            if time.time() - float(state.get("ts", 0)) > STATE_TTL_SECONDS:
+        state = _read_state_file(state_file)
+        if isinstance(state, dict):
+            if time.time() - float(state.get("ts", 0) or 0) > STATE_TTL_SECONDS:
                 return fresh_state()
             return state
-        except Exception:
-            pass
+    parts = _fallback_window_parts(conv_id)
+    if parts:
+        window, digest = parts
+        prev = get_state_file(f"win{window - 1}_{digest}")
+        if prev.exists():
+            state = _read_state_file(prev)
+            if isinstance(state, dict):
+                if time.time() - float(state.get("ts", 0) or 0) <= STATE_TTL_SECONDS:
+                    return state
     return fresh_state()
 
 
 def save_state(conv_id: str, state: dict) -> None:
     try:
-        state["ts"] = state.get("ts") or time.time()
-        with open(get_state_file(conv_id), "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False)
+        path = get_state_file(conv_id)
+        disk = _read_state_file(path) if path.exists() else None
+        merged = _merge_states(disk, state) if isinstance(disk, dict) else dict(state)
+        merged["ts"] = merged.get("ts") or time.time()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(merged, f, ensure_ascii=False)
     except Exception:
         pass
 
@@ -204,6 +553,18 @@ def first_strike(state: dict, key: str) -> bool:
     return True
 
 
+def record_shell_graph_events(cmd: str, state: dict) -> None:
+    if not cmd:
+        return
+    if GRAPH_CONTACT_RE.search(cmd):
+        state["graph_contact"] = True
+    if GRAPH_UPDATE_RE.search(cmd):
+        state["did_update_graph"] = True
+        state["graph_contact"] = True
+    if AUDIT_RE.search(cmd):
+        state["did_audit"] = True
+
+
 # --- Inspectors -----------------------------------------------------------------
 def inspect_run_command(args: dict, conv_id: str) -> dict:
     cmd = args.get("CommandLine") or args.get("command") or args.get("cmd") or args.get("script") or ""
@@ -214,6 +575,7 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
         return deny(f"Agent Guard [Safety Block]: {reason} -> '{cmd[:70]}...'")
 
     state = load_state(conv_id)
+    record_shell_graph_events(cmd, state)
 
     # Gate 2: slow PowerShell cmdlets — one-strike guidance deny.
     for pattern, guidance in SLOW_CLI_PATTERNS:
@@ -238,6 +600,39 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
             save_state(conv_id, state)
             return allow()
 
+    # Gate 4 (v4): unanchored search before any graph query.
+    if graph_exists() and not state.get("graph_contact") and UNANCHORED_SEARCH_RE.search(cmd):
+        if first_strike(state, "graph-gate:search"):
+            save_state(conv_id, state)
+            return deny(
+                "Agent Guard [Graph-First]: unanchored search while graphify-out/graph.json exists. "
+                "Query the graph first: `just hubs` or `just path <a> <b>`, then scoped "
+                "`rg -n <pattern> <file>` (retry passes; one-strike)."
+            )
+
+    save_state(conv_id, state)
+    return allow()
+
+
+def inspect_search_tool(conv_id: str) -> dict:
+    """Grep/Glob/codebase_search without prior graph contact (v4 graph-gate)."""
+    state = load_state(conv_id)
+    if graph_exists() and not state.get("graph_contact"):
+        if first_strike(state, "graph-gate:search"):
+            save_state(conv_id, state)
+            return deny(
+                "Agent Guard [Graph-First]: unanchored search while graphify-out/graph.json exists. "
+                "Query the graph first: `just hubs` or `just path <a> <b>`, then scoped "
+                "`rg -n <pattern> <file>` (retry passes; one-strike)."
+            )
+    save_state(conv_id, state)
+    return allow()
+
+
+def inspect_graph_tool(conv_id: str) -> dict:
+    state = load_state(conv_id)
+    state["graph_contact"] = True
+    save_state(conv_id, state)
     return allow()
 
 
@@ -295,8 +690,23 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
         read_list.append(target_path)
         state["reads"] = read_list
 
+    result = allow()
+    last = state.get("last_edit") or {}
+    last_path = last.get("path") or ""
+    last_ts = float(last.get("ts") or 0)
+    if last_path and _norm_path(last_path) == _norm_path(str(target_path)):
+        if time.time() - last_ts <= THRASH_WINDOW_SECONDS:
+            msg = (
+                "Agent Guard [Edit Verification]: redundant view after edit on "
+                f"'{path_obj.name}'. Treat the edit tool's success snippet as "
+                "verification. Prefer content-addressed edits or Bottom-Up line edits; "
+                "re-read only on edit failure, ambiguous result, or external rewrite."
+            )
+            result = allow(reason=msg, agent_message=msg)
+            state["thrash_hit"] = True
+
     save_state(conv_id, state)
-    return allow()
+    return result
 
 
 def inspect_write_to_file(args: dict) -> dict:
@@ -311,67 +721,185 @@ def inspect_write_to_file(args: dict) -> dict:
     return allow()
 
 
+def _edit_target(args: dict) -> str:
+    return (
+        args.get("TargetFile") or args.get("path") or args.get("file_path")
+        or args.get("target_notebook") or args.get("AbsolutePath") or "unknown"
+    )
+
+
+def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) -> dict:
+    """v4 edit-gate: require graph contact before the first edit; pinpoint = one file."""
+    if metadata_check:
+        md_result = inspect_write_to_file(args)
+        if md_result.get("decision") == "deny":
+            return md_result
+
+    target = _edit_target(args)
+    state = load_state(conv_id)
+    files = list(state.get("edit_files") or [])
+    unique = []
+    for f in files:
+        if f not in unique:
+            unique.append(f)
+
+    if graph_exists() and not state.get("graph_contact"):
+        if not unique:
+            if first_strike(state, "edit-gate"):
+                save_state(conv_id, state)
+                return deny(
+                    "Agent Guard [Graph-First]: graph exists but no graph query before first edit. "
+                    "Run `just path <a> <b>` or `get_node(label=…)` to scope blast radius "
+                    "(retry of the SAME file passes as pinpoint; one-strike)."
+                )
+        elif target not in unique:
+            if first_strike(state, f"edit-gate:multi:{target}"):
+                save_state(conv_id, state)
+                return deny(
+                    "Agent Guard [Graph-First]: multi-file edit without graph query. "
+                    "Pinpoint exception is ONE file. Run `just path` first "
+                    f"(retry of '{Path(str(target)).name}' passes; one-strike)."
+                )
+
+    state["edited"] = True
+    if target not in files:
+        files.append(target)
+    state["edit_files"] = files
+    state["reads"] = []
+    state["last_edit"] = {"path": str(target), "ts": time.time()}
+    save_state(conv_id, state)
+    return allow()
+
+
+def inspect_batch_end(conv_id: str) -> dict:
+    """stop/sessionEnd: warn once if edits happened without update-graph + audit."""
+    state = load_state(conv_id)
+    edited = bool(state.get("edited"))
+    updated = bool(state.get("did_update_graph"))
+    audited = bool(state.get("did_audit"))
+    result = allow()
+    if edited and (not updated or not audited):
+        missing = []
+        if not updated:
+            missing.append("`just update-graph`")
+        if not audited:
+            missing.append("`just audit`")
+        msg = (
+            "Agent Guard [Batch End]: edits recorded this session but "
+            + " and ".join(missing)
+            + " not run. Run them before reporting done. "
+            "just audit PASS proves no regression, not that a fix works (Done contract)."
+        )
+        if first_strike(state, "batch-end"):
+            result["reason"] = msg
+            result["followup_message"] = msg
+            result["additional_context"] = msg
+            result["agent_message"] = msg
+        save_state(conv_id, state)
+        return result
+    save_state(conv_id, state)
+    return result
+
+
 # --- Entry point ------------------------------------------------------------------
+def _extract_args(payload: dict, tool_call: dict) -> dict:
+    args = (
+        tool_call.get("args") or tool_call.get("arguments") or tool_call.get("parameters")
+        or payload.get("args") or payload.get("tool_input") or payload.get("input") or {}
+    )
+    if not args:
+        args = {}
+    if not args.get("CommandLine") and not args.get("command"):
+        for key in ("command", "CommandLine", "cmd"):
+            if payload.get(key):
+                args = dict(args)
+                args[key] = payload.get(key)
+                break
+    return args
+
+
 def main() -> None:
     raw_input_data = ""
+    conv_id = "default"
+    tool_name = ""
+    hook_event = ""
+    harness = detect_harness()
+    result = allow()
     try:
         raw_input_data = sys.stdin.read()
         if not raw_input_data or not raw_input_data.lstrip('\ufeff').strip():
-            print(json.dumps(allow()))
+            emit_result(allow(), harness, "")
             return
         payload = json.loads(raw_input_data.lstrip('\ufeff').strip())
+        harness = detect_harness(payload)
 
         tool_call = payload.get("toolCall") or payload.get("tool_call") or payload
-        tool_name = (
-            tool_call.get("name") or tool_call.get("tool_name")
-            or payload.get("name") or payload.get("tool_name") or ""
-        ).lower()
-        args = (
-            tool_call.get("args") or tool_call.get("arguments") or tool_call.get("parameters")
-            or payload.get("args") or payload.get("tool_input") or payload.get("input") or {}
-        )
-        conv_id = (
-            payload.get("conversationId") or payload.get("conversation_id")
-            or payload.get("session_id") or payload.get("sessionId")
-            or f"pid{os.getppid()}"
-        )
+        tool_name = extract_tool_name(payload, tool_call)
+        graph_name = _graph_lookup_name(payload, tool_call)
+        args = _extract_args(payload, tool_call)
+        conv_id = resolve_conv_id(payload)
+        hook_event = normalize_event(payload)
 
         gc_stale_state_files()
 
-        if tool_name in ["run_command", "bash", "execute_command", "powershell", "terminal", "exec", "shell"]:
-            print(json.dumps(inspect_run_command(args, conv_id)))
-            return
+        if hook_event in ("stop", "sessionend") and payload.get("stop_hook_active"):
+            result = allow()
+        elif hook_event in ("stop", "sessionend"):
+            result = inspect_batch_end(conv_id)
+        elif is_graph_tool(tool_name) or is_graph_tool(graph_name):
+            result = inspect_graph_tool(conv_id)
+        elif tool_name in SHELL_TOOLS:
+            result = inspect_run_command(args, conv_id)
+        elif tool_name in SEARCH_TOOLS:
+            result = inspect_search_tool(conv_id)
+        elif tool_name in READ_TOOLS:
+            result = inspect_view_file(args, conv_id)
+        elif tool_name in WRITE_TOOLS:
+            result = inspect_edit_gate(args, conv_id, metadata_check=True)
+        elif tool_name in EDIT_TOOLS:
+            result = inspect_edit_gate(args, conv_id, metadata_check=False)
+        else:
+            result = allow()
 
-        if tool_name in ["view_file", "readfile", "read_file", "view", "cat", "get_content", "read"]:
-            print(json.dumps(inspect_view_file(args, conv_id)))
-            return
+        try:
+            st = load_state(conv_id)
+            entry = {
+                "ts": int(time.time()),
+                "conv": conv_id,
+                "event": hook_event or "preToolUse",
+                "tool": (tool_name or "")[:80],
+                "decision": result.get("decision"),
+                "graph_contact": bool(st.get("graph_contact")),
+                "edited": bool(st.get("edited")),
+                "denied": result.get("decision") == "deny",
+                "thrash": bool(st.get("thrash_hit")),
+                "harness": harness,
+            }
+            if not st.get("logged_keys"):
+                entry["keys"] = sorted(str(k) for k in payload.keys())[:40]
+                st["logged_keys"] = True
+            append_session_log(entry)
+            if st.get("thrash_hit"):
+                st["thrash_hit"] = False
+            save_state(conv_id, st)
+        except Exception:
+            pass
 
-        if tool_name in ["write_to_file", "writefile", "write_file", "write", "create_file"]:
-            print(json.dumps(inspect_write_to_file(args)))
-            return
-
-        if tool_name in ["replace_file_content", "editfile", "edit_file", "edit", "str_replace_editor", "strreplace"]:
-            # On file edits, reset the read budget for the next iteration cycle
-            # (strikes are kept: guidance stays one-shot for the whole session).
-            state = load_state(conv_id)
-            state["reads"] = []
-            save_state(conv_id, state)
-            print(json.dumps(allow()))
-            return
-
-        print(json.dumps(allow()))
+        emit_result(result, harness, hook_event)
+        return
     except Exception as e:
-        # Guarded fail-open: never lock the agent loop on parser/IO glitches,
-        # but a malformed payload that visibly contains a destructive pattern
-        # must still be denied (raw-text best-effort scan, double-fault safe).
         try:
             reason = find_dangerous(raw_input_data)
         except Exception:
             reason = None
         if reason:
-            print(json.dumps(deny(f"Agent Guard [Safety Block/fallback]: {reason} (raw payload scan)")))
+            emit_result(
+                deny(f"Agent Guard [Safety Block/fallback]: {reason} (raw payload scan)"),
+                harness,
+                hook_event,
+            )
         else:
-            print(json.dumps(allow(f"Agent Guard warning: {str(e)}")))
+            emit_result(allow(f"Agent Guard warning: {str(e)}"), harness, hook_event)
 
 
 if __name__ == "__main__":

@@ -3,13 +3,31 @@
   "hooks": {
     "preToolUse": [
       {
-        "matcher": "run_command|view_file|write_to_file|replace_file_content|Bash|bash|execute_command|ReadFile|read_file|WriteFile|write_file|Edit|EditFile|edit_file",
+        "matcher": "Shell|Bash|Read|Write|Edit|Grep|Glob|Task|run_command|view_file|write_to_file|replace_file_content|ReadFile|read_file|WriteFile|write_file|EditFile|edit_file|grep_search|codebase_search|GlobFileSearch",
         "command": "python scripts/agent_guard.py",
         "timeout": 5
       },
       {
         "matcher": "Shell|run_command|Bash|bash|execute_command",
         "command": "rtk hook cursor",
+        "timeout": 5
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "python scripts/agent_guard.py",
+        "timeout": 5
+      }
+    ],
+    "stop": [
+      {
+        "command": "python scripts/agent_guard.py",
+        "timeout": 5
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "python scripts/agent_guard.py",
         "timeout": 5
       }
     ]

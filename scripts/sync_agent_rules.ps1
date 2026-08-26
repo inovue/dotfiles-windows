@@ -391,10 +391,12 @@ $allTargets = @(
     @{ Name = "Agents Skills RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";        Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
-    @{ Name = "Claude Code Global Settings";         Src = $masterClaudeSettings; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json";                        IsDir = $false },
+    @{ Name = "Claude Code Global Settings";         Src = $masterClaudeSettings; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json";                        IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py" },
     @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
+    @{ Name = "Antigravity Global Edit Orchestration"; Src = (Join-Path $masterAntigravityDir "rules\edit-orchestration.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "edit-orchestration.md"; IsDir = $false },
     @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
+    @{ Name = "Agents Always-on Edit Orchestration"; Src = (Join-Path $masterAntigravityDir "rules\edit-orchestration.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "edit-orchestration.md"; IsDir = $false },
     @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
     @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
     @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py" },
@@ -405,6 +407,7 @@ $allTargets = @(
     @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Cursor Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; IsDir = $false },
+    @{ Name = "Claude Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
     @{ Name = "Workspace Claude Pointer (CLAUDE.md)"; Src = $masterClaudeProjectPointer; Dest = $projectClaudeMd; IsDir = $false }
 )

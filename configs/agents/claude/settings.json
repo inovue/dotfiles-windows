@@ -9,6 +9,27 @@
             "command": "rtk hook claude"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Read|Edit|MultiEdit|NotebookEdit|Write|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/agent_guard.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/agent_guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }

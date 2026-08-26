@@ -79,7 +79,7 @@ def mm [
     # Helper: Open in Default Browser (with XSS-safe DOM population)
     let open_web = {|content|
         let tmp_html = $"($env.TEMP)/mermaid_preview.html" | path expand
-        let json_content = ($content | to json)
+        let json_content = ($content | to json | str replace -a '<' '\u003c')
         let template = "<!DOCTYPE html>
 <html>
 <head>
@@ -125,7 +125,7 @@ def mm [
     if $img {
         let kroki_base = ($env.KROKI_URL? | default "https://kroki.io")
         let tmp_png = $"($env.TEMP)/mermaid_render.png"
-        print $"[Mermaid] Rendering via ($kroki_base)... (do not submit confidential data)"
+        print $"[Mermaid] Rendering via ($kroki_base)... \(do not submit confidential data\)"
         let res = (do { $mmd | ^curl.exe -s --connect-timeout 2 --max-time 3 -X POST $"($kroki_base)/mermaid/png" -H "Content-Type: text/plain" --data-binary @- -o $tmp_png } | complete)
         if ($tmp_png | path exists) and $res.exit_code == 0 {
             if (which chafa | is-not-empty) {

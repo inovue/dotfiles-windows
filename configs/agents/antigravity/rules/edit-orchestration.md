@@ -11,9 +11,10 @@ description: Bottom-Up line-numbered edits to avoid line-shift re-reads. Antigra
 
 When applying multiple replacements in one file with a line-numbered tool:
 
-1. Sort targets by StartLine descending (file bottom → top).
-2. Apply each replacement without re-reading.
-3. Treat the tool's success snippet as verification.
+1. **Batch Line Discovery**: Discover all target line ranges in **one query** (e.g. `rg -n -e 'pat1' -e 'pat2' <file>` or a single scoped slice) before editing. Do not issue sequential piecemeal `rg` lookups for each individual chunk.
+2. Sort targets by StartLine descending (file bottom → top).
+3. Apply each replacement without re-reading.
+4. Treat the tool's success snippet as verification.
 
 Do not compute in-memory line deltas after a top-down edit — a miscount silently corrupts the wrong lines. Bottom-Up keeps every remaining StartLine/EndLine valid.
 

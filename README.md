@@ -124,7 +124,7 @@ dotfiles-windows/
 | `just update-graph`| 高速 AST 解析によりナレッジグラフ（`graphify-out/`）を更新 | 編集バッチ完了時 |
 | `just install-graph-hook`| コミット時に自動で知識グラフを再構築する post-commit フックを登録 | リポジトリ初回クローン時 |
 | `just update-graphify` | 📦 Graphify エンジンの更新、Git フック再登録、ルール同期、テストを一括実行 | Graphify アップデート時 |
-| `just session-report` | 📊 セッションログの deny 率、Thrash（編集直後の再読込）発生率、グラフ接触率を集計 | エージェント動作品質・トークン効率検証 |
+| `just session-report` | 📊 セッションログの deny 率、Thrash、累積スライス (crawl)、短周期待ち誘導 (poll_guide) を集計 | エージェント動作品質・トークン効率検証 |
 | `just rtk-gain` | 📊 rtk のトークン削減統計ダッシュボードを表示 | トークン節約効果の確認 |
 | `just rtk-history` | 直近のコマンド実行履歴とトークン削減率の内訳を表示 | 直近の節約履歴確認 |
 | `just rtk-discover`| 削減可能な見落としコマンドを履歴から自動検出 | エージェント最適化の確認 |

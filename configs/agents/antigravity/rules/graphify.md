@@ -6,7 +6,7 @@ description: Graph-first navigation when graphify-out exists. MCP preferred, jus
 # Graphify × Antigravity Protocol
 
 **Gate:** no `graphify-out/graph.json` → plain `rg`/`fd`/`ast-grep`; never run graphify, MCP graph tools, or `/graphify` unless the user explicitly asks to build a graph.
-MCP invocation: `call_mcp_tool(ServerName="graphify", ToolName="query_graph", Arguments={"question": "…", "token_budget": 1200})`. Full tool schemas & recipes: skill `graphify-navigator`.
+MCP invocation: `call_mcp_tool(ServerName="graphify", ToolName="query_graph", Arguments={"question": "…", "token_budget": 1200, "project_path": "<workspace root>"}`. Full tool schemas & recipes: skill `graphify-navigator`.
 
 ## Flow (hubs answer in 1-2 calls what 20 greps cannot)
 
@@ -22,8 +22,9 @@ Re-query the graph before designing new functions or tasks, when syncing cross-l
 
 ## Invariants
 
-- Params are strict: `query_graph(question=…)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query` / `name`. Node labels are file basenames or symbol names.
-- Always pass `token_budget: 1200` for compact inline answers.
+- Params are strict: `query_graph(question=…, token_budget=1200, project_path=<workspace root>)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query` / `name`. Node labels are file basenames or symbol names.
+- Always pass `token_budget: 1200` and `project_path` (workspace root) on MCP calls.
+- If MCP returns `graph.json not found` or a home-directory path, do not retry MCP — run `just graph` / `just hubs` once.
 - Never fall back to unanchored `rg`/`fd` before hub expansion; never re-verify audit-proven facts by crawling files.
 - Freshness: the post-commit hook (`just install-graph-hook`) auto-rebuilds the graph; run `just update-graph` once per edit batch for uncommitted work. `just check-semantic` reports pending semantic re-extraction; clear with `just update-semantic` or `just watch` (`GRAPHIFY_SEMANTIC_AUTO=1` = auto-LLM).
 - Memory loop: session start `just lessons`; after answering an architecture/impact question `just remember "<q>" "<a>"` (wrong earlier answer: `graphify save-result --outcome corrected`). Saved results become graph nodes on the next update.

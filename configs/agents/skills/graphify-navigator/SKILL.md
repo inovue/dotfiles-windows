@@ -60,17 +60,17 @@ Turn architecture questions into **scoped subgraph answers**, then finish with *
 
 | Intent | MCP Tool | Required Parameters | Optional Parameters | Example Payload |
 | :--- | :--- | :--- | :--- | :--- |
-| **Open Survey / QA** | `query_graph` | `question: string` *(NOT query)* | `token_budget: int` (1200), `depth: int` (1-2), `mode: "bfs"\|"dfs"` | `{"question": "How does deploy work?", "token_budget": 1200}` |
-| **Concept / Node** | `get_node` | `label: string` | `project_path: string` | `{"label": "Install-WingetPackage"}` |
-| **Neighbors / Edges** | `get_neighbors` | `label: string` | `relation_filter: string`, `token_budget: int` | `{"label": "README.md"}` |
-| **Path between A & B** | `shortest_path` | `source: string`, `target: string` | `max_hops: int` (8), `undirected: bool` | `{"source": "install.ps1", "target": "deploy"}` |
-| **God nodes / Hubs** | `god_nodes` | *(None)* | `top_n: int` (10), `project_path: string` | `{"top_n": 10}` |
-| **Community Cluster** | `get_community` | `community_id: int` | `token_budget: int` (1200), `project_path: string` | `{"community_id": 0}` |
-| **Graph Statistics** | `graph_stats` | *(None)* | `project_path: string` | `{}` |
+| **Open Survey / QA** | `query_graph` | `question`, `project_path`, `token_budget` | `depth` (1-2), `mode` | `{"question": "How does deploy work?", "token_budget": 1200, "project_path": "<workspace root>"}` |
+| **Concept / Node** | `get_node` | `label`, `project_path` | — | `{"label": "Install-WingetPackage", "project_path": "<workspace root>"}` |
+| **Neighbors / Edges** | `get_neighbors` | `label`, `project_path` | `relation_filter`, `token_budget` | `{"label": "README.md", "project_path": "<workspace root>", "token_budget": 1200}` |
+| **Path between A & B** | `shortest_path` | `source`, `target`, `project_path` | `max_hops`, `undirected` | `{"source": "install.ps1", "target": "deploy", "project_path": "<workspace root>"}` |
+| **God nodes / Hubs** | `god_nodes` | `project_path` | `top_n` (10) | `{"top_n": 10, "project_path": "<workspace root>"}` |
+| **Community Cluster** | `get_community` | `community_id`, `project_path` | `token_budget` | `{"community_id": 0, "token_budget": 1200, "project_path": "<workspace root>"}` |
+| **Graph Statistics** | `graph_stats` | `project_path` | — | `{"project_path": "<workspace root>"}` |
 
 > [!IMPORTANT]
-> **Strict MCP Parameter Rule**: Parameter names are strict (`query_graph` takes `question`, NOT `query`; `get_node` and `get_neighbors` take `label`, NOT `name`).
-> **Node Label Resilience**: AST node labels are symbol names or file basenames (e.g. `Microsoft.PowerShell_profile.ps1`, `01_winget_packages.ps1`). If `get_node` returns empty, immediately call `query_graph(question="<topic>", depth=1, token_budget=1200)` rather than falling back to text grep.
+> **Strict MCP Parameter Rule**: Parameter names are strict (`query_graph` takes `question`, NOT `query`; `get_node` and `get_neighbors` take `label`, NOT `name`). Always pass `project_path` (workspace root). User-global MCP (Cursor `~/.cursor/mcp.json`) has no pinned corpus; omitting `project_path` resolves `graphify-out/graph.json` against `$HOME`. If the tool returns `graph.json not found` or a home-directory path, do **not** retry MCP — run `just graph` / `just hubs` once.
+> **Node Label Resilience**: AST node labels are symbol names or file basenames (e.g. `Microsoft.PowerShell_profile.ps1`, `01_winget_packages.ps1`). If `get_node` returns empty, immediately call `query_graph(question="<topic>", depth=1, token_budget=1200, project_path="<workspace root>")` rather than falling back to text grep.
 > **Continuous Mid-Stream Re-invocation**: Never treat Graphify as a 1-shot entry gate. Call Graphify mid-task before adding new functions, when checking cross-layer sync between `justfile` and `README.md`, or before modifying existing profile configurations.
 
 ### 2. Fast `just` CLI shortcuts (when in terminal loop)

@@ -38,6 +38,37 @@ function Assert-Test {
     }
 }
 
+function Get-McpArgList {
+    param($Server)
+    if (-not $Server) { return @() }
+    $a = $Server.args
+    if ($null -eq $a) { return @() }
+    return @($a | ForEach-Object { [string]$_ })
+}
+
+function Test-IsRelativeGraphJsonArg {
+    param([string]$Arg)
+    if (-not $Arg) { return $false }
+    $n = $Arg.Trim().Replace('\', '/')
+    if ($n.StartsWith('./')) { $n = $n.Substring(2) }
+    return ($n -eq 'graphify-out/graph.json')
+}
+
+function Get-RepoGraphJsonPath {
+    return [System.IO.Path]::GetFullPath((Join-Path $rootDir 'graphify-out\graph.json'))
+}
+
+function Test-IsRepoGraphJsonArg {
+    param([string]$Arg)
+    if (-not $Arg -or -not [System.IO.Path]::IsPathRooted($Arg)) { return $false }
+    try {
+        $full = [System.IO.Path]::GetFullPath($Arg)
+        return $full.Equals((Get-RepoGraphJsonPath), [System.StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
+}
+
 Write-Host "`n=======================================================" -ForegroundColor Cyan
 Write-Host "  AI Agent & Modern CLI Environment Verification Suite " -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -247,42 +278,75 @@ foreach ($psScript in $allPsScripts) {
 
 
 
-# MCP must use absolute graphify-mcp on all merge targets (uv tool run is ~8x slower and PATH-fragile)
-$mcpPathsToCheck = @(
+# MCP must use absolute graphify-mcp. User-global configs must not pin a graph
+# path (relative graphify-out/graph.json resolves against $HOME; pinning THIS
+# repo poisons every other workspace). Workspace-local MCP may pin the repo graph.
+$graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
+$mcpGlobalPaths = @(
     (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
     (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
-    (Join-Path $rootDir ".agents\mcp_config.json")
+    (Join-Path $env:USERPROFILE ".agents\mcp_config.json")
+    (Join-Path $env:USERPROFILE ".cursor\mcp.json")
 )
-foreach ($mcpPath in $mcpPathsToCheck) {
-    if (-not (Test-Path $mcpPath)) {
-        # Missing dest is OK when graphify-mcp is not installed yet (sync skips merge)
-        $graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
+$mcpWorkspacePaths = @(
+    (Join-Path $rootDir ".agents\mcp_config.json")
+    (Join-Path $rootDir ".cursor\mcp.json")
+)
+
+function Assert-GraphifyMcpConfig {
+    param(
+        [string]$McpPath,
+        [ValidateSet('Global', 'Workspace')]
+        [string]$Scope
+    )
+    $label = [IO.Path]::GetFileName($McpPath)
+    if (-not (Test-Path $McpPath)) {
         if ($graphifyMcpInstalled) {
-            Assert-Test -Name "MCP graphify config exists ($([IO.Path]::GetFileName($mcpPath)))" -Condition $false -Details "Missing: $mcpPath"
+            Assert-Test -Name "MCP graphify config exists ($label)" -Condition $false -Details "Missing: $McpPath"
         } else {
-            Write-Host "  [SKIP] MCP config absent (graphify-mcp not installed): $mcpPath" -ForegroundColor DarkGray
+            Write-Host "  [SKIP] MCP config absent (graphify-mcp not installed): $McpPath" -ForegroundColor DarkGray
             $script:warnCount++
         }
-        continue
+        return
     }
     try {
-        $mcpObj = [System.IO.File]::ReadAllText($mcpPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        $mcpObj = [System.IO.File]::ReadAllText($McpPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
         if (-not $mcpObj.mcpServers -or -not $mcpObj.mcpServers.graphify) {
-            $graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
             if ($graphifyMcpInstalled) {
-                Assert-Test -Name "MCP graphify entry present ($([IO.Path]::GetFileName($mcpPath)))" -Condition $false -Details "No mcpServers.graphify in $mcpPath"
+                Assert-Test -Name "MCP graphify entry present ($label)" -Condition $false -Details "No mcpServers.graphify in $McpPath"
             }
-            continue
+            return
         }
         $cmd = [string]$mcpObj.mcpServers.graphify.command
         $isAbs = ($cmd -match '(?i)\.exe$' -or $cmd -match '^[A-Za-z]:\\' -or $cmd -match '^/')
         $notUv = ($cmd -notmatch '(?i)(^|[\\/])uv(\.exe)?$')
         $notBare = ($cmd -ne "graphify-mcp" -and $cmd -ne "graphify-mcp.exe")
         $pathOk = if ($isAbs) { Test-Path $cmd } else { $false }
-        Assert-Test -Name "MCP graphify uses absolute graphify-mcp ($([IO.Path]::GetFileName($mcpPath)))" -Condition ($isAbs -and $notUv -and $notBare -and $pathOk) -Details "command='$cmd'"
+        Assert-Test -Name "MCP graphify uses absolute graphify-mcp ($label)" -Condition ($isAbs -and $notUv -and $notBare -and $pathOk) -Details "command='$cmd'"
+
+        $argList = Get-McpArgList -Server $mcpObj.mcpServers.graphify
+        $hasRelative = $false
+        $hasRepoPin = $false
+        foreach ($arg in $argList) {
+            if (Test-IsRelativeGraphJsonArg -Arg $arg) { $hasRelative = $true }
+            if (Test-IsRepoGraphJsonArg -Arg $arg) { $hasRepoPin = $true }
+        }
+        if ($Scope -eq 'Global') {
+            Assert-Test -Name "MCP graphify global args are unpinned ($label)" -Condition (-not $hasRelative -and -not $hasRepoPin) -Details ("args=" + ($argList -join '|'))
+        } else {
+            $pinOk = $hasRepoPin -and (Test-Path (Get-RepoGraphJsonPath))
+            Assert-Test -Name "MCP graphify workspace args pin repo graph.json ($label)" -Condition $pinOk -Details ("args=" + ($argList -join '|'))
+        }
     } catch {
-        Assert-Test -Name "MCP graphify config parse ($mcpPath)" -Condition $false -Details "$_"
+        Assert-Test -Name "MCP graphify config parse ($McpPath)" -Condition $false -Details "$_"
     }
+}
+
+foreach ($mcpPath in $mcpGlobalPaths) {
+    Assert-GraphifyMcpConfig -McpPath $mcpPath -Scope Global
+}
+foreach ($mcpPath in $mcpWorkspacePaths) {
+    Assert-GraphifyMcpConfig -McpPath $mcpPath -Scope Workspace
 }
 
 # Claude Code user scope (~/.claude.json): jaq-only check.
@@ -299,6 +363,11 @@ if ($graphifyMcpInstalledForClaude -and $jaqAvailable) {
         $cNotBare = ($claudeCmd -ne "graphify-mcp" -and $claudeCmd -ne "graphify-mcp.exe")
         $cPathOk = if ($cIsAbs) { Test-Path $claudeCmd } else { $false }
         Assert-Test -Name "MCP graphify uses absolute graphify-mcp (.claude.json)" -Condition ($cIsAbs -and $cNotUv -and $cNotBare -and $cPathOk) -Details "command='$claudeCmd'"
+        $claudeArgsRaw = (& jaq -c '.mcpServers.graphify.args // []' $claudeUserJson 2>&1 | Out-String).Trim()
+        $claudeHasRel = $claudeArgsRaw -match 'graphify-out/graph.json'
+        $repoGraphEsc = [regex]::Escape((Get-RepoGraphJsonPath).Replace('\', '\\'))
+        $claudeHasRepoPin = $claudeArgsRaw -match $repoGraphEsc
+        Assert-Test -Name "MCP graphify global args are unpinned (.claude.json)" -Condition (-not $claudeHasRel -and -not $claudeHasRepoPin) -Details "args=$claudeArgsRaw"
     } else {
         Assert-Test -Name "MCP graphify config exists (.claude.json)" -Condition $false -Details "Missing: $claudeUserJson (run just sync-rules)"
     }

@@ -75,6 +75,12 @@ Graph-contact resilience (v4.3 after Cursor field report 2026-08-26):
                 default ~/.cache/graphify-queries.log, written by graphify-mcp)
                 whose corpus path resolves inside this repo. Deterministic,
                 fail-silent. GRAPHIFY_QUERY_LOG_DISABLE still wins.
+                A home-relative corpus (C:\\Users\\...\\graphify-out\\graph.json)
+                is NOT contact — that is the Cursor global-MCP cwd bug.
+ - ARG MERGE  : _extract_args unions every arg bag (toolCall.args, tool_input,
+                JSON-string inputs). Cursor Read sometimes sends path-only on
+                one bag and offset/limit on another; first-nonempty-wins
+                dropped the slice and tripped the unsliced 300-line gate.
  - OUT-OF-REPO: writes outside the repo root (e.g. ~/.cursor/plans plan files,
                 brain artifacts) no longer trip the edit gate, the edited flag,
                 or the batch-end contract.
@@ -1067,6 +1073,7 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
             line_count = count_lines_capped(path_obj, MAX_UNSLICED_LINE_COUNT)
             if line_count > MAX_UNSLICED_LINE_COUNT:
                 if first_strike(state, f"read:{target_path}"):
+                    state["arg_keys"] = sorted(str(k) for k in args.keys())[:40]
                     save_state(conv_id, state)
                     return deny(
                         f"Agent Guard [Read Budget Invariant]: '{path_obj.name}' exceeds {MAX_UNSLICED_LINE_COUNT} lines. "
@@ -1247,28 +1254,45 @@ def inspect_batch_end(conv_id: str) -> dict:
 
 
 # --- Entry point ------------------------------------------------------------------
-def _extract_args(payload: dict, tool_call: dict) -> dict:
-    args = (
-        tool_call.get("args") or tool_call.get("arguments") or tool_call.get("parameters")
-        or payload.get("args") or payload.get("tool_input") or payload.get("input") or {}
-    )
-    # Cursor beforeMCPExecution: tool_input is a JSON-params STRING, not an object
-    # (cursor.com/docs/hooks). Parsing failure must not skip inspect_graph_tool.
-    if isinstance(args, str):
+def _coerce_arg_dict(value):
+    """Parse one harness arg bag. Cursor beforeMCPExecution sends tool_input
+    as a JSON string; an empty dict must not shadow a later full bag."""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, str):
         try:
-            parsed = json.loads(args)
-            args = parsed if isinstance(parsed, dict) else {}
+            parsed = json.loads(value)
         except Exception:
-            args = {}
-    if not isinstance(args, dict):
-        args = {}
-    if not args.get("CommandLine") and not args.get("command"):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _extract_args(payload: dict, tool_call: dict) -> dict:
+    """Union every arg bag. First-nonempty-wins dropped Cursor Read slices
+    when toolCall.args had only `path` and tool_input had offset/limit."""
+    merged = {}
+    sources = (
+        tool_call.get("args"),
+        tool_call.get("arguments"),
+        tool_call.get("parameters"),
+        payload.get("args"),
+        payload.get("tool_input"),
+        payload.get("input"),
+        payload.get("updated_input"),
+    )
+    for src in sources:
+        chunk = _coerce_arg_dict(src)
+        if chunk:
+            merged.update(chunk)
+    if not merged.get("CommandLine") and not merged.get("command"):
         for key in ("command", "CommandLine", "cmd"):
             if payload.get(key):
-                args = dict(args)
-                args[key] = payload.get(key)
+                merged[key] = payload.get(key)
                 break
-    return args
+    return merged
 
 
 def main() -> None:
@@ -1344,6 +1368,8 @@ def main() -> None:
             if not st.get("logged_keys"):
                 entry["keys"] = sorted(str(k) for k in payload.keys())[:40]
                 st["logged_keys"] = True
+            if st.get("arg_keys"):
+                entry["arg_keys"] = st.get("arg_keys")
             append_session_log(entry)
             if st.get("thrash_hit"):
                 st["thrash_hit"] = False

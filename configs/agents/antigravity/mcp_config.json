@@ -2,9 +2,7 @@
   "mcpServers": {
     "graphify": {
       "command": "graphify-mcp",
-      "args": [
-        "graphify-out/graph.json"
-      ],
+      "args": [],
       "env": {
         "PYTHONUTF8": "1",
         "PYTHONIOENCODING": "utf-8",

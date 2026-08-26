@@ -28,7 +28,7 @@
 - **Independent review**: multi-file or security batches are not done until a fresh-context reviewer (Bugbot / reviewer subagent) is given only the diff + this Done contract and reports zero findings.
 - **Review**: graph anchor (`loc=Lxx` tags) → scoped `rg -n` snippets → conclude from snippets when they suffice (Read = 0).
 - **Re-invoke mid-stream**: before designing a new function/task, when syncing cross-layer files, and when a symbol lookup fails — Graphify is a continuous loop, not a one-shot entry gate.
-- **Strict params**: `query_graph(question=…, token_budget=1200)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query`/`name`. Full schemas: skill `graphify-navigator`. MCP contact is recorded on Cursor (`beforeMCPExecution` / `CallDynamicTool` / `MCP:<tool>`), Claude Code (`mcp__graphify__.*` PreToolUse), and Antigravity (`call_mcp_tool`); Windows Claude PreToolUse-on-MCP is flaky, so the query-log fallback covers all three.
+- **Strict params**: `query_graph(question=…, token_budget=1200, project_path=<workspace root>)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query`/`name`. Full schemas: skill `graphify-navigator`. Always pass `project_path` on MCP calls. If MCP returns `graph.json not found` or a home-directory path, do not retry MCP — run `just graph` / `just hubs` once. Never pin this repo's `graph.json` into user-global MCP. MCP contact is recorded on Cursor (`beforeMCPExecution` / `CallDynamicTool` / `MCP:<tool>`), Claude Code (`mcp__graphify__.*` PreToolUse), and Antigravity (`call_mcp_tool`); Windows Claude PreToolUse-on-MCP is flaky, so the query-log fallback covers all three.
 - **Memory loop**: session start `just lessons`; after answering an architecture/impact question `just remember "<q>" "<a>"` (wrong earlier answer: `graphify save-result --outcome corrected`). Saved results become graph nodes on the next update — this is how semantic knowledge accumulates.
 - **Freshness**: the post-commit hook (`just install-graph-hook`) rebuilds the graph on every commit; `just update-graph` covers uncommitted work. `just check-semantic` reports pending semantic re-extraction (docs/images/memory); clear it with `just update-semantic`, or `just watch` (set `GRAPHIFY_SEMANTIC_AUTO=1` to auto-run the LLM pass).
 - **Wide nav**: if `graphify-out/wiki/index.md` exists, use it for broad orientation before hub expansion.
@@ -46,7 +46,7 @@
 | HTTP | `xh GET <url>` |
 | Processes / ports | `procs <query|:port>` |
 | Structural diff | `difft` / `rtk diff` |
-| Directory tree | `eza --tree --level=2` |
+| Directory tree | `fd -t d --max-depth 2` / native Glob. If `eza --tree`, add `--color=never --icons=never` |
 | Benchmark | `hyperfine "a" "b"` |
 | Token analytics | `rtk gain` |
 

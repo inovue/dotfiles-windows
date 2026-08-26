@@ -21,7 +21,7 @@ description: >-
 | **Git Diff** | `git diff` | `rtk git diff` | ~65% (condensed changed lines) |
 | **Git Log** | `git log -n 10` | `rtk git log -n 10` | ~80% (one-line commit graph) |
 | **Git Actions** | `git add . && git commit` | `rtk git add .` / `rtk git commit -m "..."` | ~85% (compact `ok <sha>`) |
-| **File Reading** | `cat file` / `bat file` | `rtk read [file]` | ~70% (strips boilerplate/noise) |
+| **File Reading** | `cat file` / `bat file` | `rtk read [file]` or `rtk read -m <N> [file]` | ~70% (strips boilerplate/noise) |
 | **Aggressive Read** | Sliced viewing | `rtk read [file] -l aggressive` | ~85% (signatures only) |
 | **Code Summary** | Manual skimming | `rtk smart [file]` | ~95% (2-line structural summary) |
 | **File Search** | `find . -name "*.rs"` | `rtk find "*.rs" [path]` | ~75% (compact tree output) |
@@ -45,6 +45,10 @@ rtk smart scripts/agent_guard.py
 
 # Read file with noise and blank lines stripped
 rtk read src/main.rs
+
+# Cap output lines: `rtk read -m <N> <file>`. Do NOT use `-n` — that is
+# `--line-numbers` (a flag); a following number is parsed as a filename.
+rtk read -m 120 README.md
 
 # Read TypeScript/Python signatures only (ideal for caller/callee context)
 rtk read src/service.ts -l aggressive

@@ -142,26 +142,34 @@ function Test-GraphifyMcpCommandValid {
     return $false
 }
 
+function Test-McpDestIsWorkspaceLocal {
+    # User-global MCP (cwd often $HOME) must not pin a graph path.
+    # Workspace-local MCP can pin this repo's graph.json as an absolute path.
+    param([string]$DestPath)
+    if (-not $DestPath -or -not $rootDir) { return $false }
+    try {
+        $destFull = [System.IO.Path]::GetFullPath($DestPath)
+        $rootFull = [System.IO.Path]::GetFullPath($rootDir)
+    } catch {
+        return $false
+    }
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+    if ($destFull.Equals($rootFull, $cmp)) { return $true }
+    $prefix = $rootFull.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    return $destFull.StartsWith($prefix, $cmp)
+}
+
 function New-MaterializedGraphifyServer {
-    param([object]$TemplateServer)
+    param(
+        [object]$TemplateServer,
+        [switch]$PinWorkspaceGraph
+    )
     if (-not $TemplateServer) { return $null }
 
     $exe = Resolve-GraphifyMcpExe
     if (-not $exe) {
         # Never materialize bare "graphify-mcp" — PATH-dependent and fails verify_tools.
         return $null
-    }
-
-    $argsList = @()
-    if ($TemplateServer.args) {
-        foreach ($a in @($TemplateServer.args)) { $argsList += [string]$a }
-    }
-    # Strip uv-tool-run arg prefixes if a stale template somehow still has them
-    if ($argsList -contains "tool" -and $argsList -contains "run") {
-        $argsList = @('graphify-out/graph.json')
-    }
-    if ($argsList.Count -eq 0) {
-        $argsList = @('graphify-out/graph.json')
     }
 
     $envObj = [PSCustomObject]@{
@@ -174,11 +182,18 @@ function New-MaterializedGraphifyServer {
         }
     }
 
-    return [PSCustomObject]@{
+    # Template args are ignored on purpose: a relative graphify-out/graph.json
+    # copied into user-global MCP resolves against $HOME (Cursor field report
+    # 2026-08-26). Never pin this repo into global configs either.
+    $server = [PSCustomObject]@{
         command = $exe
-        args    = $argsList
         env     = $envObj
     }
+    if ($PinWorkspaceGraph) {
+        $graphJson = [System.IO.Path]::GetFullPath((Join-Path $rootDir "graphify-out\graph.json"))
+        $server | Add-Member -NotePropertyName args -NotePropertyValue ([string[]]@($graphJson))
+    }
+    return $server
 }
 
 function Test-GraphifyMcpInSync {
@@ -186,7 +201,7 @@ function Test-GraphifyMcpInSync {
     if (-not (Test-Path $TemplatePath)) { return $false }
 
     $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-    $want = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
+    $want = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify -PinWorkspaceGraph:(Test-McpDestIsWorkspaceLocal -DestPath $DestPath)
 
     if (-not $want) {
         # graphify-mcp not installed: OK if dest missing or has no graphify entry;
@@ -228,7 +243,7 @@ function Merge-GraphifyMcpConfig {
     }
 
     $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8).Trim() | ConvertFrom-Json
-    $graphifyServer = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
+    $graphifyServer = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify -PinWorkspaceGraph:(Test-McpDestIsWorkspaceLocal -DestPath $DestPath)
     if (-not $graphifyServer) {
         if (-not $template.mcpServers.graphify) {
             Write-Warning "[SKIP] Template has no mcpServers.graphify"
@@ -483,7 +498,7 @@ $mcpTargets = @(
     (Join-Path $rootDir ".cursor\mcp.json")
 )
 
-Write-Host "`n>> Graphify MCP (merge; absolute graphify-mcp path)..." -ForegroundColor Cyan
+Write-Host "`n>> Graphify MCP (merge; absolute exe; workspace graph pin / global unpinned)..." -ForegroundColor Cyan
 foreach ($mcpDest in $mcpTargets) {
     if ($Check) {
         if (Test-GraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $mcpDest) {

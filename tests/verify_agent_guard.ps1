@@ -384,6 +384,16 @@ print(prev)
     }
     Assert-Test -Name "v4.3 query-log fallback: sibling-prefix corpus (repo-evil) still denies" -Condition ($siblingDeny -match '"decision":\s*"deny"') -Details ($siblingDeny.Trim())
 
+    # home-relative corpus (Cursor global MCP cwd) must NOT count as contact
+    $homeCorpus = (Join-Path $env:USERPROFILE "graphify-out\graph.json").Replace('\', '\\')
+    [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"$qlogTs`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$homeCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    $qlogConvHome = "v43-qlog-home-$(Get-Random)"
+    $homeDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $qlogConvHome
+    }
+    Assert-Test -Name "v4.3 query-log fallback: home-relative corpus still denies" -Condition ($homeDeny -match '"decision":\s*"deny"') -Details ($homeDeny.Trim())
+
     # unparseable ts must NOT be accepted even when the file mtime is fresh
     [System.IO.File]::WriteAllText($qlogFile, "{`"ts`": `"not-a-timestamp`", `"kind`": `"mcp_query`", `"question`": `"probe`", `"corpus`": `"$qlogCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
     $qlogConv4 = "v43-qlog4-$(Get-Random)"
@@ -538,6 +548,39 @@ print(prev)
         conversationId  = $curConv
     }
     Assert-Test -Name "v4.4 Cursor offset/limit 200+200 denies on second slice" -Condition ($cur1 -match '"decision":\s*"allow"' -and $cur2 -match '"decision":\s*"deny"') -Details (($cur1 + $cur2).Trim())
+
+    $mergeConv = "v44-cursor-merge-$(Get-Random)"
+    $mergeRead = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        toolCall        = @{ name = "Read"; args = @{ path = $crawlFile } }
+        tool_input      = @{ path = $crawlFile; offset = 1; limit = 80 }
+        conversationId  = $mergeConv
+    }
+    Assert-Test -Name "v4.4 Cursor path-only args + tool_input offset/limit is sliced" -Condition ($mergeRead -match '"decision":\s*"allow"') -Details ($mergeRead.Trim())
+
+    $jsonConv = "v44-cursor-jsoninput-$(Get-Random)"
+    $jsonInput = (@{ path = $crawlFile; offset = 1; limit = 80 } | ConvertTo-Json -Compress)
+    $jsonRead = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = $jsonInput
+        conversationId  = $jsonConv
+    }
+    Assert-Test -Name "v4.4 Cursor JSON-string tool_input offset/limit is sliced" -Condition ($jsonRead -match '"decision":\s*"allow"') -Details ($jsonRead.Trim())
+
+    $keysConv = "v44-unsliced-keys-$(Get-Random)"
+    $keysLog = Join-Path $tempTestDir "v44-unsliced-keys.jsonl"
+    $env:AGENT_GUARD_LOG = $keysLog
+    $keysDeny = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = @{ path = $crawlFile }
+        conversationId  = $keysConv
+    }
+    $keysText = if (Test-Path $keysLog) { Get-Content -Raw -Path $keysLog } else { "" }
+    Assert-Test -Name "v4.4 unsliced Cursor Read deny logs arg_keys" -Condition ($keysDeny -match '"decision":\s*"deny"' -and $keysText -match '"arg_keys"') -Details ($keysDeny.Trim() + $keysText)
+    $env:AGENT_GUARD_LOG = $v44Log
 
     $crawlLog = if (Test-Path $v44Log) { Get-Content -Raw -Path $v44Log } else { "" }
     Assert-Test -Name "v4.4 session-log records crawl=true" -Condition ($crawlLog -match '"crawl":\s*true') -Details $v44Log

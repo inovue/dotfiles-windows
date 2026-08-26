@@ -39,7 +39,8 @@ Graph-first walls (v4):
                 the same file is the pinpoint escape. A second file without
                 graph contact is one-strike denied per path.
  - BATCH-END  : stop/sessionEnd injects a one-shot follow-up if edits happened
-                without `just update-graph` and `just audit`.
+                without `just update-graph` and `just audit`, or if docs/images
+                were edited without `just semantic-merge`.
  - SESSION LOG: append-only JSONL at graphify-out/session-log.jsonl (ground truth
                 for later performance review; never a substitute for tests).
  - CONV-ID (v4.1): payload session keys first; never getppid() (Windows hook
@@ -97,7 +98,7 @@ Token-efficiency walls (v4.4):
    one-strike denied — the N-slice bypass of the unsliced cap. Cursor/Claude
    `limit` is a count; Antigravity StartLine/EndLine are inclusive bounds.
    Known limit: shell paging (bat -r, Get-Content, sed -n) is not counted.
- - WAIT FLOOR : finite `just audit|test|sync-rules|check-rules|update-graph|deploy`
+ - WAIT FLOOR : finite `just audit|test|sync-rules|check-rules|update-graph|deploy|semantic-prepare|semantic-merge`
    with an explicit short wait or background flag is one-strike denied. Dev
    servers and `just watch` are excluded. Wait-tool polling (AwaitShell /
    schedule / manage_task status / BashOutput) is allow+guidance, never deny.
@@ -225,13 +226,23 @@ SAVE_RESULT_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rtk\s+)?(?:graphify\s+save-result\b|just\s+remember\b)",
     re.IGNORECASE,
 )
+SEMANTIC_MERGE_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+semantic-merge\b|"
+    r"graphify_semantic\.py\s+merge\b)",
+    re.IGNORECASE,
+)
+SEMANTIC_EDIT_SUFFIXES = (
+    ".md", ".markdown", ".rst", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf",
+)
+POINTER_MAX_LINES = 5
+POINTER_NEEDLE = "@AGENTS.md"
 UNANCHORED_SEARCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rg\b|fd\b|grep\b)",
     re.IGNORECASE,
 )
 FINITE_BATCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rtk\s+)?just\s+"
-    r"(?:audit|test|sync-rules|check-rules|update-graph|deploy)\b",
+    r"(?:audit|test|sync-rules|check-rules|update-graph|deploy|semantic-prepare|semantic-merge)\b",
     re.IGNORECASE,
 )
 WATCHER_RE = re.compile(
@@ -643,6 +654,8 @@ def fresh_state() -> dict:
         "did_update_graph": False,
         "did_audit": False,
         "did_save_result": False,
+        "edited_semantic": False,
+        "did_semantic_merge": False,
         "last_edit": None,
         "logged_keys": False,
         "wait_streak": 0,
@@ -709,7 +722,8 @@ def _merge_states(disk: dict, incoming: dict) -> dict:
     strikes.update(incoming.get("strikes") or {})
     out["strikes"] = strikes
     for flag in ("graph_contact", "edited", "did_update_graph", "did_audit",
-                 "did_save_result", "logged_keys"):
+                 "did_save_result", "logged_keys", "edited_semantic",
+                 "did_semantic_merge"):
         out[flag] = bool(disk.get(flag)) or bool(incoming.get(flag))
     # Ephemeral metric flags: the writer of this save owns the value.
     out["thrash_hit"] = bool(incoming.get("thrash_hit"))
@@ -806,6 +820,8 @@ def record_shell_graph_events(cmd: str, state: dict) -> None:
         state["did_audit"] = True
     if SAVE_RESULT_RE.search(cmd):
         state["did_save_result"] = True
+    if SEMANTIC_MERGE_RE.search(cmd):
+        state["did_semantic_merge"] = True
 
 
 def _truthy(v) -> bool:
@@ -1165,6 +1181,20 @@ def _edit_target(args: dict) -> str:
     )
 
 
+def _is_agents_pointer_doc(target: str) -> bool:
+    """Workspace CLAUDE.md @AGENTS.md pointers are not semantic docs."""
+    path = Path(str(target))
+    if path.name.lower() != "claude.md":
+        return False
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return False
+    if POINTER_NEEDLE not in text:
+        return False
+    return len(text.splitlines()) <= POINTER_MAX_LINES
+
+
 def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) -> dict:
     """v4 edit-gate: require graph contact before the first edit; pinpoint = one file."""
     target = _edit_target(args)
@@ -1205,6 +1235,9 @@ def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) ->
                 )
 
     state["edited"] = True
+    suffix = Path(str(target)).suffix.lower()
+    if suffix in SEMANTIC_EDIT_SUFFIXES and not _is_agents_pointer_doc(str(target)):
+        state["edited_semantic"] = True
     if target not in files:
         files.append(target)
     state["edit_files"] = files
@@ -1223,6 +1256,7 @@ def inspect_batch_end(conv_id: str) -> dict:
     updated = bool(state.get("did_update_graph"))
     audited = bool(state.get("did_audit"))
     result = allow()
+    msgs = []
     if edited and (not updated or not audited):
         missing = []
         if not updated:
@@ -1242,11 +1276,19 @@ def inspect_batch_end(conv_id: str) -> dict:
                 "\"<question>\" \"<answer>\"` (graphify save-result) so the next "
                 "update turns this session's findings into graph nodes."
             )
-        if first_strike(state, "batch-end"):
-            result["reason"] = msg
-            result["followup_message"] = msg
-            result["additional_context"] = msg
-            result["agent_message"] = msg
+        msgs.append(msg)
+    if state.get("edited_semantic") and not state.get("did_semantic_merge"):
+        msgs.append(
+            "Agent Guard [Batch End]: docs/images edited this session but "
+            "`just semantic-merge` was not run. Load skill `graphify-builder`, "
+            "then `just semantic-prepare` / `just semantic-merge`."
+        )
+    if msgs and first_strike(state, "batch-end"):
+        combined = " ".join(msgs)
+        result["reason"] = combined
+        result["followup_message"] = combined
+        result["additional_context"] = combined
+        result["agent_message"] = combined
         save_state(conv_id, state)
         return result
     save_state(conv_id, state)

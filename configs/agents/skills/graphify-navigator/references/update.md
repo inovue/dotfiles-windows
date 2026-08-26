@@ -1,43 +1,39 @@
-# Reference: Freshness — update / check-update / watch / extract
+# Reference: Freshness — update / check-update / watch / builder
 
-> Adapted from upstream `Graphify-Labs/graphify` v8 (`skills/claude/references/update.md`
-> blob 3632fd4, `hooks.md` blob 438b8b1, `add-watch.md`, tree 43d54ac). Condensed.
+> Engine commands come from Graphify-Labs/graphify. Semantic judgment is
+> session-bound (skill `graphify-builder`), not `graphify extract`.
 
 ## Which command when
 
 | Situation | Command | LLM? |
 | :--- | :--- | :--- |
-| Edited code this batch | `just update-graph` (`graphify update .`) | No — AST re-extract, seconds |
-| Committed / checked out / merged | nothing — git hooks (`graphify hook install`) fire automatically | No |
-| Docs, images, or memory/ changed | `just update-semantic` (`graphify extract .`) | Yes — headless semantic extraction |
-| Want to know if semantic re-extraction is pending | `just check-semantic` (`graphify check-update .`) | No — reads needs_update flag |
-| Long session, want zero-thought freshness | `just watch` (see below) | AST auto; semantic per env var |
+| Edited code this batch | `just update-graph` (`graphify update . --force` + rehydrate) | No |
+| Committed / checked out / merged | git hooks rebuild AST only and may no-op (shrink-guard) while INFERRED nodes exist. Recover with `just update-graph` (`--force` + rehydrate). | No (AST). Cached semantic is rehydrated on `just update-graph` / `just lessons` |
+| Docs, images changed; prepare lists uncached files | skill `graphify-builder` → `just semantic-merge` | Yes — **this session's model only** |
+| Want to know if semantic re-extraction is pending | `just check-semantic` (needs_update **and** SHA-uncached list) / `just semantic-prepare` | No |
+| Long session, want AST freshness | `just watch` (`graphify watch .`) | No |
 
 ## Incremental logic (upstream `detect_incremental`)
 
-- **Code-only diffs** → fast path: AST re-extraction of changed files, graph
-  rewritten in place. This never requires an LLM and is safe to run per batch.
-- **Docs / images / new URL content** → AST alone cannot capture semantics; the
-  engine sets a `needs_update` flag instead of silently degrading the graph.
-  `check-update` reports it (cron-safe exit codes); `extract` clears it.
+- **Code-only diffs** → fast path: AST re-extraction of changed files. `just update-graph` passes `--force` (INFERRED nodes make AST-only rebuilds look like shrink) then rehydrates cached semantic so INFERRED edges are not wiped.
+- **Docs / images** → AST alone cannot capture semantics; the engine sets a `needs_update` flag. Clear it with builder + `just semantic-merge`, not `graphify extract`.
 - `--force` / `GRAPHIFY_FORCE=1` bypasses the manifest gate and semantic cache.
 
-## Watch mode (this harness: `just watch` → `scripts/graph_watch.ps1`)
+## Watch mode
 
-- Runs `graphify watch . --debounce 3`: rebuilds AST graph on every code change.
-- Semantic escalation is two-tier via `GRAPHIFY_SEMANTIC_AUTO`:
-  - unset (default): needs_update is only reported (audit + batch end notice).
-  - `1`: the watcher auto-runs `just update-semantic` when the flag appears
-    (uncapped LLM cost mode — deliberate opt-in).
+`just watch` is `graphify watch . --debounce 3`: AST rebuilds on code changes.
+Doc changes only set `needs_update`. There is no auto-LLM and no
+`GRAPHIFY_SEMANTIC_AUTO`.
 
 ## Git hooks
 
-`graphify hook install` (rerun after upgrades) installs post-commit, post-checkout
-and a merge driver — all AST-only, so they are fast and never call an LLM. The
-`just install-graph-hook` recipe remains the one-per-clone entry point.
+`graphify hook install` (rerun after upgrades) installs post-commit,
+post-checkout and a merge driver — AST-only, no `--force`, no rehydrate.
+After a commit that follows a semantic merge, the hook may refuse to write
+(shrink-guard). Do not patch the vendor hook; run `just update-graph` to
+recover. `just install-graph-hook` remains the one-per-clone entry point.
 
-## LLM backend for `extract`
+## LLM for semantic
 
-Uses keys from `just setup-keys` (OpenAI-compatible: set `OPENAI_BASE_URL` for
-LM Studio / vLLM; Anthropic-compatible endpoints also supported). Tune with
-`--token-budget`, `--max-concurrency` (set 1 for local LLMs), `--api-timeout`.
+The host coding agent. Never a second API key path for this harness.
+`just setup-keys` is unrelated (other tools).

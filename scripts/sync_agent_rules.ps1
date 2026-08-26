@@ -10,7 +10,7 @@
     - Workspace:   CLAUDE.md (@AGENTS.md pointer), .agents/mcp_config.json (gitignored)
     アンチ重複: ワークスペースの .cursorrules / .cursor/rules/graphify.mdc は
     常時コンテキストの多重ロード源となるため存在すれば除去します。
-    vendor の広義 graphify スキルは除去し、graphify-navigator を SSOT とします。
+    vendor の広義 graphify スキルは除去し、graphify-navigator / graphify-builder を SSOT とします。
 .PARAMETER Check
     同期せず差分のみ検査（終了コード 0: 一致, 1: 差分あり）。
 #>
@@ -29,6 +29,7 @@ $masterClaudeProjectPointer = Join-Path $configsDir "agents\claude\CLAUDE.projec
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
+$masterGraphifyBuilderDir = Join-Path $configsDir "agents\skills\graphify-builder"
 $masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
 $masterClaudeSettings = Join-Path $configsDir "agents\claude\settings.json"
@@ -400,6 +401,10 @@ $allTargets = @(
     @{ Name = "Claude Code Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Cursor Global Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Agents Skills Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator";        IsDir = $true },
+    @{ Name = "Antigravity Global Graphify-Builder"; Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-builder"; IsDir = $true },
+    @{ Name = "Claude Code Global Graphify-Builder"; Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-builder";        IsDir = $true },
+    @{ Name = "Cursor Global Graphify-Builder";      Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-builder";        IsDir = $true },
+    @{ Name = "Agents Skills Graphify-Builder";      Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-builder";        IsDir = $true },
     @{ Name = "Antigravity Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "rtk-expert";           IsDir = $true },
     @{ Name = "Claude Code Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "Cursor Global RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "rtk-expert";                  IsDir = $true },

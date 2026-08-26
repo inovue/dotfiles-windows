@@ -25,6 +25,7 @@ test:
     @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
     @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
     @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_agent_guard.ps1
+    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_semantic_harness.ps1
 
 # Run the 4-phase unified workspace audit (Tests, SSOT sync, Graph topology, Junk scan)
 audit:
@@ -54,10 +55,13 @@ checkpoint:
 rollback:
     @$latest = (git branch --list 'checkpoint-*' | ForEach-Object { $_.Trim().TrimStart('* ') } | Sort-Object -Descending | Select-Object -First 1); if ($latest) { git reset --hard $latest; Write-Host "[OK] Rolled back to latest checkpoint: $latest" -ForegroundColor Green } else { Write-Warning 'No checkpoint branches found to rollback to.' }
 
-# Refresh knowledge graph (AST code-only update). Stamp graph.json mtime even
-# when topology is unchanged, so audit freshness compares against this batch.
+# Refresh knowledge graph (AST code-only update), then rehydrate cached semantic
+# nodes if any. --force is required: INFERRED nodes make an AST-only rebuild
+# look like shrink, and the engine would otherwise refuse to write.
+# Stamp graph.json mtime even when topology is unchanged.
 update-graph:
-    @graphify update .
+    @graphify update . --force
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py rehydrate --force
     @if (Test-Path graphify-out/graph.json) { (Get-Item graphify-out/graph.json).LastWriteTime = Get-Date }
 
 # Install post-commit git hook that auto-rebuilds the knowledge graph on every commit
@@ -83,27 +87,34 @@ path source target:
 # Session start: refresh lessons from work-memory (deterministic) and print them
 lessons:
     @graphify reflect --if-stale
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py prepare
     @if (Test-Path graphify-out/reflections/LESSONS.md) { Get-Content graphify-out/reflections/LESSONS.md } else { Write-Host 'No lessons yet - save results with `just remember` to seed the loop.' -ForegroundColor DarkGray }
 
 # Save a Q&A result to work-memory (becomes a graph node on next update)
 remember question answer outcome="useful":
     @graphify save-result --question "{{question}}" --answer "{{answer}}" --type query --outcome {{outcome}}
 
-# Check whether semantic re-extraction is pending (needs_update flag, cron-safe)
+# Check semantic freshness: engine needs_update flag AND SHA-uncached docs
 check-semantic:
     @graphify check-update .
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py prepare --quiet-if-clean
 
-# Watch the workspace: auto AST updates; semantic escalation via GRAPHIFY_SEMANTIC_AUTO=1
+# List uncached docs/images for skill graphify-builder (no LLM)
+semantic-prepare:
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py prepare
+
+# Merge agent-written .graphify_semantic.json + cache into graph.json (no LLM)
+semantic-merge:
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py merge
+
+# Watch the workspace: AST-only rebuilds on code changes (no LLM)
 watch:
-    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/graph_watch.ps1
+    @graphify watch . --debounce 3
 
-# Full semantic re-extraction incl. docs/memory (headless LLM; keys via `just setup-keys`)
-update-semantic:
-    @graphify extract .
-
-# Summarize session-log.jsonl deny rate and read-after-edit (thrash) rate
+# Summarize session-log.jsonl deny rate plus semantic uncached / INFERRED counts
 session-report:
     @python scripts/report_session_log.py
+    @uv tool run --from graphifyy python ./scripts/graphify_semantic.py status
 
 # Show RTK LLM token reduction analytics dashboard
 rtk-gain:

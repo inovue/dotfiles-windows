@@ -2,7 +2,7 @@
 
 > Always-on rules for all coding agents (Antigravity, Cursor Agent, Claude Code, Codex) on this Windows machine.
 > This layer holds only facts and invariants. Procedures live in on-demand skills — load one instead of guessing:
-> `graphify-navigator` (graph tool schemas & navigation protocol), `modern-cli-expert` (AST/CLI recipes), `rtk-expert` (token proxy), `browser-agent` (Chrome automation).
+> `graphify-navigator` (graph query protocol), `graphify-builder` (session-bound semantic extract), `modern-cli-expert` (AST/CLI recipes), `rtk-expert` (token proxy), `browser-agent` (Chrome automation).
 
 ## Core Invariants
 
@@ -16,7 +16,7 @@
 - **Finite jobs wait in-tool**: terminating commands (`just audit`, `just test`, `just sync-rules`, `just check-rules`, `just update-graph`, `just deploy`) wait in the original shell call. Do not background them and poll for completion. Dev servers and `just watch` are the exception.
 - **Edit verification**: treat an edit tool's success snippet as verification; do not re-read the same file immediately after. Re-read only on edit failure, ambiguous result, or external rewrite (hook/formatter).
 - **Content-addressed edits**: prefer old/new string edits. When only a line-numbered tool is available, discover all target line ranges in one pass (`rg -n -e 'a' -e 'b' <f>`), then apply same-file multi-edits Bottom-Up (highest line first) without intermediate re-reads.
-- **Guarantees live in hooks**: `agent_guard.py` v4.4 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, **cumulative sliced reads of one file >300 lines**, finite-batch jobs with an explicit short wait / background flag, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`. Short-wait polling tools get allow+guidance, never deny. Retry always passes — the guard can never deadlock the loop.
+- **Guarantees live in hooks**: `agent_guard.py` v4.4 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, **cumulative sliced reads of one file >300 lines**, finite-batch jobs with an explicit short wait / background flag, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`, or docs/images lack `just semantic-merge`. Short-wait polling tools get allow+guidance, never deny. Retry always passes — the guard can never deadlock the loop.
 - **Finish with structure**: end turns with a concise structured markdown answer, never bare tool output.
 
 ## Graph-First Navigation (when `graphify-out/graph.json` exists)
@@ -30,7 +30,7 @@
 - **Re-invoke mid-stream**: before designing a new function/task, when syncing cross-layer files, and when a symbol lookup fails — Graphify is a continuous loop, not a one-shot entry gate.
 - **Strict params**: `query_graph(question=…, token_budget=1200, project_path=<workspace root>)`, `get_node(label=…)`, `get_neighbors(label=…)` — never `query`/`name`. Full schemas: skill `graphify-navigator`. Always pass `project_path` on MCP calls. If MCP returns `graph.json not found` or a home-directory path, do not retry MCP — run `just graph` / `just hubs` once. Never pin this repo's `graph.json` into user-global MCP. MCP contact is recorded on Cursor (`beforeMCPExecution` / `CallDynamicTool` / `MCP:<tool>`), Claude Code (`mcp__graphify__.*` PreToolUse), and Antigravity (`call_mcp_tool`); Windows Claude PreToolUse-on-MCP is flaky, so the query-log fallback covers all three.
 - **Memory loop**: session start `just lessons`; after answering an architecture/impact question `just remember "<q>" "<a>"` (wrong earlier answer: `graphify save-result --outcome corrected`). Saved results become graph nodes on the next update — this is how semantic knowledge accumulates.
-- **Freshness**: the post-commit hook (`just install-graph-hook`) rebuilds the graph on every commit; `just update-graph` covers uncommitted work. `just check-semantic` reports pending semantic re-extraction (docs/images/memory); clear it with `just update-semantic`, or `just watch` (set `GRAPHIFY_SEMANTIC_AUTO=1` to auto-run the LLM pass).
+- **Freshness**: the post-commit hook (`just install-graph-hook`) rebuilds AST on every commit; `just update-graph` covers uncommitted work and rehydrates cached semantic nodes. `just check-semantic` / `just semantic-prepare` report pending docs/images; clear them with skill `graphify-builder` then `just semantic-merge` (session model only — never `graphify extract`).
 - **Wide nav**: if `graphify-out/wiki/index.md` exists, use it for broad orientation before hub expansion.
 
 ## Tool Quick Map

@@ -81,9 +81,10 @@ just graph "how does deploy work?"
 just hubs
 just neighbors "scripts_sync_agent_rules"
 just path "04_setup_configs.ps1" "Deploy-WindowsTerminalConfig()"
-just update-graph          # once per edit batch (AST-only, no LLM)
+just update-graph          # once per edit batch (AST + cached semantic rehydrate)
 just remember "<question>" "<answer>"   # after answering an architecture question
-just check-semantic        # is semantic re-extraction pending? (needs_update flag)
+just check-semantic        # needs_update flag (docs/images pending)
+just semantic-prepare      # list uncached docs — then skill graphify-builder
 ```
 
 ## References (sidecar — load on demand, do not inline)
@@ -92,7 +93,8 @@ just check-semantic        # is semantic re-extraction pending? (needs_update fl
 | :--- | :--- |
 | Graph query returned 0 hits / cross-language vocab / >2000 nodes | `references/query.md` (constrained query expansion) |
 | Saving results, reflect, LESSONS, outcome vocabulary | `references/memory.md` (work-memory loop) |
-| update vs check-update vs watch vs extract, git hooks, LLM backends | `references/update.md` (freshness) |
+| update vs check-update vs watch vs builder, git hooks | `references/update.md` (freshness) |
+| Pending docs/images (INFERRED layer) | skill `graphify-builder` |
 
 ## Memory loop (semantic nodes accumulate automatically)
 

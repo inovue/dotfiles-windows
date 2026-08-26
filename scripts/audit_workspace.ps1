@@ -26,6 +26,7 @@ $rootDir = Split-Path -Parent $PSScriptRoot
 $testsScript = Join-Path $rootDir "tests\verify_tools.ps1"
 $secScript  = Join-Path $rootDir "tests\verify_security.ps1"
 $guardTestScript = Join-Path $rootDir "tests\verify_agent_guard.ps1"
+$semanticTestScript = Join-Path $rootDir "tests\verify_semantic_harness.ps1"
 $syncScript  = Join-Path $rootDir "scripts\sync_agent_rules.ps1"
 $graphJson   = Join-Path $rootDir "graphify-out\graph.json"
 
@@ -97,6 +98,20 @@ if (Test-Path $guardTestScript) {
     }
 } else {
     Write-Warning "[FAIL] tests/verify_agent_guard.ps1 is missing."
+    $auditFailed = $true
+}
+
+Write-Host "`n[Audit Phase 1d/4] Running Semantic Graph Harness Suite..." -ForegroundColor White
+if (Test-Path $semanticTestScript) {
+    $semProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $semanticTestScript -NoNewWindow -Wait -PassThru
+    if ($semProc.ExitCode -ne 0) {
+        Write-Warning "[FAIL] Semantic graph harness tests failed (ExitCode: $($semProc.ExitCode))."
+        $auditFailed = $true
+    } else {
+        Write-Host "[PASS] Phase 1d: Semantic graph harness suite passed." -ForegroundColor Green
+    }
+} else {
+    Write-Warning "[FAIL] tests/verify_semantic_harness.ps1 is missing."
     $auditFailed = $true
 }
 
@@ -199,13 +214,22 @@ if (Test-Path $graphJson) {
             Write-Host "  -> Session log: $($slogLines.Count) events, $graphN graph-contact, $denyN denies" -ForegroundColor Gray
         }
 
-        # Semantic freshness: code-only updates cannot clear docs/image changes (needs_update flag)
+        # Semantic freshness: engine needs_update flag AND SHA-uncached docs
         try {
             $checkOut = (& graphify check-update . 2>&1 | Out-String)
-            if ($LASTEXITCODE -ne 0 -or $checkOut -match "(?i)needs[_ -]?update|pending") {
-                Write-Warning "[WARN] Semantic re-extraction pending (docs/images/memory changed). Run ``just update-semantic`` (or ``just watch`` with GRAPHIFY_SEMANTIC_AUTO=1)."
+            $flagPending = ($LASTEXITCODE -ne 0 -or $checkOut -match "(?i)needs[_ -]?update|pending")
+            & uv tool run --from graphifyy python ./scripts/graphify_semantic.py prepare --quiet-if-clean | Out-Null
+            $uncachedFile = Join-Path $rootDir "graphify-out\.graphify_uncached.txt"
+            $uncachedN = 0
+            if (Test-Path $uncachedFile) {
+                $uncachedN = @((Get-Content -Path $uncachedFile -ErrorAction SilentlyContinue) | Where-Object { $_.Trim() }).Count
+            }
+            if ($flagPending) {
+                Write-Warning "[WARN] Semantic re-extraction pending (docs/images changed). Load skill ``graphify-builder`` then ``just semantic-prepare`` / ``just semantic-merge``."
+            } elseif ($uncachedN -gt 0) {
+                Write-Warning "[WARN] Semantic SHA cache: $uncachedN uncached doc(s). Load skill ``graphify-builder`` then ``just semantic-merge``."
             } else {
-                Write-Host "  -> Semantic freshness: no pending re-extraction (check-update clean)" -ForegroundColor Gray
+                Write-Host "  -> Semantic freshness: SHA cache warm, check-update clean" -ForegroundColor Gray
             }
         } catch {
             Write-Host "  -> Semantic freshness: check-update unavailable ($_)" -ForegroundColor DarkGray

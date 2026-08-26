@@ -51,7 +51,7 @@ dotfiles-windows/
 │   ├── Assert-PinnedHash.ps1       # 🔒 バイナリダウンロードの SHA256 ピン & TOFU 整合性検証
 │   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse フック v4.4)
 │   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査・クリーンアップスクリプト
-│   ├── graph_watch.ps1             # 👁️ 知識グラフ AST 自動更新 & セマンティック監視スクリプト
+│   ├── graphify_semantic.py        # セッション結束セマンティック prepare/merge/rehydrate
 │   ├── report_session_log.py       # 📊 セッションログのトークン節約・deny率・Thrash発生状況の集計レポート
 │   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 AI Agent ルール＆スキルの高速一括同期 (正本 -> 全グローバル/ワークスペース)
@@ -118,8 +118,9 @@ dotfiles-windows/
 | `just path <a> <b>` | 2つのコンポーネント間の最短呼び出し/依存パスを探索 | 依存関係・リファクタ影響調査 |
 | `just lessons` | 🧠 ワークメモリ（`LESSONS.md`）から過去の教訓・リフレクションを表示 | セッション開始時のルーティン |
 | `just remember <q> <a>` | 💾 調査・設計結果をワークメモリに保存（次回グラフ更新時にノード化） | アーキテクチャ質問の回答後 |
-| `just check-semantic` | 🔍 ドキュメント/画像/メモリのセマンティック再抽出保留を検知 | 状態確認・CI検証時 |
-| `just update-semantic` | 🚀 ヘッドレス LLM によるドキュメント/メモリのフルセマンティック抽出 | ドキュメント大幅追加時 |
+| `just check-semantic` | ドキュメント/画像のセマンティック再抽出保留を検知 | 状態確認・CI検証時 |
+| `just semantic-prepare` | 未キャッシュ docs を列挙（LLM なし） | セッション開始・ドキュメント編集後 |
+| `just semantic-merge` | エージェント JSON + cache を graph.json に結合 | skill `graphify-builder` の後 |
 | `just watch` | 👁️ ファイル変更を監視し AST 更新・セマンティック抽出を自動追従 | バックグラウンド作業時 |
 | `just update-graph`| 高速 AST 解析によりナレッジグラフ（`graphify-out/`）を更新 | 編集バッチ完了時 |
 | `just install-graph-hook`| コミット時に自動で知識グラフを再構築する post-commit フックを登録 | リポジトリ初回クローン時 |
@@ -167,7 +168,7 @@ just install
 | `just sync-rules` | AI Agent ルール＆スキルのみを高速一括同期 (`.\scripts\sync_agent_rules.ps1`) |
 | `just setup-keys` | AI Agent & Graphify 用 API キーの安全な対話型登録 (`.\scripts\setup_api_keys.ps1`) |
 | `just lessons` | 🧠 ワークメモリから過去の教訓・リフレクションを読み込み表示 (`graphify reflect --if-stale`) |
-| `just watch` | 👁️ ファイル変更を監視し知識グラフをバックグラウンド自動追従 (`.\scripts\graph_watch.ps1`) |
+| `just watch` | ファイル変更を監視し AST グラフをバックグラウンド自動追従 (`graphify watch .`) |
 | `just audit` | 🌟 4フェーズ統合監査（テスト+SSOT同期+グラフ健全性+ゴミ検知）の実行 (`.\scripts\audit_workspace.ps1`) |
 | `just clean` | 一時ファイル・古いバックアップ（`*.bak`）・キャッシュの一括消去 (`.\scripts\audit_workspace.ps1 -Clean`) |
 | `just test` | 環境全体の整合性・ツール動作確認・セキュリティ回帰・Agent Guard 回帰テスト (`.\tests\verify_tools.ps1` + `verify_security.ps1` + `verify_agent_guard.ps1`) |
@@ -201,7 +202,7 @@ just install
 4. **Gated Graphify & ワークメモリ・自己進化ループ**:
    - 知識グラフツール（`graphify` / `graphify-mcp`）は、対象プロジェクトに `graphify-out/graph.json` が存在する場合のみ利用（通常プロジェクトでの無駄な全走査やトークン消費を防止）。
    - **自己進化ワークメモリ**: セッション開始時に `just lessons` で教訓を読み込み、アーキテクチャ回答後に `just remember "<q>" "<a>"` で知見を蓄積して次回グラフ更新時に自動ノード化。
-   - **自動追従**: `just watch`（`scripts/graph_watch.ps1`）による AST 自動更新、および `GRAPHIFY_SEMANTIC_AUTO=1` によるセマンティック抽出（LLM）のシームレス連携。
+   - **自動追従**: `just watch`（`graphify watch .`）による AST 自動更新。セマンティック層はセッション中の skill `graphify-builder`（`just semantic-prepare` / `just semantic-merge`）。
 5. **段階的開示スキル (Progressive Disclosure)**:
    - `browser-agent`: 実 Google Chrome + Playwright によるログインセッション維持・動的SPAスクレイピング。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。

@@ -465,6 +465,134 @@ print(prev)
     }
     Assert-Test -Name "v4.3 batch-end omits nudge after just remember ran" -Condition ($srStop2 -notmatch 'just remember') -Details ($srStop2.Trim())
 
+    # --- semantic batch-end: docs/images require graphify-builder merge
+    $semConv = "v43-sem-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just hubs" } }
+        conversationId = $semConv
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "doc.md") } }
+        conversationId = $semConv
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just update-graph" } }
+        conversationId = $semConv
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit" } }
+        conversationId = $semConv
+    }
+    $semStop = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $semConv
+    }
+    Assert-Test -Name "v4.4 batch-end warns when docs edited without semantic-merge" -Condition ($semStop -match 'graphify-builder' -and $semStop -match 'semantic-merge') -Details ($semStop.Trim())
+
+    $semConv2 = "v43-sem2-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just hubs" } }
+        conversationId = $semConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root "doc2.md") } }
+        conversationId = $semConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just update-graph" } }
+        conversationId = $semConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit" } }
+        conversationId = $semConv2
+    }
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just semantic-merge" } }
+        conversationId = $semConv2
+    }
+    $semStop2 = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $semConv2
+    }
+    Assert-Test -Name "v4.4 batch-end omits semantic warn after just semantic-merge" -Condition ($semStop2 -notmatch 'graphify-builder') -Details ($semStop2.Trim())
+
+    # --- Cross-harness Stop/sessionEnd: Cursor, Claude Code, Antigravity CLI
+    function Invoke-SemanticPendingSession {
+        param([string]$Conv, [string]$DocName)
+        $null = Invoke-GuardHook @{
+            toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just hubs" } }
+            conversationId = $Conv
+        }
+        $null = Invoke-GuardHook @{
+            toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = (Join-Path $v43Root $DocName) } }
+            conversationId = $Conv
+        }
+        $null = Invoke-GuardHook @{
+            toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just update-graph" } }
+            conversationId = $Conv
+        }
+        $null = Invoke-GuardHook @{
+            toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit" } }
+            conversationId = $Conv
+        }
+    }
+
+    $savedClaudeDir = $env:CLAUDE_PROJECT_DIR
+    Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+
+    $curConv = "v44-sem-cursor-$(Get-Random)"
+    Invoke-SemanticPendingSession -Conv $curConv -DocName "cursor.md"
+    $curStop = Invoke-GuardHook @{
+        hook_event_name = "sessionEnd"
+        cursor_version  = "1.0"
+        conversationId  = $curConv
+    }
+    Assert-Test -Name "Cursor sessionEnd warns graphify-builder after docs edit" -Condition (
+        $curStop -match 'graphify-builder' -and $curStop -match 'semantic-merge'
+    ) -Details ($curStop.Trim())
+
+    $env:CLAUDE_PROJECT_DIR = $v43Root
+    $ccConvSem = "v44-sem-claude-$(Get-Random)"
+    Invoke-SemanticPendingSession -Conv $ccConvSem -DocName "claude.md"
+    $ccStop = Invoke-GuardProc @{
+        hook_event_name = "Stop"
+        permission_mode = "default"
+        conversationId  = $ccConvSem
+    }
+    Assert-Test -Name "Claude Code Stop decision:block includes graphify-builder" -Condition (
+        $ccStop.stdout -match '"decision":\s*"block"' -and
+        $ccStop.stdout -match 'graphify-builder' -and
+        $ccStop.stdout -match 'semantic-merge'
+    ) -Details ($ccStop.stdout)
+
+    Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+    $agyConv = "v44-sem-agy-$(Get-Random)"
+    Invoke-SemanticPendingSession -Conv $agyConv -DocName "antigravity.md"
+    $agyStop = Invoke-GuardHook @{
+        hook_event_name = "Stop"
+        conversationId  = $agyConv
+    }
+    Assert-Test -Name "Antigravity Stop followup includes graphify-builder" -Condition (
+        $agyStop -match 'graphify-builder' -and $agyStop -match 'semantic-merge'
+    ) -Details ($agyStop.Trim())
+
+    [System.IO.File]::WriteAllText(
+        (Join-Path $v43Root "CLAUDE.md"),
+        "@AGENTS.md`n",
+        [System.Text.Encoding]::UTF8
+    )
+    $ptrConv = "v44-sem-pointer-$(Get-Random)"
+    Invoke-SemanticPendingSession -Conv $ptrConv -DocName "CLAUDE.md"
+    $ptrStop = Invoke-GuardHook @{
+        hook_event_name = "stop"
+        conversationId  = $ptrConv
+    }
+    Assert-Test -Name "v4.4 batch-end omits semantic warn for CLAUDE.md pointer" -Condition (
+        $ptrStop -notmatch 'graphify-builder'
+    ) -Details ($ptrStop.Trim())
+
+    if ($savedClaudeDir) { $env:CLAUDE_PROJECT_DIR = $savedClaudeDir }
+
     # --- v4.4: cumulative sliced-line cap (closes the N-slice bypass of the 300-line cap)
     $v44Root = Join-Path $tempTestDir "v44_root"
     $v44Graph = Join-Path $v44Root "graphify-out"

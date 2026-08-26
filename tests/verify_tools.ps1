@@ -176,6 +176,7 @@ $configFiles = @(
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Master graphify-builder Skill";               Path = Join-Path $rootDir "configs\agents\skills\graphify-builder\SKILL.md" }
     @{ Name = "Master rtk-expert Skill";                     Path = Join-Path $rootDir "configs\agents\skills\rtk-expert\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
     @{ Name = "Master Claude settings";                      Path = Join-Path $rootDir "configs\agents\claude\settings.json" }
@@ -200,6 +201,10 @@ $configFiles = @(
     @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Cursor Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Agents Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator\SKILL.md" }
+    @{ Name = "Antigravity Global Skill (graphify-builder)";  Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-builder\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (graphify-builder)";  Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-builder\SKILL.md" }
+    @{ Name = "Cursor Global Skill (graphify-builder)";     Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-builder\SKILL.md" }
+    @{ Name = "Agents Global Skill (graphify-builder)";     Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-builder\SKILL.md" }
     @{ Name = "Antigravity Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\rtk-expert\SKILL.md" }
     @{ Name = "Claude Code Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".claude\skills\rtk-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert\SKILL.md" }

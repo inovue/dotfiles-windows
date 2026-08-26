@@ -76,9 +76,10 @@ def mm [
         return
     }
 
-    # Helper: Open in Default Browser
+    # Helper: Open in Default Browser (with XSS-safe DOM population)
     let open_web = {|content|
         let tmp_html = $"($env.TEMP)/mermaid_preview.html" | path expand
+        let json_content = ($content | to json)
         let template = "<!DOCTYPE html>
 <html>
 <head>
@@ -87,17 +88,24 @@ def mm [
   <script src='https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js'></script>
   <style>
     body { background: #1e1e2e; color: #cdd6f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 32px; display: flex; justify-content: center; align-items: center; min-height: 90vh; }
-    .mermaid { background: #181825; padding: 32px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #313244; max-width: 95vw; overflow: auto; }
+    .mermaid-box { background: #181825; padding: 32px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #313244; max-width: 95vw; overflow: auto; }
   </style>
 </head>
 <body>
-  <div class='mermaid'>
-__MERMAID_CONTENT__
+  <div class='mermaid-box'>
+    <div id='mermaid-target'></div>
   </div>
-  <script>mermaid.initialize({startOnLoad: true, theme: 'dark', securityLevel: 'strict'});</script>
+  <script>
+    const diagramCode = __MERMAID_CONTENT_JSON__;
+    const target = document.getElementById('mermaid-target');
+    target.textContent = diagramCode;
+    target.className = 'mermaid';
+    mermaid.initialize({startOnLoad: false, theme: 'dark', securityLevel: 'strict'});
+    mermaid.run({nodes: [target]});
+  </script>
 </body>
 </html>"
-        $template | str replace "__MERMAID_CONTENT__" $content | save -f $tmp_html
+        $template | str replace "__MERMAID_CONTENT_JSON__" $json_content | save -f $tmp_html
 
         # Open in system default browser
         ^cmd /c start "" ($tmp_html | str replace -a "/" "\\")
@@ -115,8 +123,10 @@ __MERMAID_CONTENT__
 
     # If --img is explicitly requested, render via Kroki + Chafa (with 3s timeout)
     if $img {
+        let kroki_base = ($env.KROKI_URL? | default "https://kroki.io")
         let tmp_png = $"($env.TEMP)/mermaid_render.png"
-        let res = (do { $mmd | ^curl.exe -s --connect-timeout 2 --max-time 3 -X POST https://kroki.io/mermaid/png -H "Content-Type: text/plain" --data-binary @- -o $tmp_png } | complete)
+        print $"[Mermaid] Rendering via ($kroki_base)... (do not submit confidential data)"
+        let res = (do { $mmd | ^curl.exe -s --connect-timeout 2 --max-time 3 -X POST $"($kroki_base)/mermaid/png" -H "Content-Type: text/plain" --data-binary @- -o $tmp_png } | complete)
         if ($tmp_png | path exists) and $res.exit_code == 0 {
             if (which chafa | is-not-empty) {
                 ^chafa $tmp_png

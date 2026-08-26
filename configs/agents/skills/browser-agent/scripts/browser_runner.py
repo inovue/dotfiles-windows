@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -202,7 +203,9 @@ async def main():
         temp_dir_obj = tempfile.TemporaryDirectory(prefix="chrome_agent_temp_")
         user_data_dir = Path(temp_dir_obj.name)
     else:
-        user_data_dir = PROFILES_BASE / args.profile
+        # Sanitize profile name to prevent path traversal
+        safe_profile = re.sub(r'[^a-zA-Z0-9_-]', '_', args.profile)
+        user_data_dir = PROFILES_BASE / safe_profile
         user_data_dir.mkdir(parents=True, exist_ok=True)
         cleanup_singleton_locks(user_data_dir)
 

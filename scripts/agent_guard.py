@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Agent Guard v2: Stability-First Deterministic Governor (PreToolUse lifecycle hook).
+Agent Guard v3: Stability-First Deterministic Governor (PreToolUse lifecycle hook).
 
 Validates tool invocations, enforces safety invariants, and limits token waste,
 while guaranteeing the agent loop can NEVER deadlock or spin on guard denials.
 
 Stability invariants (v2 hardening after Antigravity CLI field report):
- 1. FAIL-OPEN     : any internal error yields {"decision": "allow"}; exit code is always 0.
+ 1. GUARDED FAIL-OPEN: any internal error yields {"decision": "allow"} and exit code 0,
+                    BUT the raw payload is best-effort scanned against the destructive
+                    patterns first — a parse glitch can no longer smuggle a wipe through.
  2. ONE-STRIKE    : except for destructive commands, the same target is never denied
                     twice in a session. A guidance deny costs at most 1 tool call
                     and can never loop. Destructive commands stay hard-denied forever.
@@ -18,6 +20,16 @@ Stability invariants (v2 hardening after Antigravity CLI field report):
                     session's read budget (the v1 "default"-session starvation bug).
  5. EXACT RECOVERY: every deny message contains a concrete, copy-pastable next step
                     (exact slice bounds, exact rtk-prefixed command, exact CLI swap).
+
+Obfuscation resistance (v3 hardening after security review):
+ - Patterns are matched against the raw command AND an escape-stripped variant
+   (PowerShell backtick / cmd caret removed), defeating i`ex-style token splitting.
+ - Flag order is normalized via lookaheads (rd /q /s == rd /s /q, -f == --force).
+ - Encoded execution (powershell -enc/-e/-ec), Base64-decode-then-invoke, and
+   download-and-execute in BOTH pipe and argument form are hard-denied.
+ - NOT a sandbox: a determined injected payload can still evade any regex layer.
+   OS-level containment (non-admin agent account, harness approval flow) remains
+   the real boundary; this guard is a seatbelt against agent mistakes.
 """
 import sys
 import json
@@ -36,15 +48,76 @@ SLICE_HINT_SIZE = 300           # suggested slice height in deny guidance
 STATE_TTL_SECONDS = 2 * 60 * 60
 STATE_GC_SECONDS = 24 * 60 * 60
 
-# 1. Critical destructive patterns (Hard Deny, no one-strike escape)
+# 1. Critical destructive patterns (Hard Deny, no one-strike escape).
+# Matched case-insensitively against the raw command AND an escape-stripped
+# variant (see find_dangerous). Lookaheads make flag/argument order irrelevant.
+_STMT = r"[^\n;&|]*"  # stay inside one shell statement
+_BARE_ROOT = r"(?:\$env:USERPROFILE|\$HOME|~|[a-zA-Z]:)[\\/]?[\"']?\s*(?:$|[;&|,\s])"
+
 DANGEROUS_PATTERNS = [
+    # --- disk / volume destruction ---
     (r"\bformat\s+[a-zA-Z]:", "Disk formatting command detected"),
+    (r"\b(?:format-volume|clear-disk|initialize-disk|remove-partition)\b",
+     "PowerShell disk-destruction cmdlet detected"),
     (r"\bdiskpart\b", "Disk partitioning command detected"),
-    (r"\brmdir\s+/[sS]\s+/[qQ]\s+[cC]:\\(?:\s|$)", "Root drive recursive wipe detected"),
-    (r"\brm\s+-rf\s+/[*\s]*$", "Root filesystem wipe detected"),
-    (r"git\s+push\s+[^;|\n]*--force[^\n]*\b(?:main|master)\b", "Force push to protected branch blocked"),
-    (r"(?:curl|iwr|Invoke-WebRequest)[^\n|]*\|\s*(?:iex|Invoke-Expression)", "Unverified remote script execution pipe blocked"),
+
+    # --- recursive wipe of drive roots / user profile ---
+    # cmd.exe style: rmdir|rd with /s (any flag order) aimed at a bare drive root
+    (r"\b(?:rmdir|rd)\b(?=" + _STMT + r"\s/[sS]\b)" + _STMT +
+     r"\s[\"']?[a-zA-Z]:[\\/]?[\"']?\s*(?:$|[;&|])",
+     "Drive-root recursive wipe detected"),
+    # unix style: rm with any -r… flag combo aimed at /, /*, ~ or $HOME
+    (r"\brm\b(?=" + _STMT + r"\s-[a-zA-Z]*r)" + _STMT +
+     r"\s[\"']?(?:/\*?|~|\$HOME)[\"']?\s*(?:$|[;&|])",
+     "Root/home filesystem wipe detected"),
+    # PowerShell style: Remove-Item & aliases aimed at a BARE profile/drive root
+    # (deleting subdirectories like $env:USERPROFILE\.cache stays allowed)
+    (r"\b(?:remove-item|ri|rm|rd|del|erase)\b(?=" + _STMT + r"\s-[a-zA-Z]*r)"
+     r"(?=" + _STMT + r"[\s\"'(,]" + _BARE_ROOT + r")",
+     "User-profile/drive-root recursive wipe detected"),
+
+    # --- encoded / obfuscated execution ---
+    # powershell -enc/-en/-ec/-e … (parameter-prefix abbreviations included);
+    # scan stops at -File so trailing SCRIPT arguments cannot false-positive.
+    (r"\b(?:powershell|pwsh)(?:\.exe)?\b(?:(?!\s-[fF]ile\b)[^\n;&])*\s-(?:enc\w*|en|ec|e)\b",
+     "Encoded PowerShell execution (-EncodedCommand) blocked"),
+    # Base64 decode co-occurring with dynamic invocation (either order)
+    (r"frombase64string[^\n;&]*(?:\biex\b|invoke-expression|invoke-command|::create)"
+     r"|(?:\biex\b|invoke-expression|invoke-command|::create)[^\n;&]*frombase64string",
+     "Base64-decoded dynamic execution blocked"),
+
+    # --- download-and-execute (pipe AND argument form) ---
+    (r"\b(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n|]*\|[^\n;&]*"
+     r"\b(?:iex|invoke-expression)\b",
+     "Unverified remote script execution pipe blocked"),
+    (r"\b(?:iex|invoke-expression)\b" + _STMT +
+     r"(?:\biwr\b|\birm\b|\bcurl\b|\bwget\b|invoke-webrequest|invoke-restmethod"
+     r"|downloadstring|downloadfile|net\.webclient)"
+     r"|::create\([^\n;&]*(?:\biwr\b|\birm\b|invoke-webrequest|invoke-restmethod|downloadstring)",
+     "Unverified remote script execution (argument form) blocked"),
+
+    # --- git force push to protected branches (--force-with-lease stays allowed) ---
+    (r"git\s+push\b(?=" + _STMT + r"\s(?:--force\b(?!-)|-f\b))"
+     r"(?=" + _STMT + r"\b(?:main|master)\b(?![\w-]))",
+     "Force push to protected branch blocked (--force-with-lease is allowed)"),
 ]
+
+
+def strip_shell_escapes(text: str) -> str:
+    """PS backticks and cmd carets are transparent to the shell but opaque to
+    regexes (i`ex, for^mat). Strip them so the normalized variant is scannable."""
+    return re.sub(r"[`^]", "", text)
+
+
+def find_dangerous(text: str):
+    """Return the matched deny reason, or None. Scans raw + escape-stripped."""
+    if not text:
+        return None
+    for variant in (text, strip_shell_escapes(text)):
+        for pattern, reason in DANGEROUS_PATTERNS:
+            if re.search(pattern, variant, re.IGNORECASE):
+                return reason
+    return None
 
 # 2. Slow PowerShell cmdlets violating Modern CLI Invariants (one-strike deny)
 SLOW_CLI_PATTERNS = [
@@ -136,9 +209,9 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
     cmd = args.get("CommandLine") or args.get("command") or args.get("cmd") or args.get("script") or ""
 
     # Gate 1: destructive commands — unconditional hard deny (no one-strike).
-    for pattern, reason in DANGEROUS_PATTERNS:
-        if re.search(pattern, cmd, re.IGNORECASE):
-            return deny(f"Agent Guard [Safety Block]: {reason} -> '{cmd[:70]}...'")
+    reason = find_dangerous(cmd)
+    if reason:
+        return deny(f"Agent Guard [Safety Block]: {reason} -> '{cmd[:70]}...'")
 
     state = load_state(conv_id)
 
@@ -240,6 +313,7 @@ def inspect_write_to_file(args: dict) -> dict:
 
 # --- Entry point ------------------------------------------------------------------
 def main() -> None:
+    raw_input_data = ""
     try:
         raw_input_data = sys.stdin.read()
         if not raw_input_data or not raw_input_data.lstrip('\ufeff').strip():
@@ -287,8 +361,17 @@ def main() -> None:
 
         print(json.dumps(allow()))
     except Exception as e:
-        # Fail open: never lock the agent loop on parser/IO glitches.
-        print(json.dumps(allow(f"Agent Guard warning: {str(e)}")))
+        # Guarded fail-open: never lock the agent loop on parser/IO glitches,
+        # but a malformed payload that visibly contains a destructive pattern
+        # must still be denied (raw-text best-effort scan, double-fault safe).
+        try:
+            reason = find_dangerous(raw_input_data)
+        except Exception:
+            reason = None
+        if reason:
+            print(json.dumps(deny(f"Agent Guard [Safety Block/fallback]: {reason} (raw payload scan)")))
+        else:
+            print(json.dumps(allow(f"Agent Guard warning: {str(e)}")))
 
 
 if __name__ == "__main__":

@@ -188,10 +188,11 @@ just install
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索。
    - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
-6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v2 — 安定性最優先設計)**:
-   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format`, `diskpart`, `rmdir /s C:\`, `git push --force`）を無条件ハード遮断。
+6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v3 — 安定性最優先 + 難読化耐性)**:
+   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format` / `Format-Volume`, `diskpart`, ドライブルート・ユーザープロファイル直下の再帰削除, `git push --force`（`--force-with-lease` は許可）, `powershell -enc` エンコード実行, Base64 デコード実行, ダウンロード＆実行のパイプ形式・引数形式）を無条件ハード遮断。
+   - 難読化耐性: バッククォート/キャレット除去後の正規化変体も再スキャンし（`` i`ex `` 対策）、lookahead によりフラグ順序（`rd /q /s` = `rd /s /q`, `-f` = `--force`）に依存しないマッチングを実現。
    - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
-   - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時は常にフェイルオープン（allow）。
+   - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時はフェイルオープン（allow）だが、生ペイロードに破壊パターンが見える場合はフォールバックスキャンで deny（guarded fail-open）。
 
 ---
 

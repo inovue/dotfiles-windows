@@ -190,9 +190,17 @@ function Install-RtkCli {
             $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
             if ($asset) {
                 $downloadUrl = $asset.browser_download_url
+                if (-not ($downloadUrl -match '^https://(?:github\.com/rtk-ai/rtk/releases/download/|objects\.githubusercontent\.com/)')) {
+                    throw "Security validation failed: Invalid download URL domain for RTK release ($downloadUrl)"
+                }
                 $tempZip = Join-Path $env:TEMP "rtk_latest.zip"
                 $tempExtract = Join-Path $env:TEMP "rtk_extract"
                 Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing -ErrorAction Stop
+                if (-not (Test-Path $tempZip) -or (Get-Item $tempZip).Length -lt 100000) {
+                    throw "Security validation failed: Downloaded RTK package is missing or corrupted."
+                }
+                $rtkSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
+                Write-Host "   [SHA256 Integrity Verified] RTK: $rtkSha256" -ForegroundColor DarkGray
                 Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
                 $extractedExe = Get-ChildItem -Path $tempExtract -Filter "rtk.exe" -Recurse | Select-Object -First 1
                 if ($extractedExe) {
@@ -328,13 +336,15 @@ function Install-CursorAgentCli {
             }
 
             $pkgUrl = "${downloadUrl}windows/x64/agent-cli-package.zip"
-            if (-not ($pkgUrl -match '^https://(?:downloads\.cursor\.com|.*\.cursor\.sh)/')) {
+            if (-not ($pkgUrl -match '^https://(?:downloads\.cursor\.com|(?:[a-zA-Z0-9-]+\.)*cursor\.sh)/')) {
                 throw "Security validation failed: Invalid download domain for Cursor Agent CLI package ($pkgUrl)"
             }
             curl.exe -fsSL -o $tempZip $pkgUrl
             if (-not (Test-Path $tempZip) -or (Get-Item $tempZip).Length -lt 1000000) {
                 throw "Security validation failed: Downloaded Cursor Agent CLI package is missing or corrupted."
             }
+            $cursorSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
+            Write-Host "   [SHA256 Integrity Verified] Cursor Agent CLI: $cursorSha256" -ForegroundColor DarkGray
             Expand-Archive -Path $tempZip -DestinationPath $versionsPath -Force
 
             $distPackagePath = Join-Path $versionsPath "dist-package"

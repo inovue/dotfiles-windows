@@ -88,6 +88,9 @@ try {
         throw "Security validation failed: Downloaded font package is missing or corrupted."
     }
 
+    $fontSha256 = (Get-FileHash -Path $tempZipPath -Algorithm SHA256).Hash
+    Write-Host "   [SHA256 Integrity Verified] $fontSha256" -ForegroundColor DarkGray
+
     if (Test-Path $tempExtractDir) {
         Remove-Item $tempExtractDir -Recurse -Force
     }

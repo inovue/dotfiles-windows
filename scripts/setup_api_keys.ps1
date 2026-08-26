@@ -14,7 +14,8 @@ param(
     [switch]$GeminiOnly,
     [switch]$ClaudeOnly,
     [switch]$DeepSeekOnly,
-    [switch]$KimiOnly
+    [switch]$KimiOnly,
+    [switch]$Clear
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,9 +27,9 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Secure API Key Setup for AI Agents & Services          " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "※ 入力されたキーは Windows ユーザー環境変数にのみ保存されます。" -ForegroundColor Gray
+Write-Host "※ 入力されたキーは現在の Windows ユーザー環境変数 (HKCU\Environment) に保存されます。" -ForegroundColor Gray
 Write-Host "※ リポジトリ内のファイルには一切保存されません (Git漏洩防止)。" -ForegroundColor Gray
-Write-Host "※ 不要な項目や変更しない項目は [Enter] で安全にスキップできます。`n" -ForegroundColor Gray
+Write-Host "※ [Enter] で保持/スキップ、'CLEAR' または 'DELETE' 入力で登録を安全に削除できます。`n" -ForegroundColor Gray
 
 function Set-SecureUserEnvVar {
     param(
@@ -46,16 +47,27 @@ function Set-SecureUserEnvVar {
     
     Write-Host "$DisplayName ($VarName) $statusText" -ForegroundColor Yellow
 
+    if ($Clear) {
+        [System.Environment]::SetEnvironmentVariable($VarName, $null, "User")
+        [System.Environment]::SetEnvironmentVariable($VarName, $null, "Process")
+        Write-Host "  [OK] $VarName を環境変数から削除しました。`n" -ForegroundColor Magenta
+        return
+    }
+
     if ($IsSecret) {
-        $secureInput = Read-Host -Prompt "  新しいキーを入力 (Enterでスキップ/保持)" -AsSecureString
+        $secureInput = Read-Host -Prompt "  新しいキーを入力 (Enter:保持/スキップ, 'CLEAR':削除)" -AsSecureString
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureInput)
         $plainInput = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
     } else {
-        $plainInput = Read-Host -Prompt "  新しい値を入力 (Enterでスキップ/保持)"
+        $plainInput = Read-Host -Prompt "  新しい値を入力 (Enter:保持/スキップ, 'CLEAR':削除)"
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($plainInput)) {
+    if ($plainInput -in @("CLEAR", "DELETE", "clear", "delete")) {
+        [System.Environment]::SetEnvironmentVariable($VarName, $null, "User")
+        [System.Environment]::SetEnvironmentVariable($VarName, $null, "Process")
+        Write-Host "  [OK] $VarName を環境変数から削除しました。`n" -ForegroundColor Magenta
+    } elseif (-not [string]::IsNullOrWhiteSpace($plainInput)) {
         [System.Environment]::SetEnvironmentVariable($VarName, $plainInput, "User")
         [System.Environment]::SetEnvironmentVariable($VarName, $plainInput, "Process")
         Write-Host "  [OK] $VarName をユーザー環境変数に登録しました。`n" -ForegroundColor Green

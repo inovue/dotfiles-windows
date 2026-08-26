@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize graphify-out/session-log.jsonl: deny rate and read-after-edit (thrash) rate."""
+"""Summarize graphify-out/session-log.jsonl: deny / thrash / crawl / poll-guide rates."""
 import json
 import sys
 from collections import Counter
@@ -26,11 +26,19 @@ def main() -> int:
     total = len(rows)
     denied = sum(1 for r in rows if r.get("denied") or r.get("decision") == "deny")
     thrash = sum(1 for r in rows if r.get("thrash"))
+    crawl = sum(1 for r in rows if r.get("crawl"))
+    poll_guide = sum(1 for r in rows if r.get("poll_guide"))
     reads = sum(1 for r in rows if str(r.get("tool") or "") in {
         "view_file", "readfile", "read_file", "view", "read", "cat", "get_content",
     })
     deny_rate = (denied / total * 100) if total else 0.0
     thrash_rate = (thrash / reads * 100) if reads else 0.0
+    max_lines = 0
+    for r in rows:
+        try:
+            max_lines = max(max_lines, int(r.get("read_lines_max") or 0))
+        except (TypeError, ValueError):
+            continue
     harnesses = Counter(str(r.get("harness") or "unknown") for r in rows)
     harness_txt = ", ".join(f"{k}={v}" for k, v in sorted(harnesses.items()))
     print(f"session-log: {LOG}")
@@ -38,7 +46,12 @@ def main() -> int:
     print(f"  denied        : {denied} ({deny_rate:.1f}%)")
     print(f"  reads         : {reads}")
     print(f"  thrash (read-after-edit): {thrash} ({thrash_rate:.1f}% of reads)")
+    print(f"  crawl (cumulative-line cap): {crawl}")
+    print(f"  poll_guide (short-wait streak): {poll_guide}")
+    print(f"  read_lines_max: {max_lines}")
     print(f"  harnesses     : {harness_txt}")
+    if thrash == 0 and (crawl or poll_guide):
+        print("  note          : thrash 0% is not token-efficiency; check crawl / poll_guide")
     return 0
 
 

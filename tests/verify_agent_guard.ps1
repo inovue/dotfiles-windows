@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Fail-to-pass tests for agent_guard.py v4.2 (session identity, MCP, thrash, Claude ACI, merge).
+    Fail-to-pass tests for agent_guard.py v4.4 (session identity, MCP, thrash, Claude ACI, merge, cumulative read, wait floor).
 #>
 [CmdletBinding()]
 param()
@@ -31,7 +31,7 @@ function Assert-Test {
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host "  Agent Guard v4.2 Session / Thrash / Claude Regression  " -ForegroundColor Cyan
+Write-Host "  Agent Guard v4.4 Session / Thrash / Wait / Crawl Regression  " -ForegroundColor Cyan
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 $guardScript = Join-Path $rootDir "scripts\agent_guard.py"
@@ -455,6 +455,168 @@ print(prev)
     }
     Assert-Test -Name "v4.3 batch-end omits nudge after just remember ran" -Condition ($srStop2 -notmatch 'just remember') -Details ($srStop2.Trim())
 
+    # --- v4.4: cumulative sliced-line cap (closes the N-slice bypass of the 300-line cap)
+    $v44Root = Join-Path $tempTestDir "v44_root"
+    $v44Graph = Join-Path $v44Root "graphify-out"
+    New-Item -Path $v44Graph -ItemType Directory -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $v44Graph "graph.json"), '{"nodes":[],"links":[]}', [System.Text.Encoding]::UTF8)
+    $v44Log = Join-Path $tempTestDir "v44-session-log.jsonl"
+    $env:AGENT_GUARD_GRAPH_ROOT = $v44Root
+    $env:AGENT_GUARD_LOG = $v44Log
+    $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
+    Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+
+    $crawlFile = Join-Path $v44Root "crawl.ps1"
+    [System.IO.File]::WriteAllText($crawlFile, (("x`n" * 400)), [System.Text.Encoding]::UTF8)
+    $crawlConv = "v44-crawl-$(Get-Random)"
+    $slice200 = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 1; EndLine = 200 } }
+        conversationId = $crawlConv
+    }
+    Assert-Test -Name "v4.4 first 200-line slice is allowed" -Condition ($slice200 -match '"decision":\s*"allow"') -Details ($slice200.Trim())
+    $slice200b = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 201; EndLine = 400 } }
+        conversationId = $crawlConv
+    }
+    Assert-Test -Name "v4.4 second 200-line slice is denied (cumulative > 300)" -Condition ($slice200b -match '"decision":\s*"deny"' -and $slice200b -match 'rtk read' -and $slice200b -match '\^function') -Details ($slice200b.Trim())
+    $slice200retry = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 201; EndLine = 400 } }
+        conversationId = $crawlConv
+    }
+    Assert-Test -Name "v4.4 cumulative-cap retry passes (one-strike)" -Condition ($slice200retry -match '"decision":\s*"allow"') -Details ($slice200retry.Trim())
+
+    $pinConv = "v44-pin-$(Get-Random)"
+    $pin1 = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 1; EndLine = 20 } }
+        conversationId = $pinConv
+    }
+    $pin2 = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 80; EndLine = 99 } }
+        conversationId = $pinConv
+    }
+    Assert-Test -Name "v4.4 two 20-line pinpoint slices stay allowed" -Condition ($pin1 -match '"decision":\s*"allow"' -and $pin2 -match '"decision":\s*"allow"') -Details (($pin1 + $pin2).Trim())
+
+    $tinyFile = Join-Path $v44Root "tiny.ps1"
+    [System.IO.File]::WriteAllText($tinyFile, (("x`n" * 40)), [System.Text.Encoding]::UTF8)
+    $tinyConv = "v44-tiny-$(Get-Random)"
+    $tiny1 = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $tinyFile; StartLine = 1; EndLine = 200 } }
+        conversationId = $tinyConv
+    }
+    $tiny2 = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $tinyFile; StartLine = 201; EndLine = 400 } }
+        conversationId = $tinyConv
+    }
+    Assert-Test -Name "v4.4 oversized ranges on a 40-line file do not trip the cap (clamped)" -Condition ($tiny1 -match '"decision":\s*"allow"' -and $tiny2 -match '"decision":\s*"allow"') -Details (($tiny1 + $tiny2).Trim())
+
+    $noAccLog = Join-Path $tempTestDir "v44-noacc.jsonl"
+    $env:AGENT_GUARD_LOG = $noAccLog
+    $noAccConv = "v44-noacc-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 1; EndLine = 200 } }
+        conversationId = $noAccConv
+    }
+    $noAccDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "view_file"; args = @{ path = $crawlFile; StartLine = 201; EndLine = 400 } }
+        conversationId = $noAccConv
+    }
+    $noAccLogText = if (Test-Path $noAccLog) { Get-Content -Raw -Path $noAccLog } else { "" }
+    Assert-Test -Name "v4.4 denied slice is not accumulated (read_lines_max stays 200)" -Condition ($noAccDeny -match '"decision":\s*"deny"' -and $noAccLogText -match '"read_lines_max":\s*200' -and $noAccLogText -notmatch '"read_lines_max":\s*400') -Details ($noAccDeny.Trim() + $noAccLogText)
+    $env:AGENT_GUARD_LOG = $v44Log
+
+    $curConv = "v44-cursor-limit-$(Get-Random)"
+    $cur1 = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = @{ path = $crawlFile; offset = 1; limit = 200 }
+        conversationId  = $curConv
+    }
+    $cur2 = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = @{ path = $crawlFile; offset = 201; limit = 200 }
+        conversationId  = $curConv
+    }
+    Assert-Test -Name "v4.4 Cursor offset/limit 200+200 denies on second slice" -Condition ($cur1 -match '"decision":\s*"allow"' -and $cur2 -match '"decision":\s*"deny"') -Details (($cur1 + $cur2).Trim())
+
+    $crawlLog = if (Test-Path $v44Log) { Get-Content -Raw -Path $v44Log } else { "" }
+    Assert-Test -Name "v4.4 session-log records crawl=true" -Condition ($crawlLog -match '"crawl":\s*true') -Details $v44Log
+
+    # --- v4.4: finite-batch wait floor (explicit short wait / background only)
+    $wfCursor = Invoke-GuardHook @{
+        tool_name       = "Shell"
+        cursor_version  = "1.0"
+        tool_input      = @{ command = "just audit"; block_until_ms = 0 }
+        conversationId  = "v44-wf-cursor-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 just audit + block_until_ms=0 is denied with 120000" -Condition ($wfCursor -match '"decision":\s*"deny"' -and $wfCursor -match '120000') -Details ($wfCursor.Trim())
+
+    $wfClaude = Invoke-GuardHook @{
+        toolCall       = @{ name = "Bash"; args = @{ command = "just audit"; run_in_background = $true } }
+        conversationId = "v44-wf-claude-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 just audit + run_in_background is denied" -Condition ($wfClaude -match '"decision":\s*"deny"' -and $wfClaude -match 'run_in_background') -Details ($wfClaude.Trim())
+
+    $wfAgy = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit"; WaitMsBeforeAsync = 5000 } }
+        conversationId = "v44-wf-agy-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 just audit + WaitMsBeforeAsync=5000 is denied with 120000" -Condition ($wfAgy -match '"decision":\s*"deny"' -and $wfAgy -match 'WaitMsBeforeAsync=120000') -Details ($wfAgy.Trim())
+
+    $wfAgyConv = "v44-wf-agy-retry-$(Get-Random)"
+    $null = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit"; WaitMsBeforeAsync = 5000 } }
+        conversationId = $wfAgyConv
+    }
+    $wfAgyRetry = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit"; WaitMsBeforeAsync = 5000 } }
+        conversationId = $wfAgyConv
+    }
+    Assert-Test -Name "v4.4 wait-floor retry passes (one-strike)" -Condition ($wfAgyRetry -match '"decision":\s*"allow"') -Details ($wfAgyRetry.Trim())
+
+    $wfDev = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "npm run dev"; WaitMsBeforeAsync = 0; RunPersistent = $true } }
+        conversationId = "v44-wf-dev-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 npm run dev background is allowed (watcher exclusion)" -Condition ($wfDev -match '"decision":\s*"allow"') -Details ($wfDev.Trim())
+
+    $wfBare = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just audit" } }
+        conversationId = "v44-wf-bare-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 just audit without wait flags is allowed" -Condition ($wfBare -match '"decision":\s*"allow"') -Details ($wfBare.Trim())
+
+    # --- v4.4: short-wait polling is allow + guidance, never deny
+    $pollConv = "v44-poll-$(Get-Random)"
+    $poll1 = Invoke-GuardHook @{
+        tool_name       = "AwaitShell"
+        cursor_version  = "1.0"
+        tool_input      = @{ block_until_ms = 5000 }
+        conversationId  = $pollConv
+    }
+    $poll2 = Invoke-GuardHook @{
+        tool_name       = "AwaitShell"
+        cursor_version  = "1.0"
+        tool_input      = @{ block_until_ms = 5000 }
+        conversationId  = $pollConv
+    }
+    $poll3 = Invoke-GuardHook @{
+        tool_name       = "AwaitShell"
+        cursor_version  = "1.0"
+        tool_input      = @{ block_until_ms = 5000 }
+        conversationId  = $pollConv
+    }
+    Assert-Test -Name "v4.4 AwaitShell short-wait streak is allowed (never denied)" -Condition ($poll1 -match '"decision":\s*"allow"' -and $poll2 -match '"decision":\s*"allow"' -and $poll3 -match '"decision":\s*"allow"') -Details (($poll1 + $poll2 + $poll3).Trim())
+    Assert-Test -Name "v4.4 AwaitShell 2nd+ short wait emits poll guidance" -Condition ($poll2 -match '\[Wait\]' -and $poll3 -match '\[Wait\]') -Details ($poll2.Trim())
+    $pollLog = if (Test-Path $v44Log) { Get-Content -Raw -Path $v44Log } else { "" }
+    Assert-Test -Name "v4.4 session-log records poll_guide=true" -Condition ($pollLog -match '"poll_guide":\s*true') -Details $v44Log
+
+    $killPoll = Invoke-GuardHook @{
+        toolCall       = @{ name = "manage_task"; args = @{ Action = "kill"; TaskId = "t1" } }
+        conversationId = "v44-kill-$(Get-Random)"
+    }
+    Assert-Test -Name "v4.4 manage_task kill is allowed without poll guidance" -Condition ($killPoll -match '"decision":\s*"allow"' -and $killPoll -notmatch '\[Wait\]') -Details ($killPoll.Trim())
+
     Remove-Item Env:AGENT_GUARD_GRAPH_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:AGENT_GUARD_LOG -ErrorAction SilentlyContinue
     Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
@@ -465,7 +627,7 @@ print(prev)
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host " Guard v4.2 Summary: $passedCount PASSED, $failedCount FAILED" -ForegroundColor $(if ($failedCount -eq 0) { "Green" } else { "Red" })
+Write-Host " Guard v4.4 Summary: $passedCount PASSED, $failedCount FAILED" -ForegroundColor $(if ($failedCount -eq 0) { "Green" } else { "Red" })
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 if ($failedCount -gt 0) { exit 1 } else { exit 0 }

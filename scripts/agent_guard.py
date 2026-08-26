@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agent Guard v4.2: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
+Agent Guard v4.4: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
 
 Validates tool invocations, enforces safety invariants, limits token waste,
 and mechanically requires graph contact before unanchored search or multi-file
@@ -85,6 +85,16 @@ Graph-contact resilience (v4.3 after Cursor field report 2026-08-26):
                 interleaving a plain open("w") write corrupt the JSON, and the
                 next load_state silently resets the session (wiping contact and
                 strikes) — observed live on 2026-08-26.
+
+Token-efficiency walls (v4.4):
+ - CUMULATIVE READ: sliced reads of the SAME file that sum past 300 lines are
+   one-strike denied — the N-slice bypass of the unsliced cap. Cursor/Claude
+   `limit` is a count; Antigravity StartLine/EndLine are inclusive bounds.
+   Known limit: shell paging (bat -r, Get-Content, sed -n) is not counted.
+ - WAIT FLOOR : finite `just audit|test|sync-rules|check-rules|update-graph|deploy`
+   with an explicit short wait or background flag is one-strike denied. Dev
+   servers and `just watch` are excluded. Wait-tool polling (AwaitShell /
+   schedule / manage_task status / BashOutput) is allow+guidance, never deny.
 """
 import sys
 import json
@@ -105,6 +115,9 @@ SLICE_HINT_SIZE = 300           # suggested slice height in deny guidance
 STATE_TTL_SECONDS = 2 * 60 * 60
 STATE_GC_SECONDS = 24 * 60 * 60
 THRASH_WINDOW_SECONDS = 120     # read-after-edit soft guidance window
+FINITE_WAIT_MS = 120000         # foreground wait floor for finite batch jobs
+POLL_SHORT_MS = 15000           # short-wait streak guidance (never deny)
+POLL_GUIDE_AFTER = 2            # emit poll guidance from the Nth consecutive short wait
 
 # 1. Critical destructive patterns (Hard Deny, no one-strike escape).
 # Matched case-insensitively against the raw command AND an escape-stripped
@@ -210,6 +223,17 @@ UNANCHORED_SEARCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rg\b|fd\b|grep\b)",
     re.IGNORECASE,
 )
+FINITE_BATCH_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?just\s+"
+    r"(?:audit|test|sync-rules|check-rules|update-graph|deploy)\b",
+    re.IGNORECASE,
+)
+WATCHER_RE = re.compile(
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+watch\b|"
+    r"(?:npm|pnpm|yarn)\s+(?:run\s+)?dev\b|"
+    r"npx\s+\S*dev\b|cargo\s+watch\b)",
+    re.IGNORECASE,
+)
 
 GRAPH_TOOL_MARKERS = (
     "query_graph", "get_node", "get_neighbors", "god_nodes",
@@ -228,6 +252,11 @@ SEARCH_TOOLS = {
 SHELL_TOOLS = {
     "run_command", "bash", "execute_command", "powershell",
     "terminal", "exec", "shell",
+}
+# Completion-poll tools. Guidance only (never deny). Matchers may not fire yet.
+WAIT_TOOLS = {
+    "await_shell", "awaitshell", "schedule", "manage_task", "managetask",
+    "bashoutput", "bash_output", "monitor",
 }
 READ_TOOLS = {
     "view_file", "readfile", "read_file", "view", "cat", "get_content", "read",
@@ -600,6 +629,7 @@ def fresh_state() -> dict:
     return {
         "ts": time.time(),
         "reads": [],
+        "read_lines": {},
         "strikes": {},
         "graph_contact": False,
         "edited": False,
@@ -609,6 +639,7 @@ def fresh_state() -> dict:
         "did_save_result": False,
         "last_edit": None,
         "logged_keys": False,
+        "wait_streak": 0,
     }
 
 
@@ -635,19 +666,60 @@ def _union_list(a, b):
     return seen
 
 
+def _merge_read_lines(a, b) -> dict:
+    out = {}
+    for src in (a, b):
+        if not isinstance(src, dict):
+            continue
+        for k, v in src.items():
+            try:
+                n = int(v)
+            except (TypeError, ValueError):
+                continue
+            out[str(k)] = max(out.get(str(k), 0), n)
+    return out
+
+
+def _read_lines_max(state: dict) -> int:
+    rl = state.get("read_lines") if isinstance(state, dict) else None
+    if not isinstance(rl, dict) or not rl:
+        return 0
+    best = 0
+    for v in rl.values():
+        try:
+            best = max(best, int(v))
+        except (TypeError, ValueError):
+            continue
+    return best
+
+
 def _merge_states(disk: dict, incoming: dict) -> dict:
     """Union-merge so a parallel hook cannot clobber strikes / flags."""
     out = dict(incoming)
     out["reads"] = _union_list(disk.get("reads"), incoming.get("reads"))
     out["edit_files"] = _union_list(disk.get("edit_files"), incoming.get("edit_files"))
+    out["read_lines"] = _merge_read_lines(disk.get("read_lines"), incoming.get("read_lines"))
     strikes = dict(disk.get("strikes") or {})
     strikes.update(incoming.get("strikes") or {})
     out["strikes"] = strikes
     for flag in ("graph_contact", "edited", "did_update_graph", "did_audit",
                  "did_save_result", "logged_keys"):
         out[flag] = bool(disk.get(flag)) or bool(incoming.get(flag))
-    # Ephemeral metric flag: the writer of this save owns the value.
+    # Ephemeral metric flags: the writer of this save owns the value.
     out["thrash_hit"] = bool(incoming.get("thrash_hit"))
+    out["crawl_hit"] = bool(incoming.get("crawl_hit"))
+    out["poll_guide"] = bool(incoming.get("poll_guide"))
+    try:
+        incoming_streak = int(incoming.get("wait_streak") or 0)
+    except (TypeError, ValueError):
+        incoming_streak = 0
+    if incoming_streak == 0:
+        out["wait_streak"] = 0
+    else:
+        try:
+            out["wait_streak"] = max(int(disk.get("wait_streak") or 0), incoming_streak)
+        except (TypeError, ValueError):
+            out["wait_streak"] = incoming_streak
     d_le = disk.get("last_edit") if isinstance(disk.get("last_edit"), dict) else {}
     i_le = incoming.get("last_edit") if isinstance(incoming.get("last_edit"), dict) else {}
     d_ts = float(d_le.get("ts") or 0)
@@ -730,6 +802,83 @@ def record_shell_graph_events(cmd: str, state: dict) -> None:
         state["did_save_result"] = True
 
 
+def _truthy(v) -> bool:
+    if v is True:
+        return True
+    if v is False or v is None:
+        return False
+    if isinstance(v, (int, float)):
+        return v != 0
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _int_arg(args: dict, *keys):
+    v = _arg_get(args, *keys)
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _explicit_wait_ms(args: dict):
+    return _int_arg(
+        args, "WaitMsBeforeAsync", "waitMsBeforeAsync", "block_until_ms", "blockUntilMs",
+    )
+
+
+def finite_job_backgrounded(args: dict, cmd: str) -> bool:
+    if not cmd or not FINITE_BATCH_RE.search(cmd):
+        return False
+    if WATCHER_RE.search(cmd):
+        return False
+    if _truthy(_arg_get(args, "run_in_background", "runInBackground",
+                        "RunPersistent", "run_persistent")):
+        return True
+    wait = _explicit_wait_ms(args)
+    return wait is not None and wait < FINITE_WAIT_MS
+
+
+def wait_floor_guidance(args: dict) -> str:
+    if _truthy(_arg_get(args, "run_in_background", "runInBackground")):
+        return (
+            "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
+            "Retry without run_in_background (retry passes; one-strike)."
+        )
+    if _truthy(_arg_get(args, "RunPersistent", "run_persistent")):
+        return (
+            "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
+            "Retry without RunPersistent and with WaitMsBeforeAsync=120000 "
+            "(retry passes; one-strike)."
+        )
+    if _arg_get(args, "block_until_ms", "blockUntilMs") is not None:
+        return (
+            "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
+            "Retry with block_until_ms=120000 (retry passes; one-strike)."
+        )
+    return (
+        "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
+        "Retry with WaitMsBeforeAsync=120000 (retry passes; one-strike)."
+    )
+
+
+def _is_short_wait(args: dict) -> bool:
+    action = str(_arg_get(args, "Action", "action") or "").lower()
+    if action in ("kill", "send_input", "sendinput"):
+        return False
+    dur = _arg_get(args, "DurationSeconds", "duration_seconds", "duration")
+    if dur is not None and dur != "":
+        try:
+            return float(dur) < 15
+        except (TypeError, ValueError):
+            pass
+    wait = _explicit_wait_ms(args)
+    if wait is not None:
+        return 0 <= wait < POLL_SHORT_MS
+    return True
+
+
 # --- Inspectors -----------------------------------------------------------------
 def inspect_run_command(args: dict, conv_id: str) -> dict:
     cmd = args.get("CommandLine") or args.get("command") or args.get("cmd") or args.get("script") or ""
@@ -740,6 +889,14 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
         return deny(f"Agent Guard [Safety Block]: {reason} -> '{cmd[:70]}...'")
 
     state = load_state(conv_id)
+    state["wait_streak"] = 0
+
+    # Gate 1b (v4.4): finite batch jobs must wait in-tool, not background+poll.
+    if finite_job_backgrounded(args, cmd):
+        if first_strike(state, f"wait-floor:{cmd[:80]}"):
+            save_state(conv_id, state)
+            return deny(wait_floor_guidance(args))
+
     record_shell_graph_events(cmd, state)
 
     # Gate 2: slow PowerShell cmdlets — one-strike guidance deny.
@@ -807,10 +964,84 @@ def count_lines_capped(path_obj: Path, cap: int) -> int:
         return sum(1 for _ in islice(f, cap + 1))
 
 
+def _file_remaining(path_obj: Path, origin_1indexed: int):
+    """Lines from origin (1-indexed) to EOF, capped. None if the file is missing."""
+    if not path_obj.is_file():
+        return None
+    try:
+        skip = max(0, int(origin_1indexed) - 1)
+        with open(path_obj, "r", encoding="utf-8", errors="ignore") as f:
+            for _ in range(skip):
+                if next(f, None) is None:
+                    return 0
+            return sum(1 for _ in islice(f, MAX_UNSLICED_LINE_COUNT + 1))
+    except Exception:
+        return None
+
+
+def slice_line_count(args: dict, path_obj: Path) -> int:
+    """Lines this read will ingest. Cursor/Claude `limit` is a count;
+    Antigravity StartLine/EndLine are inclusive 1-indexed bounds.
+    When the file exists, requested ranges are clamped to remaining lines
+    so a 50-line file cannot be billed as a 400-line crawl."""
+    start = _int_arg(args, "StartLine", "start_line")
+    end = _int_arg(args, "EndLine", "end_line")
+    offset = _int_arg(args, "offset")
+    limit = _int_arg(args, "limit")
+
+    def _clamp(requested: int, origin) -> int:
+        requested = max(0, requested)
+        if origin is None:
+            origin = 1
+        remaining = _file_remaining(path_obj, origin)
+        if remaining is None:
+            return requested
+        return min(requested, remaining)
+
+    if limit is not None and end is None:
+        origin = offset if offset is not None else (start if start is not None else 1)
+        return _clamp(limit, origin)
+    if start is not None and end is not None:
+        return _clamp(end - start + 1, start)
+
+    origin = start if start is not None else offset
+    if origin is not None:
+        remaining = _file_remaining(path_obj, origin)
+        return 0 if remaining is None else remaining
+
+    if path_obj.is_file():
+        try:
+            return count_lines_capped(path_obj, MAX_UNSLICED_LINE_COUNT)
+        except Exception:
+            return 0
+    return 0
+
+
+def inspect_wait_tool(args: dict, conv_id: str) -> dict:
+    """Short-wait polling: allow + guidance, never deny (AwaitShell/Monitor are
+    legitimate hang monitors). Streak resets on shell/read/edit."""
+    state = load_state(conv_id)
+    if not _is_short_wait(args):
+        state["wait_streak"] = 0
+        save_state(conv_id, state)
+        return allow()
+    streak = int(state.get("wait_streak") or 0) + 1
+    state["wait_streak"] = streak
+    result = allow()
+    if streak >= POLL_GUIDE_AFTER:
+        msg = (
+            "Agent Guard [Wait]: do not poll a finite background job with short timers. "
+            "End the turn and wait for the harness completion notification. "
+            "Use one long wait only for hang-risk processes (dev server, watcher)."
+        )
+        result = allow(reason=msg, agent_message=msg)
+        state["poll_guide"] = True
+    save_state(conv_id, state)
+    return result
+
+
 def inspect_view_file(args: dict, conv_id: str) -> dict:
     target_path = args.get("AbsolutePath") or args.get("TargetFile") or args.get("path") or args.get("file_path") or args.get("filename") or ""
-    start_line = args.get("StartLine") or args.get("start_line") or args.get("offset")
-    end_line = args.get("EndLine") or args.get("end_line") or args.get("limit")
 
     if not target_path:
         return allow()
@@ -822,9 +1053,16 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
     is_exempt = file_name in ["skill.md", "agents.md", "claude.md", ".cursorrules", "gemini.md", "hooks.json"] or "skills" in target_path.lower()
 
     state = load_state(conv_id)
+    state["wait_streak"] = 0
+
+    is_unsliced = (
+        _arg_get(args, "StartLine", "start_line", "offset") is None
+        and _arg_get(args, "EndLine", "end_line") is None
+        and _arg_get(args, "limit") is None
+    )
 
     # Gate 1: un-sliced whole-file read of a genuinely large file (one-strike).
-    if not is_exempt and start_line is None and end_line is None and path_obj.is_file():
+    if not is_exempt and is_unsliced and path_obj.is_file():
         try:
             line_count = count_lines_capped(path_obj, MAX_UNSLICED_LINE_COUNT)
             if line_count > MAX_UNSLICED_LINE_COUNT:
@@ -840,6 +1078,33 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
                 return allow()
         except Exception:
             pass
+
+    # Gate 1b (v4.4): cumulative sliced lines on one file may not exceed the unsliced cap.
+    this_lines = 0 if is_exempt else slice_line_count(args, path_obj)
+    key = _norm_path(str(target_path)) or str(target_path)
+    lines_map = dict(state.get("read_lines") or {})
+    prior = int(lines_map.get(key) or 0)
+    projected = prior + this_lines
+    state["last_slice_lines"] = this_lines
+    if not is_exempt and this_lines > 0 and projected > MAX_UNSLICED_LINE_COUNT:
+        state["crawl_hit"] = True
+        if first_strike(state, f"crawl:{key}"):
+            save_state(conv_id, state)
+            return deny(
+                f"Agent Guard [Read Budget Invariant]: cumulative reads of '{path_obj.name}' "
+                f"would ingest {projected} lines (cap {MAX_UNSLICED_LINE_COUNT}). "
+                f"Do not reconstruct a file via sequential slices. "
+                f"Locate structure: rg -n \"^function |^def |^class \" \"{path_obj.name}\" "
+                f"or `rtk read {path_obj.name} -l aggressive`. "
+                f"Retry of this read passes if the full file is required (one-strike)."
+            )
+        lines_map[key] = projected
+        state["read_lines"] = lines_map
+        save_state(conv_id, state)
+        return allow()
+    if this_lines > 0:
+        lines_map[key] = projected
+        state["read_lines"] = lines_map
 
     # Gate 2: unique-file read budget (one-strike per file over budget).
     read_list = state.get("reads", [])
@@ -937,6 +1202,8 @@ def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) ->
         files.append(target)
     state["edit_files"] = files
     state["reads"] = []
+    state["read_lines"] = {}
+    state["wait_streak"] = 0
     state["last_edit"] = {"path": str(target), "ts": time.time()}
     save_state(conv_id, state)
     return allow()
@@ -1044,6 +1311,8 @@ def main() -> None:
             result = inspect_graph_tool(conv_id)
         elif tool_name in SHELL_TOOLS:
             result = inspect_run_command(args, conv_id)
+        elif tool_name in WAIT_TOOLS:
+            result = inspect_wait_tool(args, conv_id)
         elif tool_name in SEARCH_TOOLS:
             result = inspect_search_tool(conv_id)
         elif tool_name in READ_TOOLS:
@@ -1067,6 +1336,9 @@ def main() -> None:
                 "edited": bool(st.get("edited")),
                 "denied": result.get("decision") == "deny",
                 "thrash": bool(st.get("thrash_hit")),
+                "crawl": bool(st.get("crawl_hit")),
+                "poll_guide": bool(st.get("poll_guide")),
+                "read_lines_max": _read_lines_max(st),
                 "harness": harness,
             }
             if not st.get("logged_keys"):
@@ -1075,6 +1347,10 @@ def main() -> None:
             append_session_log(entry)
             if st.get("thrash_hit"):
                 st["thrash_hit"] = False
+            if st.get("crawl_hit"):
+                st["crawl_hit"] = False
+            if st.get("poll_guide"):
+                st["poll_guide"] = False
             save_state(conv_id, st)
         except Exception:
             pass

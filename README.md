@@ -8,7 +8,7 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 
 - ⚡ **AI エージェント超高速化・安定化 (SSOT)**:
   - 単一正本（`configs/agents/`）から Antigravity, Cursor, Claude Code, Codex へルール＆スキルを一括同期（`just sync-rules`）。
-  - 🛡️ **決定論的サイバネティック・ガバナー (`agent_guard.py` v4.3 / `hooks.json`)**: `PreToolUse` ライフサイクルフックにより、破壊的コマンド、低速 PowerShell Cmdlet、トークン浪費（未スライス読み込み、ノイジーな生Git）、グラフ未参照の無差別検索を自動遮断。
+  - 🛡️ **決定論的サイバネティック・ガバナー (`agent_guard.py` v4.4 / `hooks.json`)**: `PreToolUse` ライフサイクルフックにより、破壊的コマンド、低速 PowerShell Cmdlet、トークン浪費（未スライス読み込み、同一ファイル累積スライス、ノイジーな生Git）、有限ジョブの短待ちバックグラウンド化、グラフ未参照の無差別検索を自動遮断。
   - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: Git/ビルド/テスト/ファイル閲覧等のコマンド出力をコンテキスト投入前に極限まで圧縮。
   - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`）を直結。一括行探索（Batch Line Discovery）やマルチターゲット検索のバッチ化を徹底。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
@@ -42,14 +42,14 @@ dotfiles-windows/
 ├── tests/
 │   ├── verify_tools.ps1            # 環境・モダンCLI・エージェント設定・ベンチマークの網羅的自動テスト
 │   ├── verify_security.ps1         # 🛡️ セキュリティ回帰テスト（URL検証、SHA256ピン、XSS、パストラバーサル）
-│   └── verify_agent_guard.ps1      # 🛡️ Agent Guard v4.3 回帰テスト（One-strike、MCPアンラップ、Thrash警告、Claude連携）
+│   └── verify_agent_guard.ps1      # 🛡️ Agent Guard v4.4 回帰テスト（One-strike、MCPアンラップ、Thrash警告、累積読込、待機フロア、Claude連携）
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ・ランタイム一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (UDEV Gothic 35NF) 自動取得・登録
 │   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, rustup, jaq, rtk, graphify 等のランタイム・CLIセットアップ
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles（Terminal, Helix, Nushell, Profiles）の配備
 │   ├── Assert-PinnedHash.ps1       # 🔒 バイナリダウンロードの SHA256 ピン & TOFU 整合性検証
-│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse フック v4.3)
+│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (PreToolUse フック v4.4)
 │   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査・クリーンアップスクリプト
 │   ├── graph_watch.ps1             # 👁️ 知識グラフ AST 自動更新 & セマンティック監視スクリプト
 │   ├── report_session_log.py       # 📊 セッションログのトークン節約・deny率・Thrash発生状況の集計レポート
@@ -207,7 +207,7 @@ just install
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
    - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索（オンデマンド references 付属）。
    - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
-6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v4.3 — 安定性最優先 + 難読化耐性 + Graph-First ガバナンス + Thrash 抑止 + Claude Code 連携 + MCP アンラップ)**:
+6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v4.4 — 安定性最優先 + 難読化耐性 + Graph-First ガバナンス + Thrash 抑止 + Claude Code 連携 + MCP アンラップ + 累積読込キャップ + 有限ジョブ待機フロア)**:
    - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format` / `Format-Volume`, `diskpart`, ドライブルート・ユーザープロファイル直下の再帰削除, `git push --force`（`--force-with-lease` は許可）, `powershell -enc` エンコード実行, Base64 デコード実行, ダウンロード＆実行のパイプ形式・引数形式）を無条件ハード遮断。
    - 難読化耐性: バッククォート/キャレット除去後の正規化変体も再スキャンし（`` i`ex `` 対策）、lookahead によりフラグ順序（`rd /q /s` = `rd /s /q`, `-f` = `--force`）に依存しないマッチングを実現。
    - **Graph-First ゲート**: ナレッジグラフ（`graphify-out/graph.json`）存在時に、グラフ未参照での無差別検索（非アンカーの `rg`/`fd`/Grep）や初回ファイル編集を検知し、グラフ探索（`just hubs`/`query_graph`）へ誘導する One-strike ガイダンス遮断を適用。セッション終了時には `just update-graph` + `just audit` の実行漏れを警告。
@@ -217,11 +217,12 @@ just install
      - **Out-of-Repo 書き込みの除外**: `~/.cursor/plans` や Antigravity `brain` アーティファクトなど、リポジトリ外ファイルへの書き込みを Edit Gate / Batch-End 契約の対象外として安全に許可。
      - **Atomic State Write**: 並列フックプロセスによる `session_*.json` の競合破壊を `.tmp` + `os.replace` で完全防止。
      - **Work-Memory Nudge**: セッション終了時にグラフ探索が行われていた場合、`just remember` による知見蓄積を促すアドバイザリ機能。
+   - **v4.4 トークン効率**: 同一ファイルの累積スライスが 300 行を超えたら unsliced キャップと同じ one-strike。終端する `just audit|test|sync-rules|deploy` 等を明示的な短待ち/バックグラウンドで投げた場合はフォアグラウンド待機（120000ms）へ誘導。短周期 AwaitShell/schedule は deny せず allow+guidance。
    - **Thrash (read-after-edit) 抑止**: 編集直後に同一ファイルを再読み込みするエージェントの無駄なトークン浪費に対して Edit Verification ガイダンスを付与し、セッションログに記録。
    - **Claude Code ネイティブ連携**: `permissionDecision: deny` / `exit 2` および Stop batch-end 警告プロトコルに対応。
-   - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
+   - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、同一ファイル累積スライス >300行、有限ジョブの短待ちバックグラウンド化、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
    - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時はフェイルオープン（allow）だが、生ペイロードに破壊パターンが見える場合はフォールバックスキャンで deny（guarded fail-open）。
-   - `just session-report`（`scripts/report_session_log.py`）により、セッションごとの deny 率、グラフ接触回数、Thrash 発生件数を即座に集計・可視化。
+   - `just session-report`（`scripts/report_session_log.py`）により、セッションごとの deny 率、Thrash、累積スライス (crawl)、短周期待ち誘導 (poll_guide) を集計。thrash 0% だけでは効率は証明されない。
 
 ---
 

@@ -29,7 +29,7 @@ justfile           task runner — all common operations
 | Command | Purpose |
 | :--- | :--- |
 | `just audit` | 4-phase ground-truth audit (tests + SSOT sync + graph health + junk scan). First step for any survey. |
-| `just test` | environment suite + security regression + agent_guard v4.1 |
+| `just test` | environment suite + security regression + agent_guard v4.4 |
 | `just deploy` | deploy `configs/` to user & app directories |
 | `just sync-rules` / `just check-rules` | propagate (or verify) agent rules & skills |
 | `just graph "<q>"` / `just hubs` / `just neighbors <l>` / `just path <a> <b>` | knowledge-graph queries |
@@ -38,7 +38,7 @@ justfile           task runner — all common operations
 | `just check-semantic` / `just update-semantic` | detect / run pending semantic re-extraction (docs & images, headless LLM) |
 | `just watch` | background AST freshness; `GRAPHIFY_SEMANTIC_AUTO=1` auto-runs the LLM pass |
 | `just update-graphify` | upgrade graphify engine + refresh hooks + sync + test |
-| `just session-report` | session-log deny rate and read-after-edit (thrash) rate |
+| `just session-report` | session-log deny rate, thrash, crawl (cumulative slices), poll_guide |
 | `just install-graph-hook` | install post-commit auto-rebuild hook (once per clone) |
 | `just checkpoint` / `just rollback` | git safety net around risky edits |
 | `just clean` | remove temp / backup junk |

@@ -12,9 +12,11 @@
 - **Encoding**: all code UTF-8. Any `.ps1` containing CJK text MUST be saved UTF-8 **with BOM** — Windows PowerShell 5.1 misparses BOM-less non-ASCII files.
 - **SSOT flow**: edit masters under `dotfiles-windows/configs/agents/`, then run `just sync-rules`. Deployed mirrors (global AGENTS.md / CLAUDE.md / rule files) are generated; direct edits get overwritten.
 - **Reads are a budget, not a reflex**: prefer graph queries and scoped `rg -n` snippets. When snippets already prove the answer, stop. Batch multi-target searches into a single `rg -e 'a' -e 'b'` pass instead of sequential lookups. Slice-read (max ~30 lines) only genuinely ambiguous spots; never re-read files already in context.
+- **Cumulative read cap**: sequential slices of one file that sum past 300 lines are the same waste as an unsliced dump. Stop. Structure discovery is `rg -n '^function |^def |^class '`, `ast-grep`, or `rtk read <f> -l aggressive`.
+- **Finite jobs wait in-tool**: terminating commands (`just audit`, `just test`, `just sync-rules`, `just check-rules`, `just update-graph`, `just deploy`) wait in the original shell call. Do not background them and poll for completion. Dev servers and `just watch` are the exception.
 - **Edit verification**: treat an edit tool's success snippet as verification; do not re-read the same file immediately after. Re-read only on edit failure, ambiguous result, or external rewrite (hook/formatter).
 - **Content-addressed edits**: prefer old/new string edits. When only a line-numbered tool is available, discover all target line ranges in one pass (`rg -n -e 'a' -e 'b' <f>`), then apply same-file multi-edits Bottom-Up (highest line first) without intermediate re-reads.
-- **Guarantees live in hooks**: `agent_guard.py` v4.2 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`. Retry always passes — the guard can never deadlock the loop.
+- **Guarantees live in hooks**: `agent_guard.py` v4.4 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, **cumulative sliced reads of one file >300 lines**, finite-batch jobs with an explicit short wait / background flag, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`. Short-wait polling tools get allow+guidance, never deny. Retry always passes — the guard can never deadlock the loop.
 - **Finish with structure**: end turns with a concise structured markdown answer, never bare tool output.
 
 ## Graph-First Navigation (when `graphify-out/graph.json` exists)
@@ -47,3 +49,13 @@
 | Directory tree | `eza --tree --level=2` |
 | Benchmark | `hyperfine "a" "b"` |
 | Token analytics | `rtk gain` |
+
+## Background wait (all harnesses)
+
+Finite batch jobs wait in the original shell call. After a server/watcher is started, end the turn and let the harness completion notification wake you. One long wait is only for hang-risk processes.
+
+| Intent | Antigravity | Cursor | Claude Code |
+| :--- | :--- | :--- | :--- |
+| Finite job (`just audit` / `test` / `sync-rules` / `deploy`) | `WaitMsBeforeAsync` >= 120000 | `block_until_ms` >= 120000 | do not set `run_in_background` |
+| Yield after starting a watcher | end the turn (completion push) | end the turn (unawaited-job notify) | end the turn (Bash completion notify) |
+| Hang-risk monitor (dev server) | one `manage_task` / terminal read | one `AwaitShell` with a long wait or pattern | `Monitor`, or one `BashOutput` |

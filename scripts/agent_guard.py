@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agent Guard v4.4: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
+Agent Guard v4.6: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
 
 Validates tool invocations, enforces safety invariants, limits token waste,
 and mechanically requires graph contact before unanchored search or multi-file
@@ -102,6 +102,33 @@ Token-efficiency walls (v4.4):
    with an explicit short wait or background flag is one-strike denied. Dev
    servers and `just watch` are excluded. Wait-tool polling (AwaitShell /
    schedule / manage_task status / BashOutput) is allow+guidance, never deny.
+
+Stability walls (v4.5 after Cursor session 5ca2d438 / 2026-08-27):
+ - WHOLE-FILE OFFSET: Cursor Read often injects offset=0/1 with no limit.
+   That is a whole-file ingest, not a slice — Gate 1 (unsliced cap) fires,
+   with `rtk read -l aggressive` as the first alternative.
+ - QUERY-LOG WINDOW: external graph-contact from graphify-queries.log is
+   180s, not STATE_TTL (2h). A 2h window let other chats in the same repo
+   skip the graph-first gate (fd ran with graph_contact still false).
+ - MCP LOG DEDUP: beforeMCPExecution is not appended to session-log when
+   preToolUse already unwraps CallDynamicTool (double-count + state races).
+   inspect_graph_tool still runs. Graph-tool log lines force graph_contact.
+
+PowerShell 7 host (v4.6):
+ - PS 5.1 CHAIN: deny `&&` / `||` only when the command explicitly launches
+   `powershell.exe` (Windows PowerShell 5.1). Install puts PowerShell 7 on PATH;
+   just, Cursor automationProfile, and agent Shell host `pwsh`, which parses `&&`.
+   Claude Code Bash is unchanged. The v4.5 blanket deny on Cursor/Antigravity
+   was a false positive once the host is pwsh.
+
+Multi-harness Antigravity & Global Hook Discovery (v4.7):
+ - WORKSPACE DISCOVERY: `find_repo_root` inspects payload `workspacePaths`, tool
+   args `Cwd`/file paths, and environment variables. Global hooks in `~/.gemini/config`
+   now discover the repo root without requiring CWD to be inside the workspace.
+ - ANTIGRAVITY STOP: `emit_result` outputs `{"decision": "continue", "reason": "..."}`
+   to block premature agent termination when batch-end verification is missing.
+ - ANTIGRAVITY WAIT FLOOR: explicit wait floor is 10000ms (schema maximum) on
+   Antigravity instead of 120000ms.
 """
 import sys
 import json
@@ -120,6 +147,7 @@ MAX_UNSLICED_LINE_COUNT = 300   # <=300 lines: 1 full read is cheaper than N sli
 MAX_READ_BUDGET = 8             # unique files per session window (resets on edit/TTL)
 SLICE_HINT_SIZE = 300           # suggested slice height in deny guidance
 STATE_TTL_SECONDS = 2 * 60 * 60
+QUERY_LOG_CONTACT_WINDOW = 180  # seconds; must stay << STATE_TTL (cross-chat poison)
 STATE_GC_SECONDS = 24 * 60 * 60
 THRASH_WINDOW_SECONDS = 120     # read-after-edit soft guidance window
 FINITE_WAIT_MS = 120000         # foreground wait floor for finite batch jobs
@@ -406,7 +434,8 @@ def detect_harness(payload=None) -> str:
 
 def emit_result(result: dict, harness: str, hook_event: str) -> None:
     """Write harness-specific JSON and exit. Claude deny uses exit 2 as a
-    schema-proof block; Cursor/Antigravity keep the v4.1 superset JSON."""
+    schema-proof block; Antigravity stop uses decision: continue; Cursor/Antigravity
+    PreToolUse keep the v4.1 superset JSON."""
     denied = result.get("decision") == "deny" or result.get("permission") == "deny"
     reason = result.get("reason") or result.get("agent_message") or ""
     if harness == "claude":
@@ -429,6 +458,13 @@ def emit_result(result: dict, harness: str, hook_event: str) -> None:
             print(reason, file=sys.stderr)
             sys.exit(2)
         sys.exit(0)
+    if harness == "antigravity" and hook_event in ("stop", "sessionend"):
+        msg = result.get("followup_message") or result.get("reason") or ""
+        if msg:
+            print(json.dumps({"decision": "continue", "reason": msg}))
+        else:
+            print(json.dumps({"decision": "allow"}))
+        sys.exit(0)
     print(json.dumps(result))
     sys.exit(0)
 
@@ -443,14 +479,67 @@ def _norm_path(p: str) -> str:
 
 
 # --- Repo / graph discovery ----------------------------------------------------
-def find_repo_root():
-    """Walk cwd (then the guard's parent tree) for graph.json or this repo's justfile.
+_RESOLVED_REPO_ROOT: Path | None = None
+
+
+def find_repo_root(payload=None, args=None) -> Path | None:
+    """Walk workspace paths from payload, args, cwd, and __file__ for graph.json or justfile.
     AGENT_GUARD_GRAPH_ROOT overrides discovery (used by the test suite)."""
+    global _RESOLVED_REPO_ROOT
     override = os.environ.get("AGENT_GUARD_GRAPH_ROOT")
     if override:
         p = Path(override)
         return p if p.exists() else None
+
     starts = []
+    # 1. Payload workspace paths (Antigravity passes workspacePaths: [...])
+    if isinstance(payload, dict):
+        for wp_key in ("workspacePaths", "workspace_paths"):
+            wps = payload.get(wp_key)
+            if isinstance(wps, list):
+                for wp in wps:
+                    if wp and isinstance(wp, str):
+                        try:
+                            starts.append(Path(wp).resolve())
+                        except Exception:
+                            pass
+        for sp_key in ("workspacePath", "workspace_path", "cwd", "project_dir", "projectDir"):
+            sp = payload.get(sp_key)
+            if sp and isinstance(sp, str):
+                try:
+                    starts.append(Path(sp).resolve())
+                except Exception:
+                    pass
+
+    # 2. Tool args for Cwd or target file paths
+    if isinstance(args, dict):
+        for cwd_key in ("Cwd", "cwd", "SearchPath", "search_path", "SearchDirectory", "search_directory"):
+            c = args.get(cwd_key)
+            if c and isinstance(c, str):
+                try:
+                    p = Path(c).resolve()
+                    starts.append(p if p.is_dir() else p.parent)
+                except Exception:
+                    pass
+        for file_key in ("AbsolutePath", "TargetFile", "file_path", "path", "filename"):
+            f = args.get(file_key)
+            if f and isinstance(f, str):
+                try:
+                    p = Path(f).resolve()
+                    starts.append(p.parent)
+                except Exception:
+                    pass
+
+    # 3. Environment variables
+    for env_var in ("WORKSPACE_ROOT", "CLAUDE_PROJECT_DIR", "CURSOR_PROJECT_DIR"):
+        v = os.environ.get(env_var)
+        if v:
+            try:
+                starts.append(Path(v).resolve())
+            except Exception:
+                pass
+
+    # 4. Current working directory & guard module location
     try:
         starts.append(Path.cwd().resolve())
     except Exception:
@@ -459,6 +548,7 @@ def find_repo_root():
         starts.append(Path(__file__).resolve().parent.parent)
     except Exception:
         pass
+
     seen = set()
     for start in starts:
         cur = start
@@ -468,12 +558,17 @@ def find_repo_root():
                 break
             seen.add(key)
             if (cur / "graphify-out" / "graph.json").is_file():
+                _RESOLVED_REPO_ROOT = cur
                 return cur
             if (cur / "justfile").is_file() and (cur / "configs" / "agents").is_dir():
+                _RESOLVED_REPO_ROOT = cur
                 return cur
             if cur.parent == cur:
                 break
             cur = cur.parent
+
+    if _RESOLVED_REPO_ROOT is not None and _RESOLVED_REPO_ROOT.exists():
+        return _RESOLVED_REPO_ROOT
     return None
 
 
@@ -525,11 +620,13 @@ def _query_log_path():
     return default if default.is_file() else None
 
 
-def external_graph_contact(window_seconds: float = STATE_TTL_SECONDS) -> bool:
+def external_graph_contact(window_seconds: float = QUERY_LOG_CONTACT_WINDOW) -> bool:
     """MCP graph queries can bypass harness hooks (Cursor's beforeMCPExecution
     does not fire). graphify-mcp appends JSONL records to the opt-in query log;
-    a fresh record whose corpus path resolves inside this repo is deterministic
-    evidence of graph contact. Fail-silent: any error returns False."""
+    a FRESH (default 180s) record whose corpus path resolves inside this repo
+    is deterministic evidence of graph contact. Fail-silent: any error returns
+    False. Do NOT use STATE_TTL here — a 2h window lets other chats in the
+    same repo skip the graph-first gate."""
     try:
         path = _query_log_path()
         if path is None or not path.is_file():
@@ -850,7 +947,7 @@ def _explicit_wait_ms(args: dict):
     )
 
 
-def finite_job_backgrounded(args: dict, cmd: str) -> bool:
+def finite_job_backgrounded(args: dict, cmd: str, harness: str = "") -> bool:
     if not cmd or not FINITE_BATCH_RE.search(cmd):
         return False
     if WATCHER_RE.search(cmd):
@@ -859,19 +956,21 @@ def finite_job_backgrounded(args: dict, cmd: str) -> bool:
                         "RunPersistent", "run_persistent")):
         return True
     wait = _explicit_wait_ms(args)
-    return wait is not None and wait < FINITE_WAIT_MS
+    floor = 10000 if harness == "antigravity" else FINITE_WAIT_MS
+    return wait is not None and wait < floor
 
 
-def wait_floor_guidance(args: dict) -> str:
+def wait_floor_guidance(args: dict, harness: str = "") -> str:
     if _truthy(_arg_get(args, "run_in_background", "runInBackground")):
         return (
             "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
             "Retry without run_in_background (retry passes; one-strike)."
         )
     if _truthy(_arg_get(args, "RunPersistent", "run_persistent")):
+        floor_text = "WaitMsBeforeAsync=10000" if harness == "antigravity" else "WaitMsBeforeAsync=120000"
         return (
             "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
-            "Retry without RunPersistent and with WaitMsBeforeAsync=120000 "
+            f"Retry without RunPersistent and with {floor_text} "
             "(retry passes; one-strike)."
         )
     if _arg_get(args, "block_until_ms", "blockUntilMs") is not None:
@@ -879,13 +978,14 @@ def wait_floor_guidance(args: dict) -> str:
             "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
             "Retry with block_until_ms=120000 (retry passes; one-strike)."
         )
+    floor_val = "10000 (schema max)" if harness == "antigravity" else "120000"
     return (
         "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
-        "Retry with WaitMsBeforeAsync=120000 (retry passes; one-strike)."
+        f"Retry with WaitMsBeforeAsync={floor_val} (retry passes; one-strike)."
     )
 
 
-def _is_short_wait(args: dict) -> bool:
+def _is_short_wait(args: dict, harness: str = "") -> bool:
     action = str(_arg_get(args, "Action", "action") or "").lower()
     if action in ("kill", "send_input", "sendinput"):
         return False
@@ -897,12 +997,57 @@ def _is_short_wait(args: dict) -> bool:
             pass
     wait = _explicit_wait_ms(args)
     if wait is not None:
-        return 0 <= wait < POLL_SHORT_MS
+        floor = 10000 if harness == "antigravity" else POLL_SHORT_MS
+        return 0 <= wait < floor
     return True
 
 
 # --- Inspectors -----------------------------------------------------------------
-def inspect_run_command(args: dict, conv_id: str) -> dict:
+_POSIX_CHAIN_RE = re.compile(r"&&|\|\|")
+# Windows PowerShell 5.1 only — not pwsh.
+# `powershell.exe` always counts as a launcher when it appears outside quotes.
+# Bare `powershell` only counts when followed by a flag (`-Command`, `-File`, …)
+# so `echo powershell && echo` on a pwsh host is not a false positive.
+_WINPS51_LAUNCHER_RE = re.compile(
+    r"powershell\.exe\b|(?:^|[;&|(\s]|\\)powershell(?=\s+[-/])",
+    re.IGNORECASE,
+)
+
+
+def _strip_quoted_spans(cmd: str) -> str:
+    """Replace double/single quoted spans with spaces so launchers inside
+    `python -c "..."` / `--format="%h && %s"` are not treated as the interpreter."""
+    return re.sub(r"""(['"])(?:\\.|(?!\1).)*\1""", " ", cmd)
+
+
+def posix_chain_in_winps51(cmd: str) -> bool:
+    """True only when Windows PowerShell 5.1 is the explicit interpreter AND
+    the command still contains `&&` / `||` (including inside -Command quotes).
+
+    After install, just/Cursor automation/Antigravity host is pwsh 7, which
+    parses POSIX chains natively — a blanket deny would false-positive.
+    Launcher match is on quote-stripped text so a Python/rg string that merely
+    *mentions* powershell.exe is not treated as a 5.1 invocation.
+    """
+    if not cmd or not _POSIX_CHAIN_RE.search(cmd):
+        return False
+    return bool(_WINPS51_LAUNCHER_RE.search(_strip_quoted_spans(cmd)))
+
+
+def _is_whole_file_read(args: dict) -> bool:
+    """True when the read has no end bound and starts at the file origin.
+    Cursor often injects offset=0/1 on an otherwise unsliced Read."""
+    if _int_arg(args, "limit") is not None:
+        return False
+    if _int_arg(args, "EndLine", "end_line") is not None:
+        return False
+    start = _int_arg(args, "StartLine", "start_line")
+    offset = _int_arg(args, "offset")
+    origin = start if start is not None else offset
+    return origin is None or origin <= 1
+
+
+def inspect_run_command(args: dict, conv_id: str, harness: str = "") -> dict:
     cmd = args.get("CommandLine") or args.get("command") or args.get("cmd") or args.get("script") or ""
 
     # Gate 1: destructive commands — unconditional hard deny (no one-strike).
@@ -914,12 +1059,26 @@ def inspect_run_command(args: dict, conv_id: str) -> dict:
     state["wait_streak"] = 0
 
     # Gate 1b (v4.4): finite batch jobs must wait in-tool, not background+poll.
-    if finite_job_backgrounded(args, cmd):
+    if finite_job_backgrounded(args, cmd, harness):
         if first_strike(state, f"wait-floor:{cmd[:80]}"):
             save_state(conv_id, state)
-            return deny(wait_floor_guidance(args))
+            return deny(wait_floor_guidance(args, harness))
 
     record_shell_graph_events(cmd, state)
+
+    # Gate 1c (v4.6): && / || only when the command explicitly launches
+    # Windows PowerShell 5.1 (`powershell.exe`). The harness host is pwsh 7.
+    if posix_chain_in_winps51(cmd):
+        if first_strike(state, f"ps-chain:{cmd[:80]}"):
+            save_state(conv_id, state)
+            return deny(
+                "Agent Guard [Shell Stability]: `powershell.exe` is Windows PowerShell 5.1 "
+                "and rejects bash `&&` / `||`. This harness uses `pwsh` (PowerShell 7). "
+                "Drop the `powershell.exe` wrapper, or replace `&&` with `;` "
+                "(retry of the unchanged command passes; one-strike)."
+            )
+        save_state(conv_id, state)
+        return allow()
 
     # Gate 2: slow PowerShell cmdlets — one-strike guidance deny.
     for pattern, guidance in SLOW_CLI_PATTERNS:
@@ -1077,11 +1236,7 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
     state = load_state(conv_id)
     state["wait_streak"] = 0
 
-    is_unsliced = (
-        _arg_get(args, "StartLine", "start_line", "offset") is None
-        and _arg_get(args, "EndLine", "end_line") is None
-        and _arg_get(args, "limit") is None
-    )
+    is_unsliced = _is_whole_file_read(args)
 
     # Gate 1: un-sliced whole-file read of a genuinely large file (one-strike).
     if not is_exempt and is_unsliced and path_obj.is_file():
@@ -1092,10 +1247,13 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
                     state["arg_keys"] = sorted(str(k) for k in args.keys())[:40]
                     save_state(conv_id, state)
                     return deny(
-                        f"Agent Guard [Read Budget Invariant]: '{path_obj.name}' exceeds {MAX_UNSLICED_LINE_COUNT} lines. "
-                        f"Locate first: rg -n \"<pattern>\" \"{path_obj.name}\" — then read ONE slice "
-                        f"(StartLine=<hit-{SLICE_HINT_SIZE // 10}>, EndLine=<hit+{SLICE_HINT_SIZE // 10}>). "
-                        f"If the full file is truly required, retry as-is (one-strike; retry passes)."
+                        f"Agent Guard [Read Budget Invariant]: '{path_obj.name}' exceeds "
+                        f"{MAX_UNSLICED_LINE_COUNT} lines. "
+                        f"Use `rtk read {path_obj.name} -l aggressive` "
+                        f"(or `rtk smart {path_obj.name}`). "
+                        f"Pinpoint: rg -n \"<pattern>\" \"{path_obj.name}\" then ONE slice "
+                        f"(offset=<hit>, limit={SLICE_HINT_SIZE // 10}). "
+                        f"Retry of this read passes if the full file is required (one-strike)."
                     )
                 save_state(conv_id, state)
                 return allow()
@@ -1356,6 +1514,7 @@ def main() -> None:
         tool_name = extract_tool_name(payload, tool_call)
         graph_name = _graph_lookup_name(payload, tool_call)
         args = _extract_args(payload, tool_call)
+        find_repo_root(payload, args)
 
         # v4.3: unwrap CallDynamicTool and Antigravity call_mcp_tool (PascalCase keys).
         if tool_name in DYNAMIC_TOOL_WRAPPERS and isinstance(args, dict):
@@ -1376,7 +1535,7 @@ def main() -> None:
         elif is_graph_tool(tool_name) or is_graph_tool(graph_name):
             result = inspect_graph_tool(conv_id)
         elif tool_name in SHELL_TOOLS:
-            result = inspect_run_command(args, conv_id)
+            result = inspect_run_command(args, conv_id, harness)
         elif tool_name in WAIT_TOOLS:
             result = inspect_wait_tool(args, conv_id)
         elif tool_name in SEARCH_TOOLS:
@@ -1392,13 +1551,20 @@ def main() -> None:
 
         try:
             st = load_state(conv_id)
+            graph_hit = is_graph_tool(tool_name) or is_graph_tool(graph_name)
+            if graph_hit:
+                st["graph_contact"] = True
+            # v4.5: Cursor fires preToolUse(CallDynamicTool unwrap) AND
+            # beforeMCPExecution for one MCP call. Dual JSONL rows inflate
+            # metrics and race session state; inspect_graph_tool already ran.
+            skip_log = hook_event == "beforemcpexecution"
             entry = {
                 "ts": int(time.time()),
                 "conv": conv_id,
                 "event": hook_event or "preToolUse",
                 "tool": (tool_name or "")[:80],
                 "decision": result.get("decision"),
-                "graph_contact": bool(st.get("graph_contact")),
+                "graph_contact": bool(st.get("graph_contact")) or graph_hit,
                 "edited": bool(st.get("edited")),
                 "denied": result.get("decision") == "deny",
                 "thrash": bool(st.get("thrash_hit")),
@@ -1407,12 +1573,15 @@ def main() -> None:
                 "read_lines_max": _read_lines_max(st),
                 "harness": harness,
             }
-            if not st.get("logged_keys"):
-                entry["keys"] = sorted(str(k) for k in payload.keys())[:40]
-                st["logged_keys"] = True
-            if st.get("arg_keys"):
-                entry["arg_keys"] = st.get("arg_keys")
-            append_session_log(entry)
+            if os.environ.get("AGENT_GUARD_TEST", "").strip().lower() in ("1", "true", "yes"):
+                entry["test"] = True
+            if not skip_log:
+                if not st.get("logged_keys"):
+                    entry["keys"] = sorted(str(k) for k in payload.keys())[:40]
+                    st["logged_keys"] = True
+                if st.get("arg_keys"):
+                    entry["arg_keys"] = st.get("arg_keys")
+                append_session_log(entry)
             if st.get("thrash_hit"):
                 st["thrash_hit"] = False
             if st.get("crawl_hit"):

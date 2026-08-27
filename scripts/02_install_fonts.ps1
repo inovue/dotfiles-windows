@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    yuru7/udev-gothic リポジトリから最新の UDEV Gothic NF (UDEV Gothic 35NF / Nerd Fonts 対応) を自動取得・インストールします。
+    yuru7/udev-gothic リポジトリから最新の UDEV Gothic NF (等幅/等倍・Nerd Fonts 対応) を自動取得・インストールします。
 .DESCRIPTION
     GitHub API を使用して最新リリース ZIP (UDEVGothic_NF_v*.zip) をダウンロード・解凍し、
     Windows のフォント管理システムに自動登録します。
@@ -24,8 +24,8 @@ Write-Host "  Step 2: Japanese Font (UDEV Gothic NF)  " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
 
 function Test-FontInstalled {
-    $checkFontFiles = @("UDEVGothic35NF-Regular.ttf", "UDEVGothicNF-Regular.ttf")
-    $checkRegKeys   = @("UDEVGothic35NF-Regular (TrueType)", "UDEVGothicNF-Regular (TrueType)")
+    $checkFontFiles = @("UDEVGothicNF-Regular.ttf", "UDEVGothic35NF-Regular.ttf")
+    $checkRegKeys   = @("UDEVGothicNF-Regular (TrueType)", "UDEVGothic35NF-Regular (TrueType)")
 
     # 1. ファイルの存在確認 (SystemRoot または LOCALAPPDATA)
     $hasFile = $false
@@ -55,7 +55,7 @@ function Test-FontInstalled {
 }
 
 if (-not $Force -and (Test-FontInstalled)) {
-    Write-Host "`n[SKIP] UDEV Gothic NF (UDEV Gothic 35NF) is already installed." -ForegroundColor Yellow
+    Write-Host "`n[SKIP] UDEV Gothic NF is already installed." -ForegroundColor Yellow
     Write-Host "       (Pass -Force to re-download and reinstall)" -ForegroundColor Gray
     return
 }
@@ -164,7 +164,7 @@ try {
     Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue
     Remove-Item $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
 
-    Write-Host "`n[OK] UDEV Gothic NF (UDEV Gothic 35NF) installed successfully!" -ForegroundColor Green
+    Write-Host "`n[OK] UDEV Gothic NF installed successfully!" -ForegroundColor Green
 }
 catch {
     Write-Error "[FAIL] Failed to install UDEV Gothic NF: $_"

@@ -18,6 +18,9 @@ $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 $env:Path = "$machinePath;$userPath"
 
 $rootDir = Split-Path -Parent $PSScriptRoot
+$psExe = "powershell.exe"
+$pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+if ($pwshCmd) { $psExe = $pwshCmd.Source }
 $passedCount = 0
 $failedCount = 0
 $warnCount   = 0
@@ -178,6 +181,7 @@ $configFiles = @(
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Master graphify-builder Skill";               Path = Join-Path $rootDir "configs\agents\skills\graphify-builder\SKILL.md" }
     @{ Name = "Master rtk-expert Skill";                     Path = Join-Path $rootDir "configs\agents\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Master tui-wireframe-designer Skill";         Path = Join-Path $rootDir "configs\agents\skills\tui-wireframe-designer\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
     @{ Name = "Master Claude settings";                      Path = Join-Path $rootDir "configs\agents\claude\settings.json" }
     @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
@@ -209,6 +213,10 @@ $configFiles = @(
     @{ Name = "Claude Code Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".claude\skills\rtk-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert\SKILL.md" }
     @{ Name = "Agents Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".agents\skills\rtk-expert\SKILL.md" }
+    @{ Name = "Antigravity Global Skill (tui-wireframe)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\tui-wireframe-designer\SKILL.md" }
+    @{ Name = "Claude Code Global Skill (tui-wireframe)";    Path = Join-Path $env:USERPROFILE ".claude\skills\tui-wireframe-designer\SKILL.md" }
+    @{ Name = "Cursor Global Skill (tui-wireframe)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\tui-wireframe-designer\SKILL.md" }
+    @{ Name = "Agents Global Skill (tui-wireframe)";         Path = Join-Path $env:USERPROFILE ".agents\skills\tui-wireframe-designer\SKILL.md" }
     @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
     @{ Name = "Claude Code Global Settings";                 Path = Join-Path $env:USERPROFILE ".claude\settings.json" }
     @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
@@ -223,6 +231,8 @@ $configFiles = @(
     @{ Name = "Script: setup_api_keys.ps1";                  Path = Join-Path $rootDir "scripts\setup_api_keys.ps1" }
     @{ Name = "Script: audit_workspace.ps1";                 Path = Join-Path $rootDir "scripts\audit_workspace.ps1" }
     @{ Name = "Script: agent_guard.py";                      Path = Join-Path $rootDir "scripts\agent_guard.py" }
+    @{ Name = "Script: merge_cursor_agent_shell.py";         Path = Join-Path $rootDir "scripts\merge_cursor_agent_shell.py" }
+    @{ Name = "Master Cursor agent-shell fragment";          Path = Join-Path $rootDir "configs\cursor\agent-shell.json" }
     @{ Name = "Script: Assert-PinnedHash.ps1";               Path = Join-Path $rootDir "scripts\Assert-PinnedHash.ps1" }
     @{ Name = "Test: verify_security.ps1";                   Path = Join-Path $rootDir "tests\verify_security.ps1" }
     @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
@@ -248,12 +258,47 @@ $projectAgentsFile = Join-Path $rootDir "AGENTS.md"
 if (Test-Path $projectAgentsFile) {
     $agentsLineCount = (Get-Content $projectAgentsFile | Measure-Object -Line).Lines
     Assert-Test -Name "Project Guide Compactness (AGENTS.md < 100 lines)" -Condition ($agentsLineCount -lt 100) -Details "Current lines: $agentsLineCount"
+
+    # Verify AGENTS.md scripts map exactness (no shorthand or phantom filenames)
+    $agentsRaw = Get-Content -Raw -Path $projectAgentsFile
+    if ($agentsRaw -match 'scripts/\s+([^\r\n]+)') {
+        $scriptNames = $Matches[1] -split ',\s*'
+        $missingScripts = @()
+        foreach ($s in $scriptNames) {
+            $sClean = $s.Trim()
+            if ($sClean -and -not (Test-Path (Join-Path $rootDir "scripts\$sClean"))) {
+                $missingScripts += $sClean
+            }
+        }
+        Assert-Test -Name "AGENTS.md scripts map has zero phantom / shorthand files" -Condition ($missingScripts.Count -eq 0) -Details ("Missing: " + ($missingScripts -join ", "))
+    }
+}
+
+# Verify Antigravity hooks.json schema (Stop must be flat array, PreToolUse grouped)
+$masterHooksFile = Join-Path $rootDir "configs\agents\hooks.json"
+if (Test-Path $masterHooksFile) {
+    $hooksObj = Get-Content -Raw -Path $masterHooksFile | ConvertFrom-Json
+    $guardObj = $hooksObj.'safety-guard'
+    $preToolUseOk = $null -ne $guardObj.PreToolUse -and $guardObj.PreToolUse[0].matcher -and $guardObj.PreToolUse[0].hooks
+    $stopOk = $null -ne $guardObj.Stop -and $guardObj.Stop[0].type -eq "command" -and (-not $guardObj.Stop[0].matcher)
+    Assert-Test -Name "Master hooks.json: PreToolUse is grouped and Stop is flat array" -Condition ($preToolUseOk -and $stopOk) -Details "PreToolUse grouped: $preToolUseOk, Stop flat: $stopOk"
 }
 
 # Anti-duplication invariants: duplicated always-on mirrors double-load context every turn.
 Assert-Test -Name "No duplicated workspace .cursorrules (Cursor reads AGENTS.md natively)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursorrules"))) -Details "Remove it: just sync-rules"
 Assert-Test -Name "No duplicated workspace .cursor/rules/graphify.mdc (global rule covers)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\rules\graphify.mdc"))) -Details "Remove it: just sync-rules"
 Assert-Test -Name "No stray nested configs/agents/AGENTS.md (auto-ingested by Cursor)" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\AGENTS.md"))) -Details "Master is GLOBAL_RULES.md"
+
+$justfileText = Get-Content -Raw -Path (Join-Path $rootDir "justfile")
+Assert-Test -Name "justfile windows-shell is powershell.exe (5.1 bootstrap trampoline)" -Condition ($justfileText -match 'windows-shell := \["powershell\.exe"') -Details "just install must run before pwsh exists"
+Assert-Test -Name "justfile install recipe uses powershell.exe" -Condition ($justfileText -match '(?m)^install:\r?\n\s+@powershell\.exe') -Details "just install is the 5.1 bootstrap"
+Assert-Test -Name "justfile test/audit recipes use pwsh.exe" -Condition ($justfileText -match '(?m)^test:\r?\n\s+@pwsh\.exe' -and $justfileText -match '(?m)^audit:\r?\n\s+@pwsh\.exe') -Details "post-install recipes host PowerShell 7"
+
+$mergePy = Join-Path $rootDir "scripts\merge_cursor_agent_shell.py"
+if (Test-Path $mergePy) {
+    & python $mergePy --check | Out-Null
+    Assert-Test -Name "Cursor User settings.json automationProfile is pwsh.exe" -Condition ($LASTEXITCODE -eq 0) -Details "Run: just sync-rules (merge_cursor_agent_shell.py)"
+}
 
 # Workspace CLAUDE.md must be the official @AGENTS.md bridge, not a duplicate.
 $wsClaudeMd = Join-Path $rootDir "CLAUDE.md"
@@ -383,7 +428,7 @@ if ($graphifyMcpInstalledForClaude -and $jaqAvailable) {
 
 # UDEV Gothic NF Font Check
 $fontInstalled = $false
-$checkFontFiles = @("UDEVGothic35NF-Regular.ttf", "UDEVGothicNF-Regular.ttf")
+$checkFontFiles = @("UDEVGothicNF-Regular.ttf", "UDEVGothic35NF-Regular.ttf")
 foreach ($ff in $checkFontFiles) {
     if ((Test-Path (Join-Path "$env:SystemRoot\Fonts" $ff)) -or (Test-Path (Join-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts" $ff))) {
         $fontInstalled = $true
@@ -448,7 +493,7 @@ try {
     Assert-Test -Name "Mermaid ASCII diagram rendering" -Condition $mmdOk -Details ($mmdResult.Trim())
 
     # Test 4.7: AI Agent SSOT Rule Synchronization
-    $syncCheckProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $rootDir "scripts\sync_agent_rules.ps1"), "-Check" -NoNewWindow -Wait -PassThru
+    $syncCheckProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $rootDir "scripts\sync_agent_rules.ps1"), "-Check" -NoNewWindow -Wait -PassThru
     Assert-Test -Name "AI Agent SSOT Rule Synchronization (Master vs Targets)" -Condition ($syncCheckProc.ExitCode -eq 0) -Details "ExitCode: $($syncCheckProc.ExitCode)"
 
     # Test 4.8: Graphify Knowledge Graph Fast Query Execution

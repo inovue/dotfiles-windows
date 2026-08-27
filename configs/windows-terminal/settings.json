@@ -10,7 +10,7 @@
     "profiles": {
         "defaults": {
             "font": {
-                "face": "UDEV Gothic 35NF",
+                "face": "UDEV Gothic NF",
                 "size": 11.5
             },
             "colorScheme": "Catppuccin Mocha",

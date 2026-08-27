@@ -23,6 +23,9 @@ $ErrorActionPreference = "Continue"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = Split-Path -Parent $PSScriptRoot
+$psExe = "powershell.exe"
+$pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+if ($pwshCmd) { $psExe = $pwshCmd.Source }
 $testsScript = Join-Path $rootDir "tests\verify_tools.ps1"
 $secScript  = Join-Path $rootDir "tests\verify_security.ps1"
 $guardTestScript = Join-Path $rootDir "tests\verify_agent_guard.ps1"
@@ -65,7 +68,7 @@ $auditFailed = $false
 
 # --- Phase 1: Environment & Integration Test Suite ---
 Write-Host "`n[Audit Phase 1/4] Running Environment Verification Suite..." -ForegroundColor White
-$testProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $testsScript -NoNewWindow -Wait -PassThru
+$testProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $testsScript -NoNewWindow -Wait -PassThru
 if ($testProc.ExitCode -ne 0) {
     Write-Warning "[FAIL] Environment verification tests failed (ExitCode: $($testProc.ExitCode))."
     $auditFailed = $true
@@ -75,7 +78,7 @@ if ($testProc.ExitCode -ne 0) {
 
 Write-Host "`n[Audit Phase 1b/4] Running Security Regression Suite..." -ForegroundColor White
 if (Test-Path $secScript) {
-    $secProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $secScript -NoNewWindow -Wait -PassThru
+    $secProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $secScript -NoNewWindow -Wait -PassThru
     if ($secProc.ExitCode -ne 0) {
         Write-Warning "[FAIL] Security regression tests failed (ExitCode: $($secProc.ExitCode))."
         $auditFailed = $true
@@ -87,14 +90,14 @@ if (Test-Path $secScript) {
     $auditFailed = $true
 }
 
-Write-Host "`n[Audit Phase 1c/4] Running Agent Guard v4.4 Regression Suite..." -ForegroundColor White
+Write-Host "`n[Audit Phase 1c/4] Running Agent Guard v4.6 Regression Suite..." -ForegroundColor White
 if (Test-Path $guardTestScript) {
-    $guardProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript -NoNewWindow -Wait -PassThru
+    $guardProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript -NoNewWindow -Wait -PassThru
     if ($guardProc.ExitCode -ne 0) {
-        Write-Warning "[FAIL] Agent Guard v4.4 tests failed (ExitCode: $($guardProc.ExitCode))."
+        Write-Warning "[FAIL] Agent Guard v4.6 tests failed (ExitCode: $($guardProc.ExitCode))."
         $auditFailed = $true
     } else {
-        Write-Host "[PASS] Phase 1c: Agent Guard v4.4 regression suite passed." -ForegroundColor Green
+        Write-Host "[PASS] Phase 1c: Agent Guard v4.6 regression suite passed." -ForegroundColor Green
     }
 } else {
     Write-Warning "[FAIL] tests/verify_agent_guard.ps1 is missing."
@@ -103,7 +106,7 @@ if (Test-Path $guardTestScript) {
 
 Write-Host "`n[Audit Phase 1d/4] Running Semantic Graph Harness Suite..." -ForegroundColor White
 if (Test-Path $semanticTestScript) {
-    $semProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $semanticTestScript -NoNewWindow -Wait -PassThru
+    $semProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $semanticTestScript -NoNewWindow -Wait -PassThru
     if ($semProc.ExitCode -ne 0) {
         Write-Warning "[FAIL] Semantic graph harness tests failed (ExitCode: $($semProc.ExitCode))."
         $auditFailed = $true
@@ -117,7 +120,7 @@ if (Test-Path $semanticTestScript) {
 
 # --- Phase 2: AI Agent SSOT Rule Synchronization ---
 Write-Host "`n[Audit Phase 2/4] Checking AI Agent SSOT Synchronization..." -ForegroundColor White
-$syncProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $syncScript, "-Check" -NoNewWindow -Wait -PassThru
+$syncProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $syncScript, "-Check" -NoNewWindow -Wait -PassThru
 if ($syncProc.ExitCode -ne 0) {
     Write-Warning "[FAIL] SSOT rules or skills are out of sync with master."
     $auditFailed = $true

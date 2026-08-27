@@ -2,7 +2,7 @@
 #  dotfiles-windows - Just Command Runner
 # =============================================================================
 
-set windows-shell := ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+set windows-shell := ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"]
 
 # Default task: list all available commands
 default:
@@ -10,30 +10,30 @@ default:
 
 # Sync AI Agent SSOT rules and skills from configs/agents/ to workspace and global configs
 sync-rules:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/sync_agent_rules.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/sync_agent_rules.ps1
 
 # Check if all AI Agent rules and skills are in sync with the master SSOT files
 check-rules:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/sync_agent_rules.ps1 -Check
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/sync_agent_rules.ps1 -Check
 
 # Deploy all dotfile configurations (Windows Terminal, Helix, Nushell, Profiles, etc.)
 deploy:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/04_setup_configs.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/04_setup_configs.ps1
 
 # Run the comprehensive test suite to verify CLI tools, environment variables, and rules
 test:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_agent_guard.ps1
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_semantic_harness.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_agent_guard.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_semantic_harness.ps1
 
 # Run the 4-phase unified workspace audit (Tests, SSOT sync, Graph topology, Junk scan)
 audit:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/audit_workspace.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/audit_workspace.ps1
 
 # Clean temporary files, stale backups (*.bak), and cache artifacts
 clean:
-    @powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/audit_workspace.ps1 -Clean
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/audit_workspace.ps1 -Clean
 
 # Run the full setup process (Winget, Fonts, Runtimes, Configs)
 install:
@@ -41,11 +41,11 @@ install:
 
 # Securely configure AI Agent & Graphify API keys in Windows User Environment
 setup-keys:
-    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
+    @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1
 
 # Securely configure fal.ai API key (FAL_KEY) for LP asset generator & background removal
 setup-fal:
-    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1 -FalOnly
+    @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1 -FalOnly
 
 # Create a lightweight git checkpoint branch before risky agent edits
 checkpoint:
@@ -130,7 +130,7 @@ rtk-discover:
 
 # Update RTK to the latest release, re-sync agent rules, and run verification
 update-rtk:
-    @powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/03_setup_runtimes.ps1 -OnlyRtk -Force
+    @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/03_setup_runtimes.ps1 -OnlyRtk -Force
     @just sync-rules
     @just test
 

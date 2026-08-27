@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Fail-to-pass tests for agent_guard.py v4.4 (session identity, MCP, thrash, Claude ACI, merge, cumulative read, wait floor).
+    Fail-to-pass tests for agent_guard.py v4.6 (session identity, MCP, thrash, Claude ACI, merge, cumulative read, wait floor, pwsh host / thin 5.1 chain, query-log window).
 #>
 [CmdletBinding()]
 param()
@@ -31,7 +31,7 @@ function Assert-Test {
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host "  Agent Guard v4.4 Session / Thrash / Wait / Crawl Regression  " -ForegroundColor Cyan
+Write-Host "  Agent Guard v4.6 Session / Thrash / Wait / Crawl / Shell Regression  " -ForegroundColor Cyan
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 $guardScript = Join-Path $rootDir "scripts\agent_guard.py"
@@ -60,6 +60,7 @@ try {
     # Hermetic: never let a real ~/.cache/graphify-queries.log leak graph contact
     # into gate tests (v4.3 default-path fallback). The qlog tests lift this.
     $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
+    $env:AGENT_GUARD_TEST = "1"
 
     # --- P0: fallback conv_id is stable without conversationId (ppid must not be used)
     $fbRoot = Join-Path $tempTestDir "fallback_root"
@@ -788,8 +789,207 @@ print(prev)
     }
     Assert-Test -Name "v4.4 manage_task kill is allowed without poll guidance" -Condition ($killPoll -match '"decision":\s*"allow"' -and $killPoll -notmatch '\[Wait\]') -Details ($killPoll.Trim())
 
+    # =====================================================================
+    # v4.5: Cursor offset=1 whole-file, query-log 180s window,
+    #       beforeMCP session-log dedup (Cursor session 5ca2d438)
+    # v4.6: pwsh host — && is legal; deny only explicit powershell.exe + &&
+    # =====================================================================
+    $env:AGENT_GUARD_GRAPH_ROOT = $v44Root
+    $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
+    $v45Log = Join-Path $tempTestDir "v45-session-log.jsonl"
+    $env:AGENT_GUARD_LOG = $v45Log
+
+    $psAndConv = "v46-psand-$(Get-Random)"
+    $psAndAllow = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "echo a && echo b" } }
+        conversationId = $psAndConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 Cursor Shell echo && echo is allowed (pwsh host)" -Condition ($psAndAllow -match '"decision":\s*"allow"') -Details ($psAndAllow.Trim())
+
+    $psSemiConv = "v46-pssemi-$(Get-Random)"
+    $psSemi = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "echo a; echo b" } }
+        conversationId = $psSemiConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 Cursor Shell echo ; echo is allowed" -Condition ($psSemi -match '"decision":\s*"allow"') -Details ($psSemi.Trim())
+
+    $psCmdConv = "v46-pscmd-$(Get-Random)"
+    $psCmdAllow = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "cmd /c echo a && echo b" } }
+        conversationId = $psCmdConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 unquoted cmd /c echo && echo is allowed (pwsh parses && first)" -Condition ($psCmdAllow -match '"decision":\s*"allow"') -Details ($psCmdAllow.Trim())
+
+    $psCmdQConv = "v46-pscmdq-$(Get-Random)"
+    $psCmdQ = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "cmd /c `"echo a && echo b`"" } }
+        conversationId = $psCmdQConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 quoted cmd /c `"echo && echo`" is allowed" -Condition ($psCmdQ -match '"decision":\s*"allow"') -Details ($psCmdQ.Trim())
+
+    $psQuotedConv = "v46-psquoted-$(Get-Random)"
+    $psQuoted = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "rtk git log --format=`"%h && %s`"" } }
+        conversationId = $psQuotedConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 quoted && inside git format is not a chain deny" -Condition ($psQuoted -match '"decision":\s*"allow"') -Details ($psQuoted.Trim())
+
+    $winpsConv = "v46-winps-$(Get-Random)"
+    $winpsDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "powershell.exe echo a && echo b" } }
+        conversationId = $winpsConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 explicit powershell.exe echo && echo is denied" -Condition ($winpsDeny -match '"decision":\s*"deny"' -and $winpsDeny -match 'Shell Stability' -and $winpsDeny -match 'pwsh') -Details ($winpsDeny.Trim())
+
+    $winpsCmdConv = "v46-winpscmd-$(Get-Random)"
+    $winpsCmdDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "powershell.exe -Command `"echo a && echo b`"" } }
+        conversationId = $winpsCmdConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 powershell.exe -Command `"echo && echo`" is denied" -Condition ($winpsCmdDeny -match '"decision":\s*"deny"' -and $winpsCmdDeny -match 'Shell Stability') -Details ($winpsCmdDeny.Trim())
+
+    $pwshCmdConv = "v46-pwshcmd-$(Get-Random)"
+    $pwshCmdAllow = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "pwsh -NoProfile -Command `"echo a && echo b`"" } }
+        conversationId = $pwshCmdConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 pwsh -Command `"echo && echo`" is allowed" -Condition ($pwshCmdAllow -match '"decision":\s*"allow"') -Details ($pwshCmdAllow.Trim())
+
+    $wordConv = "v46-psword-$(Get-Random)"
+    $wordAllow = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "echo powershell && echo ok" } }
+        conversationId = $wordConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 echo powershell && echo is not a 5.1 launcher deny" -Condition ($wordAllow -match '"decision":\s*"allow"') -Details ($wordAllow.Trim())
+
+    $pyMentionConv = "v46-pymention-$(Get-Random)"
+    $pyMention = Invoke-GuardHook @{
+        toolCall       = @{ name = "Shell"; args = @{ command = "python -c `"print('powershell.exe echo a && echo b')`"" } }
+        conversationId = $pyMentionConv
+        cursor_version = "1.0"
+    }
+    Assert-Test -Name "v4.6 python -c string mentioning powershell.exe && is allowed" -Condition ($pyMention -match '"decision":\s*"allow"') -Details ($pyMention.Trim())
+
+    $env:CLAUDE_PROJECT_DIR = $v44Root
+    $claudeAnd = Invoke-GuardProc @{
+        tool_name       = "Bash"
+        tool_input      = @{ command = "echo a && echo b" }
+        conversationId  = "v46-claude-and-$(Get-Random)"
+        hook_event_name = "PreToolUse"
+    }
+    Assert-Test -Name "v4.6 Claude Bash echo && echo is allowed" -Condition ($claudeAnd.stdout -match '"permissionDecision":\s*"allow"' -and [int]$claudeAnd.code -eq 0) -Details ($claudeAnd.stdout)
+    Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+
+    $off1Conv = "v45-offset1-$(Get-Random)"
+    $off1Deny = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = @{ path = $crawlFile; offset = 1 }
+        conversationId  = $off1Conv
+    }
+    Assert-Test -Name "v4.5 Cursor Read offset=1 no limit is unsliced Gate 1" -Condition ($off1Deny -match '"decision":\s*"deny"' -and $off1Deny -match 'exceeds' -and $off1Deny -match 'rtk read' -and $off1Deny -notmatch 'cumulative') -Details ($off1Deny.Trim())
+
+    $off0Conv = "v45-offset0-$(Get-Random)"
+    $off0Deny = Invoke-GuardHook @{
+        tool_name       = "Read"
+        cursor_version  = "1.0"
+        tool_input      = @{ path = $crawlFile; offset = 0 }
+        conversationId  = $off0Conv
+    }
+    Assert-Test -Name "v4.5 Cursor Read offset=0 no limit is unsliced Gate 1" -Condition ($off0Deny -match '"decision":\s*"deny"' -and $off0Deny -match 'exceeds' -and $off0Deny -match 'rtk read') -Details ($off0Deny.Trim())
+
+    $staleLog = Join-Path $tempTestDir "v45-stale-queries.log"
+    $staleCorpus = (Join-Path $v44Root "graphify-out\graph.json").Replace('\', '\\')
+    $staleTs = (Get-Date).ToUniversalTime().AddHours(-3).ToString("yyyy-MM-ddTHH:mm:ss+00:00")
+    [System.IO.File]::WriteAllText($staleLog, "{`"ts`": `"$staleTs`", `"kind`": `"mcp_query`", `"question`": `"old`", `"corpus`": `"$staleCorpus`"}`n", [System.Text.UTF8Encoding]::new($false))
+    Remove-Item Env:GRAPHIFY_QUERY_LOG_DISABLE -ErrorAction SilentlyContinue
+    $env:GRAPHIFY_QUERY_LOG = $staleLog
+    $staleConv = "v45-qlog-stale-$(Get-Random)"
+    $staleDeny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $staleConv
+    }
+    Assert-Test -Name "v4.5 query-log fallback: 3h-old record still denies (180s window)" -Condition ($staleDeny -match '"decision":\s*"deny"' -and $staleDeny -match 'Graph-First') -Details ($staleDeny.Trim())
+    $env:GRAPHIFY_QUERY_LOG_DISABLE = "1"
+    Remove-Item Env:GRAPHIFY_QUERY_LOG -ErrorAction SilentlyContinue
+
+    $dupLog = Join-Path $tempTestDir "v45-mcp-dup.jsonl"
+    $env:AGENT_GUARD_LOG = $dupLog
+    $dupConv = "v45-mcp-dup-$(Get-Random)"
+    Invoke-GuardHook @{
+        toolCall       = @{ name = "CallDynamicTool"; args = @{ namespace = "user-graphify"; toolName = "get_neighbors"; arguments = @{ label = "x" } } }
+        conversationId = $dupConv
+        cursor_version = "1.0"
+    } | Out-Null
+    Invoke-GuardHook @{
+        hook_event_name = "beforeMCPExecution"
+        tool_name       = "get_neighbors"
+        tool_input      = '{"label":"x"}'
+        mcp_server_name = "user-graphify"
+        conversationId  = $dupConv
+        cursor_version  = "1.0"
+    } | Out-Null
+    $dupText = if (Test-Path $dupLog) { Get-Content -Raw -Path $dupLog } else { "" }
+    $dupCount = ([regex]::Matches($dupText, '"tool":\s*"get_neighbors"')).Count
+    Assert-Test -Name "v4.5 beforeMCPExecution does not duplicate session-log row" -Condition ($dupCount -eq 1) -Details ("count=$dupCount log=$dupText")
+
+    # --- v4.7: Workspace discovery from payload workspacePaths without AGENT_GUARD_GRAPH_ROOT
+    Remove-Item Env:AGENT_GUARD_GRAPH_ROOT -ErrorAction SilentlyContinue
+    $v47Root = Join-Path $tempTestDir "v47_workspace_root"
+    $v47GraphDir = Join-Path $v47Root "graphify-out"
+    New-Item -Path $v47GraphDir -ItemType Directory -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $v47GraphDir "graph.json"), '{"nodes":[],"links":[]}', [System.Text.Encoding]::UTF8)
+    $v47Conv = "v47-ws-disc-$(Get-Random)"
+    $v47Deny = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "rg -n foo scripts/" } }
+        conversationId = $v47Conv
+        workspacePaths = @($v47Root)
+    }
+    Assert-Test -Name "v4.7 global hook workspace discovery via workspacePaths triggers graph-gate" -Condition ($v47Deny -match '"decision":\s*"deny"' -and $v47Deny -match 'Graph-First') -Details ($v47Deny.Trim())
+
+    # --- v4.7: Antigravity Stop decision: continue format
+    $v47StopRoot = Join-Path $tempTestDir "v47_stop_root"
+    $v47StopGraphDir = Join-Path $v47StopRoot "graphify-out"
+    New-Item -Path $v47StopGraphDir -ItemType Directory -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $v47StopGraphDir "graph.json"), '{"nodes":[],"links":[]}', [System.Text.Encoding]::UTF8)
+    $v47StopFile = Join-Path $v47StopRoot "sample.txt"
+    [System.IO.File]::WriteAllText($v47StopFile, "content", [System.Text.Encoding]::UTF8)
+    $v47StopConv = "v47-stop-$(Get-Random)"
+    # First edit without update-graph/audit to dirty state
+    Invoke-GuardHook @{
+        toolCall       = @{ name = "replace_file_content"; args = @{ TargetFile = $v47StopFile; Instruction = "edit"; ReplacementContent = "new" } }
+        conversationId = $v47StopConv
+        workspacePaths = @($v47StopRoot)
+    } | Out-Null
+    # Call Stop hook for Antigravity (no cursor_version, no CLAUDE_PROJECT_DIR)
+    $v47StopRes = Invoke-GuardHook @{
+        hook_event_name = "Stop"
+        conversationId  = $v47StopConv
+        workspacePaths  = @($v47StopRoot)
+    }
+    Assert-Test -Name "v4.7 Antigravity Stop hook emits decision: continue when batch unverified" -Condition ($v47StopRes -match '"decision":\s*"continue"' -and $v47StopRes -match 'Batch End') -Details ($v47StopRes.Trim())
+
+    # --- v4.7: Antigravity wait floor: 5000ms denied with 10000ms guidance
+    $v47WaitConv = "v47-wait-$(Get-Random)"
+    $v47WaitShort = Invoke-GuardHook @{
+        toolCall       = @{ name = "run_command"; args = @{ CommandLine = "just test"; WaitMsBeforeAsync = 5000 } }
+        conversationId = $v47WaitConv
+        workspacePaths = @($v47StopRoot)
+    }
+    Assert-Test -Name "v4.7 Antigravity wait floor: 5000ms is denied with 10000ms guidance" -Condition ($v47WaitShort -match '"decision":\s*"deny"' -and $v47WaitShort -match 'WaitMsBeforeAsync=10000') -Details ($v47WaitShort.Trim())
+
     Remove-Item Env:AGENT_GUARD_GRAPH_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:AGENT_GUARD_LOG -ErrorAction SilentlyContinue
+    Remove-Item Env:AGENT_GUARD_TEST -ErrorAction SilentlyContinue
     Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:GRAPHIFY_QUERY_LOG -ErrorAction SilentlyContinue
     Remove-Item Env:GRAPHIFY_QUERY_LOG_DISABLE -ErrorAction SilentlyContinue
@@ -798,7 +998,7 @@ print(prev)
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host " Guard v4.4 Summary: $passedCount PASSED, $failedCount FAILED" -ForegroundColor $(if ($failedCount -eq 0) { "Green" } else { "Red" })
+Write-Host " Guard v4.7 Summary: $passedCount PASSED, $failedCount FAILED" -ForegroundColor $(if ($failedCount -eq 0) { "Green" } else { "Red" })
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 if ($failedCount -gt 0) { exit 1 } else { exit 0 }

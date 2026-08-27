@@ -16,6 +16,8 @@ just semantic-prepare
 # Else: for each uncached file, follow extraction-spec.md and accumulate
 # nodes/edges/hyperedges. Write the combined object to:
 #   graphify-out/.graphify_semantic.json
+# (Tip: in Antigravity or restricted environments where write_to_file is brain-only,
+#  use: python scripts/graphify_semantic.py write-json --data '<json>' or pipe via stdin)
 
 just semantic-merge
 ```

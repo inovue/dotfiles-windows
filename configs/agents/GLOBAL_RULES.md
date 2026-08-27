@@ -2,21 +2,22 @@
 
 > Always-on rules for all coding agents (Antigravity, Cursor Agent, Claude Code, Codex) on this Windows machine.
 > This layer holds only facts and invariants. Procedures live in on-demand skills — load one instead of guessing:
-> `graphify-navigator` (graph query protocol), `graphify-builder` (session-bound semantic extract), `modern-cli-expert` (AST/CLI recipes), `rtk-expert` (token proxy), `browser-agent` (Chrome automation).
+> `graphify-navigator` (graph query protocol), `graphify-builder` (session-bound semantic extract), `modern-cli-expert` (AST/CLI recipes), `rtk-expert` (token proxy), `browser-agent` (Chrome automation), `tui-wireframe-designer` (TUI layout and flow renderer).
 
 ## Core Invariants
 
 - **Token economy**: prepend `rtk` to noisy commands (`rtk git status`, `rtk read <file>`, `rtk test`). Raw dumps waste 60-90% of output tokens.
 - **Native CLI first**: use `rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `eza`, `hyperfine` instead of PowerShell pipelines (`Select-String`, `Get-ChildItem -Recurse`, `Get-Content`). Compiled tools are 10-100x faster and their output is stable to parse.
+- **PowerShell 7 host**: after `install.ps1`, Cursor automation / agent Shell / just recipes use `pwsh` (parses `&&`). `just install` and just's windows-shell stay `powershell.exe` so bootstrap works before winget installs pwsh. Do not wrap agent commands in `powershell.exe` (Windows PowerShell 5.1). Standalone `.ps1` still runs with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`. Any `.ps1` containing CJK must be UTF-8 **with BOM** (5.1 still exists on the machine).
 - **Non-interactive always**: `--paging=never`, `--no-pager`, `-y`; run `.ps1` with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`. Pagers, editors, and prompts hang agents.
-- **Encoding**: all code UTF-8. Any `.ps1` containing CJK text MUST be saved UTF-8 **with BOM** — Windows PowerShell 5.1 misparses BOM-less non-ASCII files.
+- **Encoding**: all code UTF-8. Any `.ps1` containing CJK text MUST be saved UTF-8 **with BOM** — Windows PowerShell 5.1 misparses BOM-less non-ASCII files. Antigravity `replace_file_content` strips BOM; re-apply with PowerShell if CJK `.ps1` edited.
 - **SSOT flow**: edit masters under `dotfiles-windows/configs/agents/`, then run `just sync-rules`. Deployed mirrors (global AGENTS.md / CLAUDE.md / rule files) are generated; direct edits get overwritten.
 - **Reads are a budget, not a reflex**: prefer graph queries and scoped `rg -n` snippets. When snippets already prove the answer, stop. Batch multi-target searches into a single `rg -e 'a' -e 'b'` pass instead of sequential lookups. Slice-read (max ~30 lines) only genuinely ambiguous spots; never re-read files already in context.
 - **Cumulative read cap**: sequential slices of one file that sum past 300 lines are the same waste as an unsliced dump. Stop. Structure discovery is `rg -n '^function |^def |^class '`, `ast-grep`, or `rtk read <f> -l aggressive`.
-- **Finite jobs wait in-tool**: terminating commands (`just audit`, `just test`, `just sync-rules`, `just check-rules`, `just update-graph`, `just deploy`) wait in the original shell call. Do not background them and poll for completion. Dev servers and `just watch` are the exception.
+- **Finite jobs wait in-tool**: terminating commands (`just audit`, `just test`, `just sync-rules`, `just check-rules`, `just update-graph`, `just deploy`) wait in the original shell call. Antigravity `run_command` schema caps at 10000ms; jobs exceeding 10s auto-background. Never poll (`schedule`/`manage_task status`) — yield the turn and let reactive push wake you.
 - **Edit verification**: treat an edit tool's success snippet as verification; do not re-read the same file immediately after. Re-read only on edit failure, ambiguous result, or external rewrite (hook/formatter).
 - **Content-addressed edits**: prefer old/new string edits. When only a line-numbered tool is available, discover all target line ranges in one pass (`rg -n -e 'a' -e 'b' <f>`), then apply same-file multi-edits Bottom-Up (highest line first) without intermediate re-reads.
-- **Guarantees live in hooks**: `agent_guard.py` v4.4 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines, **cumulative sliced reads of one file >300 lines**, finite-batch jobs with an explicit short wait / background flag, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists; stop/sessionEnd warns if edits lack `just update-graph` + `just audit`, or docs/images lack `just semantic-merge`. Short-wait polling tools get allow+guidance, never deny. Retry always passes — the guard can never deadlock the loop.
+- **Guarantees live in hooks**: `agent_guard.py` v4.7 hard-blocks destructive commands (v3 obfuscation resistance unchanged). Slow cmdlets, raw noisy git (missing `rtk`), unsliced reads >300 lines (Cursor `offset` 0/1 with no limit counts as unsliced), **cumulative sliced reads of one file >300 lines**, explicit `powershell.exe` (5.1) with `&&`/`||`, finite-batch jobs with an explicit short wait / background flag, and read-budget overruns get a ONE-STRIKE guidance deny. Graph-first walls: unanchored `rg`/`fd`/Grep and first/multi-file edits without a recorded graph query are one-strike denied when `graphify-out/graph.json` exists (query-log fallback is 180s, not 2h). stop/sessionEnd warns if edits lack `just update-graph` + `just audit`, or docs/images lack `just semantic-merge`. Short-wait polling tools get allow+guidance, never deny. Retry always passes — the guard can never deadlock the loop.
 - **Finish with structure**: end turns with a concise structured markdown answer, never bare tool output.
 
 ## Graph-First Navigation (when `graphify-out/graph.json` exists)
@@ -37,9 +38,9 @@
 
 | Task | Command |
 | :--- | :--- |
-| Content search | `rg -n "pat" <path>` |
+| Content search | `rg -n "pat" <path>`. Note: Antigravity `grep_search` on a single file returns 0 results; use directory + `Includes` or `rg -n`. |
 | File search | `fd "pat" -t f` |
-| View file | `rtk read <f>` / `bat --paging=never <f>` |
+| View / create file | `rtk read <f>` / `bat --paging=never <f>`. Note: Antigravity `write_to_file` is brain-only; workspace file creation uses `pwsh`/Python. |
 | Regex replace | `sd 'a' 'b' <f>` |
 | AST refactor | `ast-grep -p '<pat>' -r '<repl>'` |
 | JSON query | `jaq '.k' f.json` |
@@ -56,6 +57,6 @@ Finite batch jobs wait in the original shell call. After a server/watcher is sta
 
 | Intent | Antigravity | Cursor | Claude Code |
 | :--- | :--- | :--- | :--- |
-| Finite job (`just audit` / `test` / `sync-rules` / `deploy`) | `WaitMsBeforeAsync` >= 120000 | `block_until_ms` >= 120000 | do not set `run_in_background` |
+| Finite job (`just audit` / `test` / `sync-rules` / `deploy`) | `WaitMsBeforeAsync` >= 10000 (schema max; auto-backgrounds >10s; do not poll) | `block_until_ms` >= 120000 | do not set `run_in_background` |
 | Yield after starting a watcher | end the turn (completion push) | end the turn (unawaited-job notify) | end the turn (Bash completion notify) |
 | Hang-risk monitor (dev server) | one `manage_task` / terminal read | one `AwaitShell` with a long wait or pattern | `Monitor`, or one `BashOutput` |

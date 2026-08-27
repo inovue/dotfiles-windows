@@ -30,4 +30,5 @@ Re-query the graph before designing new functions or tasks, when syncing cross-l
 - Memory loop: session start `just lessons`; after answering an architecture/impact question `just remember "<q>" "<a>"` (wrong earlier answer: `graphify save-result --outcome corrected`). Saved results become graph nodes on the next update.
 - Wide nav: if `graphify-out/wiki/index.md` exists, use it for broad orientation before hub expansion.
 - SSOT: never edit generated mirrors — edit `configs/agents/` and run `just sync-rules`.
-- Hooks are walls: `agent_guard.py` v4 one-strike-denies unanchored search and first/multi-file edits when the graph exists but no graph query has been recorded this session.
+- Hooks are walls: `agent_guard.py` v4.7 one-strike-denies unanchored search and first/multi-file edits when the graph exists but no graph query has been recorded this session.
+- Antigravity tools: `grep_search` on a single file path returns 0 results on Windows — pass directory in `SearchPath` with `Includes: ["<file>"]` (or use `rg -n`). `write_to_file` is brain-only — use `pwsh`/Python for workspace file creation.

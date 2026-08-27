@@ -15,14 +15,9 @@
     ],
     "Stop": [
       {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python scripts/agent_guard.py",
-            "timeout": 5
-          }
-        ]
+        "type": "command",
+        "command": "python scripts/agent_guard.py",
+        "timeout": 5
       }
     ]
   }

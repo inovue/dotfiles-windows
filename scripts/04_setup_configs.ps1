@@ -187,6 +187,7 @@ function Deploy-WindowsTerminalConfig {
 
 # 1. Windows Terminal 設定のマージ配置
 Deploy-WindowsTerminalConfig -SrcPath (Join-Path $configsDir "windows-terminal\settings.json") -DestPath $wtDest
+# Cursor agent Shell (pwsh) is merged in step 4.2 via sync_agent_rules.ps1.
 
 # 2. その他 CLI / エディタ設定ファイルの配備マッピング
 $deployTargets = @(

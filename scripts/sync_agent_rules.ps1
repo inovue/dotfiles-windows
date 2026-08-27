@@ -6,7 +6,8 @@
     正本 (configs/agents/GLOBAL_RULES.md ほか) から以下へ同期します:
     - Antigravity: ~/.gemini/config/*, ~/.agents/rules|workflows|skills, MCP merge
     - Claude Code: ~/.claude/CLAUDE.md, ~/.claude/skills/..., ~/.claude.json (MCP surgical merge)
-    - Cursor:      %APPDATA%/Cursor/User/AGENTS.md, ~/.cursor/rules/graphify.mdc
+    - Cursor:      %APPDATA%/Cursor/User/AGENTS.md, ~/.cursor/rules/graphify.mdc,
+                   Cursor User settings.json (agent-shell fragment → pwsh)
     - Workspace:   CLAUDE.md (@AGENTS.md pointer), .agents/mcp_config.json (gitignored)
     アンチ重複: ワークスペースの .cursorrules / .cursor/rules/graphify.mdc は
     常時コンテキストの多重ロード源となるため存在すれば除去します。
@@ -31,6 +32,7 @@ $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
 $masterGraphifyBuilderDir = Join-Path $configsDir "agents\skills\graphify-builder"
 $masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
+$masterTuiWireframeDir = Join-Path $configsDir "agents\skills\tui-wireframe-designer"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
 $masterClaudeSettings = Join-Path $configsDir "agents\claude\settings.json"
 $masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
@@ -378,6 +380,7 @@ Write-Host "Master Rules: $masterRules" -ForegroundColor Gray
 Write-Host "Master Agents Dir: $masterAgentsDir`n" -ForegroundColor Gray
 
 $hasDiff = $false
+$fatalError = $false
 $syncedCount = 0
 $skippedCount = 0
 
@@ -409,6 +412,10 @@ $allTargets = @(
     @{ Name = "Claude Code Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "Cursor Global RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "Agents Skills RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "rtk-expert";                  IsDir = $true },
+    @{ Name = "Antigravity Global Tui-Wireframe";    Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "tui-wireframe-designer"; IsDir = $true },
+    @{ Name = "Claude Code Global Tui-Wireframe";    Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "tui-wireframe-designer";        IsDir = $true },
+    @{ Name = "Cursor Global Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "tui-wireframe-designer";        IsDir = $true },
+    @{ Name = "Agents Skills Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "tui-wireframe-designer";        IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";        Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
     @{ Name = "Claude Code Global Settings";         Src = $masterClaudeSettings; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json";                        IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py" },
@@ -490,6 +497,33 @@ foreach ($target in $allTargets) {
             }
             Write-Host "  [SYNCED] $($target.Name) -> $($target.Dest)" -ForegroundColor Green
             $syncedCount++
+        }
+    }
+}
+
+Write-Host "`n>> Cursor agent Shell (pwsh automationProfile)..." -ForegroundColor Cyan
+$mergePy = Join-Path $PSScriptRoot "merge_cursor_agent_shell.py"
+if (-not (Test-Path $mergePy)) {
+    Write-Warning "[MISSING] Source missing: $mergePy"
+    $hasDiff = $true
+    $fatalError = $true
+} else {
+    & python $mergePy --check
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [OK] Cursor agent-shell fragment is already in sync." -ForegroundColor DarkGray
+        $skippedCount++
+    } elseif ($Check) {
+        Write-Host "  [DIFF] Cursor agent-shell fragment not applied -> $env:APPDATA\Cursor\User\settings.json" -ForegroundColor Yellow
+        $hasDiff = $true
+    } else {
+        & python $mergePy
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [SYNCED] Cursor agent-shell -> $env:APPDATA\Cursor\User\settings.json" -ForegroundColor Green
+            $syncedCount++
+        } else {
+            Write-Warning "Cursor agent-shell merge failed (python / settings.json)"
+            $hasDiff = $true
+            $fatalError = $true
         }
     }
 }
@@ -585,4 +619,8 @@ if ($Check) {
 } else {
     Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
     Write-Host "Sync Completed: $syncedCount synced, $skippedCount already up to date." -ForegroundColor Green
+    if ($fatalError) {
+        Write-Warning "Result: fatal sync error (Cursor agent-shell merge)."
+        exit 1
+    }
 }

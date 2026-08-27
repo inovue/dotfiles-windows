@@ -23,26 +23,28 @@ def main() -> int:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    total = len(rows)
-    denied = sum(1 for r in rows if r.get("denied") or r.get("decision") == "deny")
-    thrash = sum(1 for r in rows if r.get("thrash"))
-    crawl = sum(1 for r in rows if r.get("crawl"))
-    poll_guide = sum(1 for r in rows if r.get("poll_guide"))
-    reads = sum(1 for r in rows if str(r.get("tool") or "") in {
+    real_rows = [r for r in rows if not r.get("test")]
+    test_rows = [r for r in rows if r.get("test")]
+    total = len(real_rows) if real_rows else len(rows)
+    denied = sum(1 for r in (real_rows or rows) if r.get("denied") or r.get("decision") == "deny")
+    thrash = sum(1 for r in (real_rows or rows) if r.get("thrash"))
+    crawl = sum(1 for r in (real_rows or rows) if r.get("crawl"))
+    poll_guide = sum(1 for r in (real_rows or rows) if r.get("poll_guide"))
+    reads = sum(1 for r in (real_rows or rows) if str(r.get("tool") or "") in {
         "view_file", "readfile", "read_file", "view", "read", "cat", "get_content",
     })
     deny_rate = (denied / total * 100) if total else 0.0
     thrash_rate = (thrash / reads * 100) if reads else 0.0
     max_lines = 0
-    for r in rows:
+    for r in (real_rows or rows):
         try:
             max_lines = max(max_lines, int(r.get("read_lines_max") or 0))
         except (TypeError, ValueError):
             continue
-    harnesses = Counter(str(r.get("harness") or "unknown") for r in rows)
+    harnesses = Counter(str(r.get("harness") or "unknown") for r in (real_rows or rows))
     harness_txt = ", ".join(f"{k}={v}" for k, v in sorted(harnesses.items()))
     print(f"session-log: {LOG}")
-    print(f"  events        : {total}")
+    print(f"  events        : {total}" + (f"  (excluded {len(test_rows)} test)" if test_rows else ""))
     print(f"  denied        : {denied} ({deny_rate:.1f}%)")
     print(f"  reads         : {reads}")
     print(f"  thrash (read-after-edit): {thrash} ({thrash_rate:.1f}% of reads)")

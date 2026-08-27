@@ -462,9 +462,37 @@ def cmd_status(root: Path, spec: Path) -> int:
     return 0
 
 
+def cmd_write_json(root: Path, input_data: str | None = None, chunk_id: str | None = None) -> int:
+    """Safely write semantic extraction JSON to graphify-out/.graphify_semantic.json
+    or .graphify_chunk_<chunk_id>.json without needing write_to_file."""
+    out_dir = _out(root)
+    if input_data is None:
+        raw = sys.stdin.read()
+    else:
+        raw = input_data
+    if not raw.strip():
+        print("write-json: empty input", file=sys.stderr)
+        return 1
+    try:
+        data = json.loads(raw.lstrip("\ufeff"))
+    except json.JSONDecodeError as err:
+        print(f"write-json: invalid JSON: {err}", file=sys.stderr)
+        return 1
+    if not isinstance(data, dict):
+        print("write-json: root must be a JSON object", file=sys.stderr)
+        return 1
+    if chunk_id:
+        target = out_dir / f".graphify_chunk_{chunk_id}.json"
+    else:
+        target = out_dir / SEMANTIC_NAME
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"write-json: wrote {len(data.get('nodes', []))} node(s), {len(data.get('edges', []))} edge(s) -> {target.name}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "merge", "rehydrate", "status"))
+    parser.add_argument("command", choices=("prepare", "merge", "rehydrate", "status", "write-json"))
     parser.add_argument("--root", type=Path, default=Path("."), help="project root")
     parser.add_argument("--spec", type=Path, default=None, help="extraction-spec.md path")
     parser.add_argument("--force", action="store_true", help="bypass to_json shrink-guard")
@@ -474,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="prepare: print nothing when uncached count is 0",
     )
+    parser.add_argument("--data", type=str, default=None, help="write-json: JSON string payload")
+    parser.add_argument("--chunk", type=str, default=None, help="write-json: chunk identifier")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     spec = _spec_path(str(args.spec) if args.spec else None, root)
@@ -484,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_merge(root, spec, args.force, args.from_cache)
     if args.command == "status":
         return cmd_status(root, spec)
+    if args.command == "write-json":
+        return cmd_write_json(root, args.data, args.chunk)
     return cmd_rehydrate(root, spec, args.force)
 
 

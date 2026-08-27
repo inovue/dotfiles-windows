@@ -25,3 +25,9 @@ If a content-addressed editor (`StrReplace`, `str_replace`, `apply_patch`) or a 
 ## Atomic multi-chunk alternative
 
 Same-file 3+ replacements: counted `sd` or `ast-grep -U` in one command (skill `modern-cli-expert`). Regex replace without a match-count assert is forbidden (silent over-replace).
+
+## UTF-8 BOM Preservation (PowerShell 5.1 CJK)
+
+`replace_file_content` writes UTF-8 without BOM. When editing `.ps1` files containing non-ASCII (CJK) characters, always re-apply the UTF-8 BOM after editing to prevent PowerShell 5.1 parse failures:
+`pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command '[System.IO.File]::WriteAllText("path/to.ps1", [System.IO.File]::ReadAllText("path/to.ps1", [System.Text.Encoding]::UTF8), [System.Text.UTF8Encoding]::new($true))'`
+

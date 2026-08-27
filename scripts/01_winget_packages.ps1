@@ -86,6 +86,7 @@ $packageGroups = [ordered]@{
     )
 
     "Apps" = @(
+        @{ Id = "Google.Chrome";             Name = "Google Chrome" }
         @{ Id = "Discord.Discord";           Name = "Discord" }
         @{ Id = "SlackTechnologies.Slack";   Name = "Slack" }
         @{ Id = "9NCBCSZSJRSB";              Name = "Spotify"; Source = "msstore" }

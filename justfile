@@ -47,6 +47,14 @@ setup-keys:
 setup-fal:
     @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_api_keys.ps1 -FalOnly
 
+# Re-apply Cursor × Windows harness baseline (env, PATH, settings.json, manifest)
+setup-harness:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/setup_cursor_harness.ps1
+
+# Verify harness baseline without applying changes
+check-harness:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/setup_cursor_harness.ps1 -Check
+
 # Create a lightweight git checkpoint branch before risky agent edits
 checkpoint:
     @$tag = 'checkpoint-' + (Get-Date -Format 'yyyyMMdd-HHmmss'); git branch $tag; Write-Host "[OK] Created git checkpoint branch: $tag" -ForegroundColor Green

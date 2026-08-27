@@ -232,7 +232,10 @@ $configFiles = @(
     @{ Name = "Script: audit_workspace.ps1";                 Path = Join-Path $rootDir "scripts\audit_workspace.ps1" }
     @{ Name = "Script: agent_guard.py";                      Path = Join-Path $rootDir "scripts\agent_guard.py" }
     @{ Name = "Script: merge_cursor_agent_shell.py";         Path = Join-Path $rootDir "scripts\merge_cursor_agent_shell.py" }
-    @{ Name = "Master Cursor agent-shell fragment";          Path = Join-Path $rootDir "configs\cursor\agent-shell.json" }
+    @{ Name = "Script: setup_cursor_harness.ps1";            Path = Join-Path $rootDir "scripts\setup_cursor_harness.ps1" }
+    @{ Name = "Master Cursor harness-settings fragment";     Path = Join-Path $rootDir "configs\cursor\harness-settings.json" }
+    @{ Name = "Master Cursor agent-shell fragment (legacy)"; Path = Join-Path $rootDir "configs\cursor\agent-shell.json" }
+    @{ Name = "Harness baseline doc (HARNESS_BASELINE.md)";  Path = Join-Path $rootDir "configs\agents\HARNESS_BASELINE.md" }
     @{ Name = "Script: Assert-PinnedHash.ps1";               Path = Join-Path $rootDir "scripts\Assert-PinnedHash.ps1" }
     @{ Name = "Test: verify_security.ps1";                   Path = Join-Path $rootDir "tests\verify_security.ps1" }
     @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
@@ -297,8 +300,16 @@ Assert-Test -Name "justfile test/audit recipes use pwsh.exe" -Condition ($justfi
 $mergePy = Join-Path $rootDir "scripts\merge_cursor_agent_shell.py"
 if (Test-Path $mergePy) {
     & python $mergePy --check | Out-Null
-    Assert-Test -Name "Cursor User settings.json automationProfile is pwsh.exe" -Condition ($LASTEXITCODE -eq 0) -Details "Run: just sync-rules (merge_cursor_agent_shell.py)"
+    Assert-Test -Name "Cursor User settings.json harness-settings in sync" -Condition ($LASTEXITCODE -eq 0) -Details "Run: just setup-harness or just sync-rules"
 }
+
+$setupHarness = Join-Path $rootDir "scripts\setup_cursor_harness.ps1"
+if (Test-Path $setupHarness) {
+    & $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $setupHarness -Check | Out-Null
+    Assert-Test -Name "Cursor harness baseline in sync (env + PATH + manifest)" -Condition ($LASTEXITCODE -eq 0) -Details "Run: just setup-harness"
+}
+$dotfilesHarness = [Environment]::GetEnvironmentVariable("DOTFILES_HARNESS", "User")
+Assert-Test -Name "User DOTFILES_HARNESS is cursor-windows-v1" -Condition ($dotfilesHarness -eq "cursor-windows-v1") -Details "Run: just setup-harness"
 
 # Workspace CLAUDE.md must be the official @AGENTS.md bridge, not a duplicate.
 $wsClaudeMd = Join-Path $rootDir "CLAUDE.md"

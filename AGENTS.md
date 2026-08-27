@@ -43,6 +43,7 @@ justfile           task runner — all common operations
 | `just checkpoint` / `just rollback` | git safety net around risky edits |
 | `just clean` | remove temp / backup junk |
 | `just install` / `just setup-keys` | full machine setup / API key configuration |
+| `just setup-harness` / `just check-harness` | fix or verify Cursor × Windows harness baseline (env, PATH, settings) |
 
 ## Deeper Docs (load on demand, do not inline)
 
@@ -54,3 +55,4 @@ justfile           task runner — all common operations
 | Semantic graph (docs/images INFERRED) | skill `graphify-builder` |
 | Modern CLI recipes | skill `modern-cli-expert` |
 | Token proxy usage | skill `rtk-expert` |
+| Harness baseline & session strategy (2026-08-28) | `docs/session-2026-08-28-harness-strategy.md` |

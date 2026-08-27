@@ -6,6 +6,7 @@
 
 ## Core Invariants
 
+- **Harness baseline (pre-configured)**: this machine is provisioned by `just install` / `just deploy` + `just sync-rules`. Agent Shell is `pwsh -NoProfile -NonInteractive` (Cursor automationProfile); hooks, PATH (`~/.local/bin`), UTF-8 env, and rules are fixed at setup. **Do not reconfigure** `settings.json`, shell profiles, or Windows PATH during tasks unless the user explicitly asks. Details: `configs/agents/HARNESS_BASELINE.md`.
 - **Token economy**: prepend `rtk` to noisy commands (`rtk git status`, `rtk read <file>`, `rtk test`). Raw dumps waste 60-90% of output tokens.
 - **Native CLI first**: use `rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `eza`, `hyperfine` instead of PowerShell pipelines (`Select-String`, `Get-ChildItem -Recurse`, `Get-Content`). Compiled tools are 10-100x faster and their output is stable to parse.
 - **PowerShell 7 host**: after `install.ps1`, Cursor automation / agent Shell / just recipes use `pwsh` (parses `&&`). `just install` and just's windows-shell stay `powershell.exe` so bootstrap works before winget installs pwsh. Do not wrap agent commands in `powershell.exe` (Windows PowerShell 5.1). Standalone `.ps1` still runs with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`. Any `.ps1` containing CJK must be UTF-8 **with BOM** (5.1 still exists on the machine).

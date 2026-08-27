@@ -501,7 +501,7 @@ foreach ($target in $allTargets) {
     }
 }
 
-Write-Host "`n>> Cursor agent Shell (pwsh automationProfile)..." -ForegroundColor Cyan
+Write-Host "`n>> Cursor harness baseline (harness-settings → settings.json)..." -ForegroundColor Cyan
 $mergePy = Join-Path $PSScriptRoot "merge_cursor_agent_shell.py"
 if (-not (Test-Path $mergePy)) {
     Write-Warning "[MISSING] Source missing: $mergePy"

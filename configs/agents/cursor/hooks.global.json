@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "Shell",
+        "command": "python scripts/agent_guard.py",
+        "timeout": 5
+      }
+    ]
+  }
+}

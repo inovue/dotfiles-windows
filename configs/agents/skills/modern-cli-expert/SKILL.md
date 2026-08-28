@@ -64,11 +64,11 @@ Use `xh` as the fastest, auto-formatting REST/JSON client (replaces heavy curl b
 ### Recipes:
 - **GET request with query parameters**:
   ```bash
-  xh GET https://httpbin.org/get search==antigravity limit==10
+  xh GET https://httpbin.org/get search==cursor limit==10
   ```
 - **POST JSON payload (auto-encoded)**:
   ```bash
-  xh POST https://httpbin.org/post name="Antigravity" enabled:=true count:=42
+  xh POST https://httpbin.org/post name="Cursor" enabled:=true count:=42
   ```
 - **Bearer Token Auth & Custom Headers**:
   ```bash

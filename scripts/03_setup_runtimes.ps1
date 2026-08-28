@@ -27,6 +27,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 . (Join-Path $PSScriptRoot "Assert-PinnedHash.ps1")
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$pinsPath = Join-Path $repoRoot "configs\pins.json"
+$pins = Get-Content -Raw -Path $pinsPath | ConvertFrom-Json
+$graphifyPin = [string]$pins.graphifyy
+$rtkPin = [string]$pins.rtk
+
 Write-Host "==========================================" -ForegroundColor Magenta
 Write-Host "  Step 3: Runtime & Tool Initialization   " -ForegroundColor Magenta
 Write-Host "==========================================" -ForegroundColor Magenta
@@ -76,26 +82,22 @@ function Install-UvPython {
 }
 
 function Install-GraphifyCli {
-    Write-Host "`n>> [3/10] Setting up Graphify (uv tool)..." -ForegroundColor Cyan
+    Write-Host "`n>> [3/10] Setting up Graphify (uv tool, pinned $graphifyPin)..." -ForegroundColor Cyan
     if (Get-Command uv -ErrorAction SilentlyContinue) {
         try {
-            $graphifyPresent = $false
-            try {
-                $toolList = uv tool list 2>&1 | Out-String
-                $graphifyPresent = ($toolList -match '(?m)^graphifyy\b')
-            } catch { }
+            $currentOk = $false
+            if (-not $Force -and (Get-Command graphify -ErrorAction SilentlyContinue)) {
+                $verOut = (& graphify --version 2>&1 | Out-String)
+                $currentOk = ($verOut -match [regex]::Escape($graphifyPin))
+            }
 
-            $extras = "graphifyy[mcp,gemini,openai,anthropic]"
+            $extras = "graphifyy[mcp,gemini,openai,anthropic]==$graphifyPin"
 
-            if ($graphifyPresent) {
-                Write-Host "   graphifyy already installed; ensuring full LLM extras in virtualenv..." -ForegroundColor Gray
-                $graphifyVenv = Join-Path $env:APPDATA "uv\tools\graphifyy"
-                if (Test-Path $graphifyVenv) {
-                    uv pip install --python $graphifyVenv openai 2>&1 | Out-Null
-                }
+            if ($currentOk) {
+                Write-Host "   graphifyy $graphifyPin already installed; skip." -ForegroundColor Gray
             } else {
                 Write-Host "   Installing $extras via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
-                uv tool install $extras 2>&1 | Out-Null
+                uv tool install --force $extras 2>&1 | Out-Null
             }
 
             $uvToolBin = ""
@@ -104,7 +106,7 @@ function Install-GraphifyCli {
             if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
 
             if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
-                Write-Host "[OK] graphify + graphify-mcp installed with LLM backends." -ForegroundColor Green
+                Write-Host "[OK] graphify + graphify-mcp installed (pin $graphifyPin)." -ForegroundColor Green
             } else {
                 Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
             }
@@ -141,7 +143,7 @@ function Install-RustupJaq {
 
 function Install-RtkCli {
     param([switch]$Force)
-    Write-Host "`n>> [5/11] Checking RTK (Rust Token Killer - LLM Token Optimizer CLI)..." -ForegroundColor Cyan
+    Write-Host "`n>> [5/11] Checking RTK (Rust Token Killer - pinned v$rtkPin)..." -ForegroundColor Cyan
     $localBinDir = Join-Path $env:USERPROFILE ".local\bin"
     $rtkExe = Join-Path $localBinDir "rtk.exe"
 
@@ -161,78 +163,59 @@ function Install-RtkCli {
         }
     }
 
-    # Query latest release from GitHub API
-    $latestTag = $null
-    $release = $null
-    try {
-        $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
-        $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction SilentlyContinue
-        if ($release -and $release.tag_name) {
-            $latestTag = $release.tag_name.TrimStart('v')
-        }
-    } catch {}
-
-    $needsInstall = ($null -eq $currentVersion) -or $Force
-    if ($currentVersion -and $latestTag -and ($currentVersion -ne $latestTag)) {
-        Write-Host "   Update available for RTK: v$currentVersion -> v$latestTag" -ForegroundColor Yellow
-        $needsInstall = $true
-    } elseif ($currentVersion -and (-not $Force)) {
-        Write-Host "[OK] RTK is up to date (v$currentVersion)." -ForegroundColor Green
+    if ($currentVersion -eq $rtkPin -and -not $Force) {
+        Write-Host "[OK] RTK is at pin v$rtkPin." -ForegroundColor Green
         return
     }
 
-    if ($needsInstall) {
-        Write-Host "   Downloading RTK binary$(if ($latestTag) { " (v$latestTag)" }) from GitHub releases..." -ForegroundColor Gray
-        $installed = $false
-        try {
-            if (-not $release) {
-                $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/latest"
-                $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction Stop
+    $tag = "v$rtkPin"
+    Write-Host "   Downloading RTK binary ($tag) from GitHub releases..." -ForegroundColor Gray
+    $installed = $false
+    try {
+        $releaseApi = "https://api.github.com/repos/rtk-ai/rtk/releases/tags/$tag"
+        $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing -ErrorAction Stop
+        $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
+        if ($asset) {
+            $downloadUrl = $asset.browser_download_url
+            if (-not ($downloadUrl -match '^https://(?:github\.com/rtk-ai/rtk/releases/download/|objects\.githubusercontent\.com/)')) {
+                throw "Security validation failed: Invalid download URL domain for RTK release ($downloadUrl)"
             }
-            $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
-            if ($asset) {
-                $downloadUrl = $asset.browser_download_url
-                if (-not ($downloadUrl -match '^https://(?:github\.com/rtk-ai/rtk/releases/download/|objects\.githubusercontent\.com/)')) {
-                    throw "Security validation failed: Invalid download URL domain for RTK release ($downloadUrl)"
-                }
-                $tempZip = Join-Path $env:TEMP "rtk_latest.zip"
-                $tempExtract = Join-Path $env:TEMP "rtk_extract"
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing -ErrorAction Stop
-                if (-not (Test-Path $tempZip) -or (Get-Item $tempZip).Length -lt 100000) {
-                    throw "Security validation failed: Downloaded RTK package is missing or corrupted."
-                }
-                $rtkSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
-                Write-Host "   [SHA256] RTK: $rtkSha256" -ForegroundColor DarkGray
-                $rtkPinName = if ($latestTag) { "rtk:$latestTag" } else { "rtk:latest" }
-                Assert-PinnedHash -Name $rtkPinName -FilePath $tempZip
-                Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
-                $extractedExe = Get-ChildItem -Path $tempExtract -Filter "rtk.exe" -Recurse | Select-Object -First 1
-                if ($extractedExe) {
-                    Copy-Item -Path $extractedExe.FullName -Destination $rtkExe -Force
-                    Remove-Item -Path $tempZip, $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
-                    $newVer = & $rtkExe --version 2>&1
-                    Write-Host "[OK] RTK binary updated: $newVer" -ForegroundColor Green
-                    $installed = $true
-                }
+            $tempZip = Join-Path $env:TEMP "rtk_pinned.zip"
+            $tempExtract = Join-Path $env:TEMP "rtk_extract"
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing -ErrorAction Stop
+            if (-not (Test-Path $tempZip) -or (Get-Item $tempZip).Length -lt 100000) {
+                throw "Security validation failed: Downloaded RTK package is missing or corrupted."
+            }
+            $rtkSha256 = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash
+            Write-Host "   [SHA256] RTK: $rtkSha256" -ForegroundColor DarkGray
+            Assert-PinnedHash -Name "rtk:$tag" -FilePath $tempZip
+            Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
+            $extractedExe = Get-ChildItem -Path $tempExtract -Filter "rtk.exe" -Recurse | Select-Object -First 1
+            if ($extractedExe) {
+                Copy-Item -Path $extractedExe.FullName -Destination $rtkExe -Force
+                Remove-Item -Path $tempZip, $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+                $newVer = & $rtkExe --version 2>&1
+                Write-Host "[OK] RTK binary installed: $newVer (pin $tag)" -ForegroundColor Green
+                $installed = $true
+            }
+        }
+    } catch {
+        if ("$_" -match 'SHA256') { throw }
+        Write-Warning "[WARN] Failed to download pinned RTK release $tag : $_"
+    }
+
+    if (-not $installed -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        Write-Host "   Building RTK $tag from source via cargo..." -ForegroundColor Gray
+        try {
+            cargo install --git https://github.com/rtk-ai/rtk --tag $tag --locked 2>&1 | Out-Null
+            $cargoRtk = Join-Path $env:USERPROFILE ".cargo\bin\rtk.exe"
+            if (Test-Path $cargoRtk) {
+                Copy-Item -Path $cargoRtk -Destination $rtkExe -Force
+                Write-Host "[OK] RTK $tag built and installed via cargo." -ForegroundColor Green
+                $installed = $true
             }
         } catch {
-            if ("$_" -match 'SHA256') { throw }
-            Write-Warning "[WARN] Failed to download pre-built RTK release: $_"
-        }
-
-        if (-not $installed -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
-            Write-Host "   Building RTK from source via cargo..." -ForegroundColor Gray
-            try {
-                cargo install --git https://github.com/rtk-ai/rtk --locked 2>&1 | Out-Null
-                $cargoRtk = Join-Path $env:USERPROFILE ".cargo\bin\rtk.exe"
-                if (Test-Path $cargoRtk) {
-                    Copy-Item -Path $cargoRtk -Destination $rtkExe -Force
-                    Write-Host "[OK] RTK built and installed via cargo." -ForegroundColor Green
-                    $installed = $true
-                }
-            } catch {
-                Write-Warning "[WARN] Failed to build RTK via cargo: $_"
-            }
+            Write-Warning "[WARN] Failed to build RTK via cargo: $_"
         }
     }
 }
@@ -513,7 +496,7 @@ Install-FnmNode
 Install-UvPython
 Install-GraphifyCli
 Install-RustupJaq
-Install-RtkCli
+Install-RtkCli -Force:$Force
 Update-TealdeerCache
 Install-HunkMermaid
 Install-HerdrPlugins

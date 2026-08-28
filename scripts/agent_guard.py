@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Agent Guard v4.6: Graph-First Deterministic Governor (PreToolUse / stop lifecycle hook).
+Agent Guard v5: Cursor-only Graph-First Governor (sessionStart / preToolUse /
+beforeMCP / afterFileEdit / stop hard-loop).
 
 Validates tool invocations, enforces safety invariants, limits token waste,
 and mechanically requires graph contact before unanchored search or multi-file
 edits when graphify-out/graph.json exists.
 
-Stability invariants (v2 hardening after Antigravity CLI field report):
+Stability invariants (v2 hardening after Windows Cursor field report):
  1. GUARDED FAIL-OPEN: any internal error yields {"decision": "allow"} and exit code 0,
                     BUT the raw payload is best-effort scanned against the destructive
                     patterns first — a parse glitch can no longer smuggle a wipe through.
@@ -38,9 +39,8 @@ Graph-first walls (v4):
  - EDIT-GATE  : first edit without graph contact is one-strike denied; retry of
                 the same file is the pinpoint escape. A second file without
                 graph contact is one-strike denied per path.
- - BATCH-END  : stop/sessionEnd injects a one-shot follow-up if edits happened
-                without `just update-graph` and `just audit`, or if docs/images
-                were edited without `just semantic-merge`.
+ - BATCH-END  : v4 one-shot follow-up; v5 hard-loops until `just update-graph`
+                + `just audit` (+ `just semantic-merge` if docs/images).
  - SESSION LOG: append-only JSONL at graphify-out/session-log.jsonl (ground truth
                 for later performance review; never a substitute for tests).
  - CONV-ID (v4.1): payload session keys first; never getppid() (Windows hook
@@ -48,20 +48,14 @@ Graph-first walls (v4):
                 is repo-root + TTL window. Deny/allow emit user_message.
  - THRASH (v4.1): read-after-edit within 120s is allow + guidance, never deny.
 
-Multi-harness ACI (v4.2):
- - DETECT     : cursor_version → Cursor; CLAUDE_PROJECT_DIR / permission_mode
-                → Claude Code; else Antigravity (legacy decision/permission JSON).
- - CLAUDE OUT : PreToolUse emits only hookSpecificOutput.permissionDecision;
-                deny also writes the reason to stderr and exits 2 so a schema
-                drift cannot fail-open. Stop uses decision:block (once).
-                stop_hook_active short-circuits to prevent a stop loop.
+Session ACI (v4.2 shape, v5 Cursor-only emit):
  - STATE MERGE: save_state re-reads the file and unions strikes/reads/edit_files
                 (OR for flags) so parallel hook processes cannot clobber one-strike.
  - FALLBACK   : win{N}_{digest} loads win{N-1}_{digest} when the current window
                 file is missing and the previous file is still inside TTL.
- - KNOWN LIMIT: concurrent Antigravity sessions that omit a session key still
-                share the repo+window fallback id. One-strike + merge keeps the
-                harm to at most one extra retry, not a deadlock.
+ - KNOWN LIMIT: concurrent sessions that omit a session key still share the
+                repo+window fallback id. One-strike + merge keeps the harm to
+                at most one extra retry, not a deadlock.
 
 Graph-contact resilience (v4.3 after Cursor field report 2026-08-26):
  - MCP UNWRAP : dynamic-tool wrappers (CallDynamicTool et al.) are unwrapped to
@@ -95,9 +89,9 @@ Graph-contact resilience (v4.3 after Cursor field report 2026-08-26):
 
 Token-efficiency walls (v4.4):
  - CUMULATIVE READ: sliced reads of the SAME file that sum past 300 lines are
-   one-strike denied — the N-slice bypass of the unsliced cap. Cursor/Claude
-   `limit` is a count; Antigravity StartLine/EndLine are inclusive bounds.
-   Known limit: shell paging (bat -r, Get-Content, sed -n) is not counted.
+   one-strike denied — the N-slice bypass of the unsliced cap. Cursor `limit`
+   is a count; StartLine/EndLine are inclusive bounds. Known limit: shell
+   paging (bat -r, Get-Content, sed -n) is not counted.
  - WAIT FLOOR : finite `just audit|test|sync-rules|check-rules|update-graph|deploy|semantic-prepare|semantic-merge`
    with an explicit short wait or background flag is one-strike denied. Dev
    servers and `just watch` are excluded. Wait-tool polling (AwaitShell /
@@ -118,17 +112,31 @@ PowerShell 7 host (v4.6):
  - PS 5.1 CHAIN: deny `&&` / `||` only when the command explicitly launches
    `powershell.exe` (Windows PowerShell 5.1). Install puts PowerShell 7 on PATH;
    just, Cursor automationProfile, and agent Shell host `pwsh`, which parses `&&`.
-   Claude Code Bash is unchanged. The v4.5 blanket deny on Cursor/Antigravity
-   was a false positive once the host is pwsh.
 
-Multi-harness Antigravity & Global Hook Discovery (v4.7):
- - WORKSPACE DISCOVERY: `find_repo_root` inspects payload `workspacePaths`, tool
-   args `Cwd`/file paths, and environment variables. Global hooks in `~/.gemini/config`
-   now discover the repo root without requiring CWD to be inside the workspace.
- - ANTIGRAVITY STOP: `emit_result` outputs `{"decision": "continue", "reason": "..."}`
-   to block premature agent termination when batch-end verification is missing.
- - ANTIGRAVITY WAIT FLOOR: explicit wait floor is 10000ms (schema maximum) on
-   Antigravity instead of 120000ms.
+Workspace discovery (v4.7, kept):
+ - `find_repo_root` inspects payload `workspacePaths`, tool args `Cwd`/file
+   paths, and environment variables so a global `~/.cursor/hooks.json` still
+   finds the repo without CWD being inside the workspace.
+
+Cursor-only SOTA (v5):
+ - ACI: emit Cursor-native JSON only (`permission`, `updated_input`,
+   `followup_message`, `additional_context`).
+ - RTK REWRITE: `rtk rewrite` on Shell → `updated_input` (allow). Fallback
+   one-strike deny remains if rewrite is unavailable for git status/log/diff/show.
+ - HARD LOOP: stop/sessionEnd keep `followup_message` until update-graph
+   (+ semantic-merge if docs) when graph.json exists. `just audit` is advisory
+   (Done contract), not a stop loop. Cursor `loop_limit` is 5.
+ - SESSION START: additional_context (graph-first + pins). Cannot block.
+ - AFTER EDIT: record edited flags only (never deny; the write already landed).
+ - WAIT FLOOR: always 120000ms (`block_until_ms`).
+
+Cursor × Graphify fold (v5.1, official docs 2026-08):
+ - Cursor runs ALL hook sources (Enterprise → Team → Project → User). Dual
+   full-guard copies double-count Read crawl. Project hooks are the graph
+   wall; user hooks are `--mode=destructive` (Shell only). Never Tab hooks.
+ - Graphify official strict = first raw-source redirect once, then nudge.
+   Graph-gate is one-strike on *unanchored* Grep/rg/fd only. Glob / scoped
+   `rg -n pat file` / Cursor semantic search are not gated.
 """
 import sys
 import json
@@ -137,10 +145,101 @@ import os
 import time
 import hashlib
 import tempfile
+import subprocess
 from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from shutil import which
+
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _guard_mode() -> str:
+    """CLI --mode=destructive for user-global Shell-only hooks (Cursor runs
+    Project + User together; a second full guard double-counts Read crawl)."""
+    for arg in sys.argv[1:]:
+        if arg in ("--mode=destructive", "--destructive"):
+            return "destructive"
+        if arg.startswith("--mode="):
+            return (arg.split("=", 1)[1].strip().lower() or "full")
+    return "full"
+
+
+def _is_dot_or_empty_path(p) -> bool:
+    s = str(p or "").strip().strip('"').strip("'")
+    if not s:
+        return True
+    s = s.replace("\\", "/").rstrip("/")
+    return s in ("", ".")
+
+
+def _tokenize_cmd(cmd: str) -> list:
+    return [m.group(0) for m in _CMD_TOKEN_RE.finditer(cmd or "")]
+
+
+def shell_search_is_unanchored(cmd: str) -> bool:
+    """True for rg/fd/grep with no path, or path '.' / './' only."""
+    if not UNANCHORED_SEARCH_RE.search(cmd or ""):
+        return False
+    tokens = _tokenize_cmd(cmd)
+    i = 0
+    while i < len(tokens):
+        bare = tokens[i].strip('"').strip("'").lower()
+        if bare in _SEARCH_BINARIES:
+            i += 1
+            positionals = []
+            pattern_consumed = False
+            while i < len(tokens):
+                raw = tokens[i].strip('"').strip("'")
+                if raw.startswith("-"):
+                    flag = raw.split("=", 1)[0]
+                    if flag in _SEARCH_VALUE_FLAGS and "=" not in raw:
+                        if flag in ("-e", "-f", "--regexp", "--file"):
+                            pattern_consumed = True
+                        i += 2
+                        continue
+                    i += 1
+                    continue
+                positionals.append(raw)
+                i += 1
+            paths = positionals if pattern_consumed else positionals[1:]
+            if not paths:
+                return True
+            return all(_is_dot_or_empty_path(p) for p in paths)
+        i += 1
+    return False
+
+
+def grep_tool_is_unanchored(args: dict) -> bool:
+    path = (
+        args.get("path") or args.get("Path") or args.get("search_path")
+        or args.get("SearchPath") or args.get("target_directory") or ""
+    )
+    return _is_dot_or_empty_path(path)
+
+
+def rtk_rewrite_command(cmd: str):
+    """Return the rtk-equivalent command, or None if rewrite is unavailable."""
+    if not cmd or not which("rtk"):
+        return None
+    if re.search(r"(?:^|[;&|(\s])rtk(?:\.exe)?\s", cmd, re.IGNORECASE):
+        return None
+    try:
+        proc = subprocess.run(
+            ["rtk", "rewrite", cmd],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            creationflags=_CREATE_NO_WINDOW,
+        )
+        out = (proc.stdout or "").strip()
+        rewritten = out.splitlines()[0].strip() if out else ""
+        # rtk 0.45 on Windows may exit 3 after a successful rewrite; trust stdout.
+        if rewritten.lower().startswith("rtk ") and rewritten != cmd:
+            return rewritten
+    except Exception:
+        return None
+    return None
 
 # --- Tunables -----------------------------------------------------------------
 MAX_UNSLICED_LINE_COUNT = 300   # <=300 lines: 1 full read is cheaper than N slices
@@ -238,8 +337,8 @@ RTK_NOISY_PATTERN = re.compile(
 
 # 4. Graph-first command classifiers (v4)
 GRAPH_CONTACT_RE = re.compile(
-    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+(?:path|graph|hubs|neighbors|update-graph)\b|"
-    r"graphify\s+(?:query|path|god-nodes|explain|update)\b)",
+    r"(?:^|[;&|(\s])(?:rtk\s+)?(?:just\s+(?:path|graph|hubs|neighbors|update-graph|affected|diagnose|lessons|remember)\b|"
+    r"graphify\s+(?:query|path|god-nodes|explain|update|affected|diagnose|tree|benchmark|check-update|save-result|reflect)\b)",
     re.IGNORECASE,
 )
 GRAPH_UPDATE_RE = re.compile(
@@ -262,12 +361,17 @@ SEMANTIC_MERGE_RE = re.compile(
 SEMANTIC_EDIT_SUFFIXES = (
     ".md", ".markdown", ".rst", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf",
 )
-POINTER_MAX_LINES = 5
-POINTER_NEEDLE = "@AGENTS.md"
 UNANCHORED_SEARCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rg\b|fd\b|grep\b)",
     re.IGNORECASE,
 )
+_SEARCH_BINARIES = {"rg", "rg.exe", "fd", "fd.exe", "grep", "grep.exe"}
+_SEARCH_VALUE_FLAGS = {
+    "-e", "-f", "-g", "-C", "-A", "-B", "-m", "-t",
+    "--glob", "--iglob", "--regexp", "--file", "--type",
+    "--max-count", "--context", "--after-context", "--before-context",
+}
+_CMD_TOKEN_RE = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
 FINITE_BATCH_RE = re.compile(
     r"(?:^|[;&|(\s])(?:rtk\s+)?just\s+"
     r"(?:audit|test|sync-rules|check-rules|update-graph|deploy|semantic-prepare|semantic-merge)\b",
@@ -288,11 +392,9 @@ GRAPH_TOOL_MARKERS = (
 # (Cursor's CallDynamicTool passes {namespace, toolName, arguments}).
 DYNAMIC_TOOL_WRAPPERS = {
     "calldynamictool", "call_dynamic_tool", "use_mcp_tool", "usemcptool",
-    "call_mcp_tool", "callmcptool", "mcp_tool_call", "mcptoolcall",
 }
 SEARCH_TOOLS = {
-    "grep", "grep_search", "glob", "glob_file_search",
-    "codebase_search", "find_by_name",
+    "grep", "grep_search",
 }
 SHELL_TOOLS = {
     "run_command", "bash", "execute_command", "powershell",
@@ -315,7 +417,14 @@ EDIT_TOOLS = {
     "multiedit", "multi_edit", "notebookedit", "notebook_edit",
     "search_replace",
 }
-STOP_EVENTS = {"stop", "sessionend", "sessionstart"}  # sessionstart ignored in inspect
+STOP_EVENTS = {"stop", "sessionend"}
+SESSION_START_CONTEXT = (
+    "Harness v2 (graphify+rtk pinned). Start with `just lessons`. "
+    "Graph-first: `just hubs` then `just neighbors`/`just affected`. "
+    "Shell is rewritten through rtk. Stop hard-loops until "
+    "`just update-graph` (docs: skill graphify-builder then "
+    "`just semantic-merge`). `just audit` is the Done contract, not a loop."
+)
 
 
 def allow(reason: str = "", *, agent_message: str = "") -> dict:
@@ -397,7 +506,7 @@ def _raw_tool_name(payload: dict, tool_call: dict) -> str:
 
 
 def _arg_get(args: dict, *keys: str):
-    """Case-insensitive dict lookup (Antigravity uses ToolName/ServerName)."""
+    """Case-insensitive dict lookup (MCP wrappers mix ToolName / tool_name)."""
     if not isinstance(args, dict) or not keys:
         return None
     lower = {str(k).lower(): v for k, v in args.items()}
@@ -424,47 +533,15 @@ def _graph_lookup_name(payload: dict, tool_call: dict) -> str:
 
 
 def detect_harness(payload=None) -> str:
-    p = payload if isinstance(payload, dict) else {}
-    if p.get("cursor_version"):
-        return "cursor"
-    if os.environ.get("CLAUDE_PROJECT_DIR") or ("permission_mode" in p):
-        return "claude"
-    return "antigravity"
+    """Cursor-only harness. Payload kept for call-site compatibility."""
+    del payload
+    return "cursor"
 
 
 def emit_result(result: dict, harness: str, hook_event: str) -> None:
-    """Write harness-specific JSON and exit. Claude deny uses exit 2 as a
-    schema-proof block; Antigravity stop uses decision: continue; Cursor/Antigravity
-    PreToolUse keep the v4.1 superset JSON."""
-    denied = result.get("decision") == "deny" or result.get("permission") == "deny"
-    reason = result.get("reason") or result.get("agent_message") or ""
-    if harness == "claude":
-        if hook_event in ("stop", "sessionend"):
-            msg = result.get("followup_message") or result.get("reason") or ""
-            if msg and (result.get("followup_message") or result.get("decision") == "block"):
-                print(json.dumps({"decision": "block", "reason": msg}))
-            else:
-                print("{}")
-            sys.exit(0)
-        out = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny" if denied else "allow",
-                "permissionDecisionReason": reason,
-            }
-        }
-        print(json.dumps(out))
-        if denied:
-            print(reason, file=sys.stderr)
-            sys.exit(2)
-        sys.exit(0)
-    if harness == "antigravity" and hook_event in ("stop", "sessionend"):
-        msg = result.get("followup_message") or result.get("reason") or ""
-        if msg:
-            print(json.dumps({"decision": "continue", "reason": msg}))
-        else:
-            print(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+    """Write Cursor-native JSON and exit. `harness`/`hook_event` kept for
+    call-site compatibility and session-log."""
+    del harness, hook_event
     print(json.dumps(result))
     sys.exit(0)
 
@@ -492,7 +569,7 @@ def find_repo_root(payload=None, args=None) -> Path | None:
         return p if p.exists() else None
 
     starts = []
-    # 1. Payload workspace paths (Antigravity passes workspacePaths: [...])
+    # 1. Payload workspace paths (workspacePaths / workspace_roots)
     if isinstance(payload, dict):
         for wp_key in ("workspacePaths", "workspace_paths"):
             wps = payload.get(wp_key)
@@ -531,7 +608,7 @@ def find_repo_root(payload=None, args=None) -> Path | None:
                     pass
 
     # 3. Environment variables
-    for env_var in ("WORKSPACE_ROOT", "CLAUDE_PROJECT_DIR", "CURSOR_PROJECT_DIR"):
+    for env_var in ("WORKSPACE_ROOT", "CURSOR_PROJECT_DIR"):
         v = os.environ.get(env_var)
         if v:
             try:
@@ -714,7 +791,7 @@ def normalize_event(payload: dict) -> str:
 
 # --- Session state (TTL + garbage collection) ----------------------------------
 def _state_dir() -> Path:
-    d = Path(tempfile.gettempdir()) / "agy_agent_guard"
+    d = Path(tempfile.gettempdir()) / "cursor_agent_guard"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -943,7 +1020,7 @@ def _int_arg(args: dict, *keys):
 
 def _explicit_wait_ms(args: dict):
     return _int_arg(
-        args, "WaitMsBeforeAsync", "waitMsBeforeAsync", "block_until_ms", "blockUntilMs",
+        args, "block_until_ms", "blockUntilMs",
     )
 
 
@@ -952,36 +1029,23 @@ def finite_job_backgrounded(args: dict, cmd: str, harness: str = "") -> bool:
         return False
     if WATCHER_RE.search(cmd):
         return False
-    if _truthy(_arg_get(args, "run_in_background", "runInBackground",
-                        "RunPersistent", "run_persistent")):
+    if _truthy(_arg_get(args, "run_in_background", "runInBackground")):
         return True
     wait = _explicit_wait_ms(args)
-    floor = 10000 if harness == "antigravity" else FINITE_WAIT_MS
-    return wait is not None and wait < floor
+    del harness
+    return wait is not None and wait < FINITE_WAIT_MS
 
 
 def wait_floor_guidance(args: dict, harness: str = "") -> str:
+    del harness
     if _truthy(_arg_get(args, "run_in_background", "runInBackground")):
         return (
             "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
             "Retry without run_in_background (retry passes; one-strike)."
         )
-    if _truthy(_arg_get(args, "RunPersistent", "run_persistent")):
-        floor_text = "WaitMsBeforeAsync=10000" if harness == "antigravity" else "WaitMsBeforeAsync=120000"
-        return (
-            "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
-            f"Retry without RunPersistent and with {floor_text} "
-            "(retry passes; one-strike)."
-        )
-    if _arg_get(args, "block_until_ms", "blockUntilMs") is not None:
-        return (
-            "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
-            "Retry with block_until_ms=120000 (retry passes; one-strike)."
-        )
-    floor_val = "10000 (schema max)" if harness == "antigravity" else "120000"
     return (
         "Agent Guard [Finite Job Wait]: do not background a finite batch job. "
-        f"Retry with WaitMsBeforeAsync={floor_val} (retry passes; one-strike)."
+        "Retry with block_until_ms=120000 (retry passes; one-strike)."
     )
 
 
@@ -997,8 +1061,8 @@ def _is_short_wait(args: dict, harness: str = "") -> bool:
             pass
     wait = _explicit_wait_ms(args)
     if wait is not None:
-        floor = 10000 if harness == "antigravity" else POLL_SHORT_MS
-        return 0 <= wait < floor
+        del harness
+        return 0 <= wait < POLL_SHORT_MS
     return True
 
 
@@ -1024,7 +1088,7 @@ def posix_chain_in_winps51(cmd: str) -> bool:
     """True only when Windows PowerShell 5.1 is the explicit interpreter AND
     the command still contains `&&` / `||` (including inside -Command quotes).
 
-    After install, just/Cursor automation/Antigravity host is pwsh 7, which
+    After install, just/Cursor host is pwsh 7, which
     parses POSIX chains natively — a blanket deny would false-positive.
     Launcher match is on quote-stripped text so a Python/rg string that merely
     *mentions* powershell.exe is not treated as a 5.1 invocation.
@@ -1089,8 +1153,25 @@ def inspect_run_command(args: dict, conv_id: str, harness: str = "") -> dict:
             save_state(conv_id, state)
             return allow()
 
-    # Gate 3: rtk token-proxy enforcement — one-strike, only when rtk is installed.
-    if which("rtk") and not re.search(r"(?:^|[;&|(\s])rtk\s", cmd):
+    # Gate 4 (v4 / v5.1): unanchored search before any graph query.
+    if graph_exists() and shell_search_is_unanchored(cmd) and not has_graph_contact(state):
+        if first_strike(state, "graph-gate:search"):
+            save_state(conv_id, state)
+            return deny(
+                "Agent Guard [Graph-First]: unanchored search while graphify-out/graph.json exists. "
+                "Query the graph first: `just hubs` or `just path <a> <b>`, then scoped "
+                "`rg -n <pattern> <file>` (retry passes; one-strike)."
+            )
+
+    # Gate 3 (v5): rewrite noisy output through rtk (allow + updated_input).
+    rewritten = rtk_rewrite_command(cmd)
+    if rewritten:
+        save_state(conv_id, state)
+        result = allow("rtk rewrite")
+        result["updated_input"] = {"command": rewritten, "CommandLine": rewritten}
+        result["agent_message"] = f"Agent Guard [Token Economy]: rewrote to `{rewritten}`"
+        return result
+    if which("rtk") and not re.search(r"(?:^|[;&|(\s])rtk(?:\.exe)?\s", cmd, re.IGNORECASE):
         m = RTK_NOISY_PATTERN.search(cmd)
         if m:
             noisy = m.group(1).strip()
@@ -1103,24 +1184,14 @@ def inspect_run_command(args: dict, conv_id: str, harness: str = "") -> dict:
             save_state(conv_id, state)
             return allow()
 
-    # Gate 4 (v4): unanchored search before any graph query.
-    if graph_exists() and UNANCHORED_SEARCH_RE.search(cmd) and not has_graph_contact(state):
-        if first_strike(state, "graph-gate:search"):
-            save_state(conv_id, state)
-            return deny(
-                "Agent Guard [Graph-First]: unanchored search while graphify-out/graph.json exists. "
-                "Query the graph first: `just hubs` or `just path <a> <b>`, then scoped "
-                "`rg -n <pattern> <file>` (retry passes; one-strike)."
-            )
-
     save_state(conv_id, state)
     return allow()
 
 
-def inspect_search_tool(conv_id: str) -> dict:
-    """Grep/Glob/codebase_search without prior graph contact (v4 graph-gate)."""
+def inspect_search_tool(args: dict, conv_id: str) -> dict:
+    """Unanchored Grep (no path / '.') without prior graph contact (v5.1)."""
     state = load_state(conv_id)
-    if graph_exists() and not has_graph_contact(state):
+    if graph_exists() and not has_graph_contact(state) and grep_tool_is_unanchored(args):
         if first_strike(state, "graph-gate:search"):
             save_state(conv_id, state)
             return deny(
@@ -1161,8 +1232,8 @@ def _file_remaining(path_obj: Path, origin_1indexed: int):
 
 
 def slice_line_count(args: dict, path_obj: Path) -> int:
-    """Lines this read will ingest. Cursor/Claude `limit` is a count;
-    Antigravity StartLine/EndLine are inclusive 1-indexed bounds.
+    """Lines this read will ingest. Cursor `limit` is a count;
+    StartLine/EndLine are inclusive 1-indexed bounds.
     When the file exists, requested ranges are clamped to remaining lines
     so a 50-line file cannot be billed as a 400-line crawl."""
     start = _int_arg(args, "StartLine", "start_line")
@@ -1231,7 +1302,7 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
     file_name = path_obj.name.lower()
 
     # Skill documentation and rule entrypoints are exempt from caps and budget.
-    is_exempt = file_name in ["skill.md", "agents.md", "claude.md", ".cursorrules", "gemini.md", "hooks.json"] or "skills" in target_path.lower()
+    is_exempt = file_name in ["skill.md", "agents.md", ".cursorrules", "gemini.md", "hooks.json"] or "skills" in target_path.lower()
 
     state = load_state(conv_id)
     state["wait_streak"] = 0
@@ -1321,14 +1392,7 @@ def inspect_view_file(args: dict, conv_id: str) -> dict:
 
 
 def inspect_write_to_file(args: dict) -> dict:
-    target_file = args.get("TargetFile") or args.get("path") or args.get("file_path") or ""
-    metadata = args.get("ArtifactMetadata")
-
-    if metadata and target_file and "brain" not in target_file.lower():
-        return deny(
-            "Agent Guard [Workspace Edit Invariant]: Do NOT use write_to_file with ArtifactMetadata "
-            "on workspace project files. Use replace_file_content for atomic surgical edits."
-        )
+    del args
     return allow()
 
 
@@ -1337,20 +1401,6 @@ def _edit_target(args: dict) -> str:
         args.get("TargetFile") or args.get("path") or args.get("file_path")
         or args.get("target_notebook") or args.get("AbsolutePath") or "unknown"
     )
-
-
-def _is_agents_pointer_doc(target: str) -> bool:
-    """Workspace CLAUDE.md @AGENTS.md pointers are not semantic docs."""
-    path = Path(str(target))
-    if path.name.lower() != "claude.md":
-        return False
-    try:
-        text = path.read_text(encoding="utf-8-sig")
-    except OSError:
-        return False
-    if POINTER_NEEDLE not in text:
-        return False
-    return len(text.splitlines()) <= POINTER_MAX_LINES
 
 
 def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) -> dict:
@@ -1394,7 +1444,7 @@ def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) ->
 
     state["edited"] = True
     suffix = Path(str(target)).suffix.lower()
-    if suffix in SEMANTIC_EDIT_SUFFIXES and not _is_agents_pointer_doc(str(target)):
+    if suffix in SEMANTIC_EDIT_SUFFIXES:
         state["edited_semantic"] = True
     if target not in files:
         files.append(target)
@@ -1407,48 +1457,74 @@ def inspect_edit_gate(args: dict, conv_id: str, metadata_check: bool = False) ->
     return allow()
 
 
-def inspect_batch_end(conv_id: str) -> dict:
-    """stop/sessionEnd: warn once if edits happened without update-graph + audit."""
+def inspect_session_start() -> dict:
+    """Fire-and-forget context injection. Cannot block the session."""
+    return allow(agent_message=SESSION_START_CONTEXT)
+
+
+def inspect_after_edit(args: dict, conv_id: str) -> dict:
+    """Record edited flags after a write already landed. Never deny."""
+    target = _edit_target(args)
+    if not target or target == "unknown" or not _in_repo(target):
+        return allow()
     state = load_state(conv_id)
+    files = list(state.get("edit_files") or [])
+    state["edited"] = True
+    suffix = Path(str(target)).suffix.lower()
+    if suffix in SEMANTIC_EDIT_SUFFIXES:
+        state["edited_semantic"] = True
+    if target not in files:
+        files.append(target)
+    state["edit_files"] = files
+    state["last_edit"] = {"path": str(target), "ts": time.time()}
+    save_state(conv_id, state)
+    return allow()
+
+
+def inspect_batch_end(conv_id: str) -> dict:
+    """stop/sessionEnd: hard-loop followup until update-graph (+ semantic) when
+    this workspace has a graph. `just audit` is advisory, not a loop condition."""
+    state = load_state(conv_id)
+    result = allow()
+    if not graph_exists():
+        save_state(conv_id, state)
+        return result
     edited = bool(state.get("edited"))
     updated = bool(state.get("did_update_graph"))
-    audited = bool(state.get("did_audit"))
-    result = allow()
     msgs = []
-    if edited and (not updated or not audited):
-        missing = []
-        if not updated:
-            missing.append("`just update-graph`")
-        if not audited:
-            missing.append("`just audit`")
-        msg = (
+    if edited and not updated:
+        msgs.append(
             "Agent Guard [Batch End]: edits recorded this session but "
-            + " and ".join(missing)
-            + " not run. Run them before reporting done. "
-            "just audit PASS proves no regression, not that a fix works (Done contract)."
+            "`just update-graph` not run. Run it before reporting done. "
+            "`just audit` is the Done contract (regression check), not a stop loop."
         )
-        # v4.3 advisory (never a block condition by itself): feed the work-memory loop.
-        if state.get("graph_contact") and not state.get("did_save_result"):
-            msg += (
-                " Graph queries also ran this session — run `just remember "
-                "\"<question>\" \"<answer>\"` (graphify save-result) so the next "
-                "update turns this session's findings into graph nodes."
-            )
-        msgs.append(msg)
     if state.get("edited_semantic") and not state.get("did_semantic_merge"):
         msgs.append(
             "Agent Guard [Batch End]: docs/images edited this session but "
             "`just semantic-merge` was not run. Load skill `graphify-builder`, "
             "then `just semantic-prepare` / `just semantic-merge`."
         )
-    if msgs and first_strike(state, "batch-end"):
+    if msgs:
         combined = " ".join(msgs)
+        if state.get("graph_contact") and not state.get("did_save_result"):
+            combined += (
+                " Graph queries also ran this session — run `just remember "
+                "\"<question>\" \"<answer>\"` (graphify save-result) so the next "
+                "update turns this session's findings into graph nodes."
+            )
         result["reason"] = combined
         result["followup_message"] = combined
         result["additional_context"] = combined
         result["agent_message"] = combined
         save_state(conv_id, state)
         return result
+    if state.get("graph_contact") and not state.get("did_save_result"):
+        nudge = (
+            "Agent Guard [Memory]: graph queries ran — `just remember "
+            "\"<question>\" \"<answer>\"` turns them into graph nodes (advisory)."
+        )
+        result["additional_context"] = nudge
+        result["agent_message"] = nudge
     save_state(conv_id, state)
     return result
 
@@ -1516,7 +1592,7 @@ def main() -> None:
         args = _extract_args(payload, tool_call)
         find_repo_root(payload, args)
 
-        # v4.3: unwrap CallDynamicTool and Antigravity call_mcp_tool (PascalCase keys).
+        # v4.3: unwrap CallDynamicTool (mixed-case keys).
         if tool_name in DYNAMIC_TOOL_WRAPPERS and isinstance(args, dict):
             inner = _canon_tool(str(_arg_get(args, "toolName", "tool_name") or ""))
             if inner:
@@ -1528,8 +1604,26 @@ def main() -> None:
 
         gc_stale_state_files()
 
-        if hook_event in ("stop", "sessionend") and payload.get("stop_hook_active"):
-            result = allow()
+        if _guard_mode() == "destructive":
+            if tool_name in SHELL_TOOLS:
+                cmd = (
+                    args.get("CommandLine") or args.get("command")
+                    or args.get("cmd") or args.get("script") or ""
+                )
+                reason = find_dangerous(cmd)
+                result = (
+                    deny(f"Agent Guard [Safety Block]: {reason} -> '{cmd[:70]}...'")
+                    if reason else allow()
+                )
+            else:
+                result = allow()
+            emit_result(result, harness, hook_event)
+            return
+
+        if hook_event == "sessionstart":
+            result = inspect_session_start()
+        elif hook_event == "afterfileedit":
+            result = inspect_after_edit(args, conv_id)
         elif hook_event in ("stop", "sessionend"):
             result = inspect_batch_end(conv_id)
         elif is_graph_tool(tool_name) or is_graph_tool(graph_name):
@@ -1539,7 +1633,7 @@ def main() -> None:
         elif tool_name in WAIT_TOOLS:
             result = inspect_wait_tool(args, conv_id)
         elif tool_name in SEARCH_TOOLS:
-            result = inspect_search_tool(conv_id)
+            result = inspect_search_tool(args, conv_id)
         elif tool_name in READ_TOOLS:
             result = inspect_view_file(args, conv_id)
         elif tool_name in WRITE_TOOLS:

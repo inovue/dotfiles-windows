@@ -90,14 +90,14 @@ if (Test-Path $secScript) {
     $auditFailed = $true
 }
 
-Write-Host "`n[Audit Phase 1c/4] Running Agent Guard v4.6 Regression Suite..." -ForegroundColor White
+Write-Host "`n[Audit Phase 1c/4] Running Agent Guard v5 Regression Suite..." -ForegroundColor White
 if (Test-Path $guardTestScript) {
     $guardProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript -NoNewWindow -Wait -PassThru
     if ($guardProc.ExitCode -ne 0) {
-        Write-Warning "[FAIL] Agent Guard v4.6 tests failed (ExitCode: $($guardProc.ExitCode))."
+        Write-Warning "[FAIL] Agent Guard v5 tests failed (ExitCode: $($guardProc.ExitCode))."
         $auditFailed = $true
     } else {
-        Write-Host "[PASS] Phase 1c: Agent Guard v4.6 regression suite passed." -ForegroundColor Green
+        Write-Host "[PASS] Phase 1c: Agent Guard v5 regression suite passed." -ForegroundColor Green
     }
 } else {
     Write-Warning "[FAIL] tests/verify_agent_guard.ps1 is missing."

@@ -165,7 +165,7 @@ def normalize_url(url: str) -> str:
     return f"https://{url}"
 
 async def main():
-    parser = argparse.ArgumentParser(description="Antigravity Ultra-Reliable Browser Runner")
+    parser = argparse.ArgumentParser(description="Ultra-Reliable Browser Runner")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Common args

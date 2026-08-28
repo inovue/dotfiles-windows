@@ -60,7 +60,6 @@ $packageGroups = [ordered]@{
         @{ Id = "Anysphere.Cursor";          Name = "Cursor (AI駆動コードエディタ)" }
         @{ Id = "Git.Git";                   Name = "Git" }
         @{ Id = "GitHub.cli";                Name = "GitHub CLI (gh)" }
-        @{ Id = "Google.AntigravityCLI";     Name = "Google Antigravity CLI" }
         @{ Id = "Fly-io.flyctl";             Name = "Fly.io CLI" }
         @{ Id = "Bruno.Bruno";               Name = "Bruno (軽量・オフラインAPIクライアント)" }
     )

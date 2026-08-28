@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Fail-to-pass tests for session-bound semantic graph plumbing (no headless LLM).
@@ -60,9 +60,6 @@ Assert-Test -Name "graphify_semantic.py exists" -Condition (
 $masterBuilder = Join-Path $rootDir "configs\agents\skills\graphify-builder"
 $deployedBuilders = @(
     @{ Name = "Cursor ~/.cursor/skills"; Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-builder" }
-    @{ Name = "Claude Code ~/.claude/skills"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-builder" }
-    @{ Name = "Antigravity ~/.gemini/config/skills"; Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-builder" }
-    @{ Name = "Agents ~/.agents/skills"; Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-builder" }
 )
 $sidecarRel = @(
     "SKILL.md"
@@ -81,24 +78,27 @@ foreach ($dest in $deployedBuilders) {
     }
 }
 
-$cursorHooks = Get-Content (Join-Path $env:USERPROFILE ".cursor\hooks.json") -Raw
-$claudeSettings = Get-Content (Join-Path $env:USERPROFILE ".claude\settings.json") -Raw
-$agyHooks = Get-Content (Join-Path $env:USERPROFILE ".gemini\config\hooks.json") -Raw
-Assert-Test -Name "Cursor hooks register sessionEnd -> agent_guard" -Condition (
-    $cursorHooks -match '"sessionEnd"' -and $cursorHooks -match 'agent_guard\.py'
+$projectHooks = Get-Content (Join-Path $rootDir ".cursor\hooks.json") -Raw
+Assert-Test -Name "Project hooks register sessionStart -> agent_guard" -Condition (
+    $projectHooks -match '"sessionStart"' -and $projectHooks -match 'agent_guard\.py'
 )
-Assert-Test -Name "Claude Code settings register Stop -> agent_guard" -Condition (
-    $claudeSettings -match '"Stop"' -and $claudeSettings -match 'agent_guard\.py'
+Assert-Test -Name "Project hooks register afterFileEdit -> agent_guard" -Condition (
+    $projectHooks -match '"afterFileEdit"' -and $projectHooks -match 'agent_guard\.py'
 )
-Assert-Test -Name "Antigravity hooks register Stop -> agent_guard" -Condition (
-    $agyHooks -match '"Stop"' -and $agyHooks -match 'agent_guard\.py'
+Assert-Test -Name "Project hooks register stop -> agent_guard" -Condition (
+    $projectHooks -match '"stop"' -and $projectHooks -match 'agent_guard\.py'
+)
+Assert-Test -Name "Project hooks register sessionEnd -> agent_guard" -Condition (
+    $projectHooks -match '"sessionEnd"' -and $projectHooks -match 'agent_guard\.py'
+)
+$userHooks = Get-Content (Join-Path $env:USERPROFILE ".cursor\hooks.json") -Raw
+Assert-Test -Name "User hooks are destructive Shell-only (no stop/Read)" -Condition (
+    $userHooks -match '--mode=destructive' -and $userHooks -match '"Shell"' -and $userHooks -notmatch '"stop"'
 )
 
 $freshNeedle = "graphify-builder"
 $alwaysOn = @(
     @{ Name = "Cursor User AGENTS.md"; Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
-    @{ Name = "Claude Code CLAUDE.md"; Path = Join-Path $env:USERPROFILE ".claude\CLAUDE.md" }
-    @{ Name = "Antigravity AGENTS.md"; Path = Join-Path $env:USERPROFILE ".gemini\config\AGENTS.md" }
 )
 foreach ($rule in $alwaysOn) {
     $text = if (Test-Path $rule.Path) { Get-Content $rule.Path -Raw } else { "" }
@@ -124,7 +124,7 @@ The hello() helper is the public API.
 
 @'
 @AGENTS.md
-'@ | Set-Content -Path (Join-Path $fixtureRoot "CLAUDE.md") -Encoding utf8
+'@ | Set-Content -Path (Join-Path $fixtureRoot "POINTER.md") -Encoding utf8
 
 New-Item -Path (Join-Path $outDir "memory") -ItemType Directory -Force | Out-Null
 @'

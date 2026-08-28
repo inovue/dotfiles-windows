@@ -1,7 +1,6 @@
 # Reference: Work-Memory Loop (save-result / reflect / LESSONS)
 
-> Adapted from upstream `Graphify-Labs/graphify` v8 (`skills/claude/references/query.md`
-> memory sections + `always_on/claude-md.md`, tree 43d54ac). Condensed for this harness.
+> Adapted from upstream `Graphify-Labs/graphify` v8 query/memory references (tree 43d54ac). Condensed for this harness.
 > This is how semantic nodes accumulate automatically: saved Q&A results are folded
 > into the graph as nodes on the next `--update`/`just update-graph` run (official spec).
 
@@ -16,7 +15,7 @@
 2. **After answering an architecture / impact / navigation question** — `just remember`
 
    ```powershell
-   just remember "which files react to hooks.json changes?" "sync_agent_rules.ps1 merges it into 3 harness configs; agent_guard.py reads deployed copy"
+   just remember "which files react to hooks.json changes?" "sync_agent_rules.ps1 merges it into Cursor ~/.cursor/hooks.json and workspace .cursor/hooks.json only; agent_guard.py reads deployed copy"
    # full control (cited nodes, outcome):
    graphify save-result --question "..." --answer "..." --type query --nodes hooks.json agent_guard.py --outcome useful
    ```

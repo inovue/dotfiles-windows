@@ -1,7 +1,6 @@
 # Reference: Constrained Query Expansion (vocab-gated search)
 
-> Adapted from upstream `Graphify-Labs/graphify` v8 (`graphify/skills/claude/references/query.md`,
-> blob 56565eb, tree 43d54ac). Condensed for this Windows/PS5.1 + MCP harness.
+> Adapted from upstream `Graphify-Labs/graphify` v8 query reference (blob 56565eb, tree 43d54ac). Condensed for this Windows/PS5.1 + MCP harness.
 > Load ONLY when a graph query returned 0 hits, or the graph exceeds ~2000 nodes,
 > or the question uses cross-language / domain vocabulary that may not match labels.
 

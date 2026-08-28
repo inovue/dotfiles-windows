@@ -11,11 +11,12 @@
       "Bypass"
     ],
     "env": {
-      "DOTFILES_HARNESS": "cursor-windows-v1",
+      "DOTFILES_HARNESS": "cursor-windows-v2",
       "PYTHONUTF8": "1",
       "PYTHONDONTWRITEBYTECODE": "1",
       "POWERSHELL_TELEMETRY_OPTOUT": "1",
       "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "RTK_TELEMETRY_DISABLED": "1",
       "GIT_PAGER": "cat",
       "PAGER": "cat",
       "BAT_PAGER": "",

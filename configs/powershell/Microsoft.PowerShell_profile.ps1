@@ -46,10 +46,10 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
 }
 
 # --- 4. Fast Non-Interactive Guard for AI Agents & Automation ---
-# Subprocesses spawned by Antigravity, Cursor, Claude Code, etc. return immediately here.
+# Agent subprocesses (Cursor) skip the interactive prompt.
 $isNonInteractive = $false
 try {
-    if (-not [Environment]::UserInteractive -or $env:TERM_PROGRAM -eq "antigravity" -or $env:CI -eq "1" -or [Console]::IsInputRedirected) {
+    if (-not [Environment]::UserInteractive -or $env:CI -eq "1" -or [Console]::IsInputRedirected) {
         $isNonInteractive = $true
     }
 } catch {

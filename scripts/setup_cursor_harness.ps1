@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 
 $rootDir = Split-Path -Parent $PSScriptRoot
 $mergePy = Join-Path $PSScriptRoot "merge_cursor_agent_shell.py"
-$baselineVersion = "cursor-windows-v1"
+$baselineVersion = "cursor-windows-v2"
 
 $UserEnv = [ordered]@{
     DOTFILES_HARNESS            = $baselineVersion

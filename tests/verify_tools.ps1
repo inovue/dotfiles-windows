@@ -171,11 +171,9 @@ Write-Host "`n[3/5] Checking AI Agent SSOT Rules & Dotfiles Deployment..." -Fore
 $configFiles = @(
     # Workspace Level Files (for instant agent context)
     @{ Name = "Workspace Project Guide (AGENTS.md)";         Path = Join-Path $rootDir "AGENTS.md" }
-    @{ Name = "Workspace Claude Guide (CLAUDE.md)";          Path = Join-Path $rootDir "CLAUDE.md" }
 
     # Master SSOT Configs
     @{ Name = "Master SSOT Rules (configs/agents/GLOBAL_RULES.md)"; Path = Join-Path $rootDir "configs\agents\GLOBAL_RULES.md" }
-    @{ Name = "Master Claude Pointer (CLAUDE.project.md)";   Path = Join-Path $rootDir "configs\agents\claude\CLAUDE.project.md" }
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Master graphify-navigator Skill";             Path = Join-Path $rootDir "configs\agents\skills\graphify-navigator\SKILL.md" }
@@ -183,47 +181,21 @@ $configFiles = @(
     @{ Name = "Master rtk-expert Skill";                     Path = Join-Path $rootDir "configs\agents\skills\rtk-expert\SKILL.md" }
     @{ Name = "Master tui-wireframe-designer Skill";         Path = Join-Path $rootDir "configs\agents\skills\tui-wireframe-designer\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
-    @{ Name = "Master Claude settings";                      Path = Join-Path $rootDir "configs\agents\claude\settings.json" }
-    @{ Name = "Master Antigravity graphify rule";            Path = Join-Path $rootDir "configs\agents\antigravity\rules\graphify.md" }
     @{ Name = "Master Cursor graphify rule";                 Path = Join-Path $rootDir "configs\agents\cursor\rules\graphify.mdc" }
     @{ Name = "Master Cursor hooks";                         Path = Join-Path $rootDir "configs\agents\cursor\hooks.json" }
-    @{ Name = "Master Antigravity MCP template";             Path = Join-Path $rootDir "configs\agents\antigravity\mcp_config.json" }
+    @{ Name = "Master Cursor global hooks";                  Path = Join-Path $rootDir "configs\agents\cursor\hooks.global.json" }
+    @{ Name = "Master Cursor MCP template";                  Path = Join-Path $rootDir "configs\agents\cursor\mcp_config.json" }
+    @{ Name = "Master pins.json";                            Path = Join-Path $rootDir "configs\pins.json" }
 
-    # Global Deployed Targets
-    @{ Name = "Antigravity Global Rules";                    Path = Join-Path $env:USERPROFILE ".gemini\config\AGENTS.md" }
-    @{ Name = "Claude Code Global Rules";                    Path = Join-Path $env:USERPROFILE ".claude\CLAUDE.md" }
+    # Global Deployed Targets (Cursor-only)
     @{ Name = "Cursor Global Rules";                         Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
-    @{ Name = "Antigravity Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (modern-cli)";       Path = Join-Path $env:USERPROFILE ".claude\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Agents Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".agents\skills\modern-cli-expert\SKILL.md" }
-    @{ Name = "Antigravity Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\browser-agent\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (browser-agent)";    Path = Join-Path $env:USERPROFILE ".claude\skills\browser-agent\SKILL.md" }
     @{ Name = "Cursor Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\browser-agent\SKILL.md" }
-    @{ Name = "Agents Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".agents\skills\browser-agent\SKILL.md" }
-    @{ Name = "Antigravity Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-navigator\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (graphify-navigator)"; Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator\SKILL.md" }
     @{ Name = "Cursor Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator\SKILL.md" }
-    @{ Name = "Agents Global Skill (graphify-navigator)";    Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator\SKILL.md" }
-    @{ Name = "Antigravity Global Skill (graphify-builder)";  Path = Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-builder\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (graphify-builder)";  Path = Join-Path $env:USERPROFILE ".claude\skills\graphify-builder\SKILL.md" }
     @{ Name = "Cursor Global Skill (graphify-builder)";     Path = Join-Path $env:USERPROFILE ".cursor\skills\graphify-builder\SKILL.md" }
-    @{ Name = "Agents Global Skill (graphify-builder)";     Path = Join-Path $env:USERPROFILE ".agents\skills\graphify-builder\SKILL.md" }
-    @{ Name = "Antigravity Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".gemini\config\skills\rtk-expert\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (rtk-expert)";       Path = Join-Path $env:USERPROFILE ".claude\skills\rtk-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert\SKILL.md" }
-    @{ Name = "Agents Global Skill (rtk-expert)";            Path = Join-Path $env:USERPROFILE ".agents\skills\rtk-expert\SKILL.md" }
-    @{ Name = "Antigravity Global Skill (tui-wireframe)";    Path = Join-Path $env:USERPROFILE ".gemini\config\skills\tui-wireframe-designer\SKILL.md" }
-    @{ Name = "Claude Code Global Skill (tui-wireframe)";    Path = Join-Path $env:USERPROFILE ".claude\skills\tui-wireframe-designer\SKILL.md" }
     @{ Name = "Cursor Global Skill (tui-wireframe)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\tui-wireframe-designer\SKILL.md" }
-    @{ Name = "Agents Global Skill (tui-wireframe)";         Path = Join-Path $env:USERPROFILE ".agents\skills\tui-wireframe-designer\SKILL.md" }
     @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
-    @{ Name = "Claude Code Global Settings";                 Path = Join-Path $env:USERPROFILE ".claude\settings.json" }
-    @{ Name = "Antigravity Global Graphify Rule";            Path = Join-Path $env:USERPROFILE ".gemini\config\rules\graphify.md" }
-    @{ Name = "Antigravity Global Graphify Workflow";        Path = Join-Path $env:USERPROFILE ".gemini\config\workflows\graphify.md" }
-    @{ Name = "Cursor always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc" }
-    @{ Name = "Agents always-on graphify rule";              Path = Join-Path $env:USERPROFILE ".agents\rules\graphify.md" }
-    @{ Name = "Agents graphify workflow";                    Path = Join-Path $env:USERPROFILE ".agents\workflows\graphify.md" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
     @{ Name = "PowerShell 5.1 Profile";                      Path = Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WindowsPowerShell") "Microsoft.PowerShell_profile.ps1" }
@@ -236,11 +208,9 @@ $configFiles = @(
     @{ Name = "Master Cursor harness-settings fragment";     Path = Join-Path $rootDir "configs\cursor\harness-settings.json" }
     @{ Name = "Master Cursor agent-shell fragment (legacy)"; Path = Join-Path $rootDir "configs\cursor\agent-shell.json" }
     @{ Name = "Harness baseline doc (HARNESS_BASELINE.md)";  Path = Join-Path $rootDir "configs\agents\HARNESS_BASELINE.md" }
+    @{ Name = "Guard policy SSOT (GUARD_POLICY.md)";         Path = Join-Path $rootDir "configs\agents\GUARD_POLICY.md" }
     @{ Name = "Script: Assert-PinnedHash.ps1";               Path = Join-Path $rootDir "scripts\Assert-PinnedHash.ps1" }
     @{ Name = "Test: verify_security.ps1";                   Path = Join-Path $rootDir "tests\verify_security.ps1" }
-    @{ Name = "Master hooks (configs/agents/hooks.json)";     Path = Join-Path $rootDir "configs\agents\hooks.json" }
-    @{ Name = "Workspace hooks (.agents/hooks.json)";        Path = Join-Path $rootDir ".agents\hooks.json" }
-    @{ Name = "Antigravity global hooks";                    Path = Join-Path $env:USERPROFILE ".gemini\config\hooks.json" }
     @{ Name = "Cursor Global hooks";                         Path = Join-Path $env:USERPROFILE ".cursor\hooks.json" }
     @{ Name = "Cursor Global agent guard";                   Path = Join-Path $env:USERPROFILE ".cursor\scripts\agent_guard.py" }
     @{ Name = "Workspace Cursor hooks (.cursor/hooks.json)"; Path = Join-Path $rootDir ".cursor\hooks.json" }
@@ -277,20 +247,59 @@ if (Test-Path $projectAgentsFile) {
     }
 }
 
-# Verify Antigravity hooks.json schema (Stop must be flat array, PreToolUse grouped)
-$masterHooksFile = Join-Path $rootDir "configs\agents\hooks.json"
-if (Test-Path $masterHooksFile) {
-    $hooksObj = Get-Content -Raw -Path $masterHooksFile | ConvertFrom-Json
-    $guardObj = $hooksObj.'safety-guard'
-    $preToolUseOk = $null -ne $guardObj.PreToolUse -and $guardObj.PreToolUse[0].matcher -and $guardObj.PreToolUse[0].hooks
-    $stopOk = $null -ne $guardObj.Stop -and $guardObj.Stop[0].type -eq "command" -and (-not $guardObj.Stop[0].matcher)
-    Assert-Test -Name "Master hooks.json: PreToolUse is grouped and Stop is flat array" -Condition ($preToolUseOk -and $stopOk) -Details "PreToolUse grouped: $preToolUseOk, Stop flat: $stopOk"
+# Verify Cursor hooks.json schema (v5: sessionStart/afterFileEdit/stop.loop_limit; no rtk hook)
+$masterCursorHooksFile = Join-Path $rootDir "configs\agents\cursor\hooks.json"
+if (Test-Path $masterCursorHooksFile) {
+    $hooksRaw = Get-Content -Raw -Path $masterCursorHooksFile
+    $hooksObj = $hooksRaw | ConvertFrom-Json
+    $h = $hooksObj.hooks
+    $requiredEvents = @('sessionStart', 'preToolUse', 'beforeMCPExecution', 'afterFileEdit', 'stop', 'sessionEnd')
+    $missingEvents = @($requiredEvents | Where-Object { -not $h.PSObject.Properties[$_] })
+    $stopHasLoopLimit = $false
+    if ($h.stop) {
+        foreach ($entry in @($h.stop)) {
+            if ($null -ne $entry.loop_limit) { $stopHasLoopLimit = $true }
+        }
+    }
+    $noRtkHook = ($hooksRaw -notmatch 'rtk hook cursor')
+    Assert-Test -Name "Master Cursor hooks.json: sessionStart/preToolUse/beforeMCPExecution/afterFileEdit/stop/sessionEnd" -Condition ($missingEvents.Count -eq 0) -Details ("Missing: " + ($missingEvents -join ", "))
+    Assert-Test -Name "Master Cursor hooks.json: stop includes loop_limit" -Condition $stopHasLoopLimit -Details "stop.loop_limit required for v5 hard loop"
+    Assert-Test -Name "Master Cursor hooks.json: must not contain rtk hook cursor" -Condition $noRtkHook -Details "rewrite lives in agent_guard v5, not a second preToolUse"
+    $preMatcher = ""
+    if ($h.preToolUse) {
+        foreach ($entry in @($h.preToolUse)) {
+            if ($entry.matcher) { $preMatcher = [string]$entry.matcher }
+        }
+    }
+    Assert-Test -Name "Master Cursor hooks.json: matcher excludes Task and Glob" -Condition ($preMatcher -notmatch 'Task' -and $preMatcher -notmatch 'Glob') -Details $preMatcher
+}
+
+$masterGlobalHooksFile = Join-Path $rootDir "configs\agents\cursor\hooks.global.json"
+if (Test-Path $masterGlobalHooksFile) {
+    $ghRaw = Get-Content -Raw -Path $masterGlobalHooksFile
+    $ghObj = $ghRaw | ConvertFrom-Json
+    $gh = $ghObj.hooks
+    $globalHasStop = $null -ne $gh.PSObject.Properties['stop']
+    $globalMatcher = ""
+    if ($gh.preToolUse) {
+        foreach ($entry in @($gh.preToolUse)) {
+            if ($entry.matcher) { $globalMatcher = [string]$entry.matcher }
+        }
+    }
+    Assert-Test -Name "Master global hooks.json: Shell-only, no stop" -Condition ((-not $globalHasStop) -and $globalMatcher -eq 'Shell') -Details $ghRaw
 }
 
 # Anti-duplication invariants: duplicated always-on mirrors double-load context every turn.
 Assert-Test -Name "No duplicated workspace .cursorrules (Cursor reads AGENTS.md natively)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursorrules"))) -Details "Remove it: just sync-rules"
-Assert-Test -Name "No duplicated workspace .cursor/rules/graphify.mdc (global rule covers)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\rules\graphify.mdc"))) -Details "Remove it: just sync-rules"
-Assert-Test -Name "No stray nested configs/agents/AGENTS.md (auto-ingested by Cursor)" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\AGENTS.md"))) -Details "Master is GLOBAL_RULES.md"
+Assert-Test -Name "No duplicated workspace .cursor/rules/graphify.mdc (AGENTS.md is the protocol)" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\rules\graphify.mdc"))) -Details "Remove it: just sync-rules"
+Assert-Test -Name "No global always-on graphify.mdc (would tax every workspace)" -Condition (-not (Test-Path (Join-Path $env:USERPROFILE ".cursor\rules\graphify.mdc"))) -Details "Remove it: just sync-rules"
+$agentsRoot = Join-Path $rootDir "configs\agents"
+$allowedAgents = @("cursor", "skills", "GLOBAL_RULES.md", "GUARD_POLICY.md", "HARNESS_BASELINE.md")
+$extraAgents = @(Get-ChildItem -Path $agentsRoot -Force | Where-Object { $allowedAgents -notcontains $_.Name } | ForEach-Object { $_.Name })
+Assert-Test -Name "configs/agents contains only Cursor SSOT entries" -Condition ($extraAgents.Count -eq 0) -Details ("Extra: " + ($extraAgents -join ", "))
+
+$guardSrc = Get-Content -Raw -Path (Join-Path $rootDir "scripts\agent_guard.py")
+Assert-Test -Name "agent_guard session state dir is cursor_agent_guard" -Condition ($guardSrc -match 'cursor_agent_guard') -Details "scripts/agent_guard.py _state_dir"
 
 $justfileText = Get-Content -Raw -Path (Join-Path $rootDir "justfile")
 Assert-Test -Name "justfile windows-shell is powershell.exe (5.1 bootstrap trampoline)" -Condition ($justfileText -match 'windows-shell := \["powershell\.exe"') -Details "just install must run before pwsh exists"
@@ -309,15 +318,11 @@ if (Test-Path $setupHarness) {
     Assert-Test -Name "Cursor harness baseline in sync (env + PATH + manifest)" -Condition ($LASTEXITCODE -eq 0) -Details "Run: just setup-harness"
 }
 $dotfilesHarness = [Environment]::GetEnvironmentVariable("DOTFILES_HARNESS", "User")
-Assert-Test -Name "User DOTFILES_HARNESS is cursor-windows-v1" -Condition ($dotfilesHarness -eq "cursor-windows-v1") -Details "Run: just setup-harness"
+Assert-Test -Name "User DOTFILES_HARNESS is cursor-windows-v2" -Condition ($dotfilesHarness -eq "cursor-windows-v2") -Details "Run: just setup-harness"
 
-# Workspace CLAUDE.md must be the official @AGENTS.md bridge, not a duplicate.
-$wsClaudeMd = Join-Path $rootDir "CLAUDE.md"
-if (Test-Path $wsClaudeMd) {
-    $claudeMdRaw = [System.IO.File]::ReadAllText($wsClaudeMd, [System.Text.Encoding]::UTF8)
-    $isPointer = ($claudeMdRaw -match '@AGENTS\.md') -and (($claudeMdRaw -split "`n").Count -le 5)
-    Assert-Test -Name "Workspace CLAUDE.md is an @AGENTS.md pointer (not a duplicate)" -Condition $isPointer -Details "Length: $((($claudeMdRaw -split "`n").Count)) lines"
-}
+$allowedRootMd = @("AGENTS.md", "README.md")
+$extraRootMd = @(Get-ChildItem -Path $rootDir -File -Filter "*.md" | Where-Object { $allowedRootMd -notcontains $_.Name } | ForEach-Object { $_.Name })
+Assert-Test -Name "Repo root markdown is only AGENTS.md and README.md" -Condition ($extraRootMd.Count -eq 0) -Details ("Extra: " + ($extraRootMd -join ", "))
 
 # Verify all PowerShell scripts parse cleanly in PowerShell AST and have UTF-8 BOM if non-ASCII
 $allPsScripts = Get-ChildItem -Path (Join-Path $rootDir "scripts"), (Join-Path $rootDir "tests") -Filter "*.ps1" -File
@@ -344,13 +349,9 @@ foreach ($psScript in $allPsScripts) {
 # repo poisons every other workspace). Workspace-local MCP may pin the repo graph.
 $graphifyMcpInstalled = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
 $mcpGlobalPaths = @(
-    (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
-    (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
-    (Join-Path $env:USERPROFILE ".agents\mcp_config.json")
     (Join-Path $env:USERPROFILE ".cursor\mcp.json")
 )
 $mcpWorkspacePaths = @(
-    (Join-Path $rootDir ".agents\mcp_config.json")
     (Join-Path $rootDir ".cursor\mcp.json")
 )
 
@@ -410,31 +411,29 @@ foreach ($mcpPath in $mcpWorkspacePaths) {
     Assert-GraphifyMcpConfig -McpPath $mcpPath -Scope Workspace
 }
 
-# Claude Code user scope (~/.claude.json): jaq-only check.
-# The file is Claude Code's live state (can exceed PS 5.1 ConvertFrom-Json ~2MB limit), never parse it with PowerShell.
-$claudeUserJson = Join-Path $env:USERPROFILE ".claude.json"
-$graphifyMcpInstalledForClaude = $null -ne (Get-Command graphify-mcp -ErrorAction SilentlyContinue)
-$jaqAvailable = $null -ne (Get-Command jaq -ErrorAction SilentlyContinue)
-if ($graphifyMcpInstalledForClaude -and $jaqAvailable) {
-    if (Test-Path $claudeUserJson) {
-        # NOTE: filter must avoid double quotes (PS 5.1 native arg passing mangles them); use // empty.
-        $claudeCmd = (& jaq -r '.mcpServers.graphify.command // empty' $claudeUserJson 2>&1 | Out-String).Trim()
-        $cIsAbs = ($claudeCmd -match '(?i)\.exe$' -or $claudeCmd -match '^[A-Za-z]:\\' -or $claudeCmd -match '^/')
-        $cNotUv = ($claudeCmd -notmatch '(?i)(^|[\\/])uv(\.exe)?$')
-        $cNotBare = ($claudeCmd -ne "graphify-mcp" -and $claudeCmd -ne "graphify-mcp.exe")
-        $cPathOk = if ($cIsAbs) { Test-Path $claudeCmd } else { $false }
-        Assert-Test -Name "MCP graphify uses absolute graphify-mcp (.claude.json)" -Condition ($cIsAbs -and $cNotUv -and $cNotBare -and $cPathOk) -Details "command='$claudeCmd'"
-        $claudeArgsRaw = (& jaq -c '.mcpServers.graphify.args // []' $claudeUserJson 2>&1 | Out-String).Trim()
-        $claudeHasRel = $claudeArgsRaw -match 'graphify-out/graph.json'
-        $repoGraphEsc = [regex]::Escape((Get-RepoGraphJsonPath).Replace('\', '\\'))
-        $claudeHasRepoPin = $claudeArgsRaw -match $repoGraphEsc
-        Assert-Test -Name "MCP graphify global args are unpinned (.claude.json)" -Condition (-not $claudeHasRel -and -not $claudeHasRepoPin) -Details "args=$claudeArgsRaw"
-    } else {
-        Assert-Test -Name "MCP graphify config exists (.claude.json)" -Condition $false -Details "Missing: $claudeUserJson (run just sync-rules)"
+# Pin checks: graphify / rtk versions must match configs/pins.json
+function Get-PinsJson {
+    $pinsPath = Join-Path $rootDir "configs\pins.json"
+    $jaqCmd = Get-Command jaq -ErrorAction SilentlyContinue
+    if ($jaqCmd) {
+        $raw = (& jaq -c '.' $pinsPath 2>&1 | Out-String).Trim()
+        if ($raw) {
+            try { return $raw | ConvertFrom-Json } catch { }
+        }
     }
-} elseif ($graphifyMcpInstalledForClaude) {
-    Write-Host "  [SKIP] jaq not installed; cannot verify .claude.json MCP entry" -ForegroundColor DarkGray
-    $script:warnCount++
+    return (Get-Content -Raw -Path $pinsPath | ConvertFrom-Json)
+}
+
+$pins = $null
+try { $pins = Get-PinsJson } catch { $pins = $null }
+Assert-Test -Name "configs/pins.json is readable" -Condition ($null -ne $pins) -Details "jaq/ConvertFrom-Json failed"
+if ($pins) {
+    $graphifyPin = [string]$pins.graphifyy
+    $rtkPin = [string]$pins.rtk
+    $gVer = if (Get-Command graphify -ErrorAction SilentlyContinue) { (& graphify --version 2>&1 | Out-String) } else { "" }
+    $rVer = if (Get-Command rtk -ErrorAction SilentlyContinue) { (& rtk --version 2>&1 | Out-String) } else { "" }
+    Assert-Test -Name "graphify --version contains pin $graphifyPin" -Condition ($gVer -match [regex]::Escape($graphifyPin)) -Details ("version='$gVer'")
+    Assert-Test -Name "rtk --version contains pin $rtkPin" -Condition ($rVer -match [regex]::Escape($rtkPin)) -Details ("version='$rVer'")
 }
 
 # UDEV Gothic NF Font Check
@@ -478,7 +477,7 @@ try {
 
     # Test 4.4: jaq & jq JSON Processing (Deterministic UTF-8 without BOM)
     $jsonFile = Join-Path $tempTestDir "test.json"
-    $jsonBytes = [System.Text.Encoding]::UTF8.GetBytes('{"agent": "antigravity", "speed": "extreme", "status": "active"}')
+    $jsonBytes = [System.Text.Encoding]::UTF8.GetBytes('{"agent": "cursor", "speed": "extreme", "status": "active"}')
     [System.IO.File]::WriteAllBytes($jsonFile, $jsonBytes)
     $jaqCmd = Get-Command jaq -ErrorAction SilentlyContinue
     if ($jaqCmd) {
@@ -561,11 +560,12 @@ try {
         Assert-Test -Name "Agent Guard denies slow cmdlet once (guidance)" -Condition ($slowRes1 -match '"decision":\s*"deny"') -Details ($slowRes1.Trim())
         Assert-Test -Name "Agent Guard one-strike: slow cmdlet retry passes" -Condition ($slowRes2 -match '"decision":\s*"allow"') -Details ($slowRes2.Trim())
 
-        # rtk token proxy enforcement -> deny once with exact rtk-prefixed suggestion
+        # rtk token proxy v5: rewrite-allow (updated_input), not deny-retry
         if (Get-Command rtk -ErrorAction SilentlyContinue) {
-            $rtkRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"git log -n 10 --oneline`"}},`"conversationId`":`"$guardConv`"}"
-            $rtkOk = ($rtkRes -match '"decision":\s*"deny"') -and ($rtkRes -match 'rtk git log')
-            Assert-Test -Name "Agent Guard enforces rtk prefix on noisy git commands" -Condition $rtkOk -Details ($rtkRes.Trim())
+            $rtkRes = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"git log -n 10 --oneline`"}},`"conversationId`":`"$guardConv`",`"cursor_version`":`"1.0`"}"
+            $rtkAllow = ($rtkRes -match '"permission":\s*"allow"' -or $rtkRes -match '"decision":\s*"allow"')
+            $rtkOk = $rtkAllow -and ($rtkRes -match 'updated_input') -and ($rtkRes -match 'rtk git')
+            Assert-Test -Name "Agent Guard v5 rewrites noisy git log via updated_input (allow, not deny)" -Condition $rtkOk -Details ($rtkRes.Trim())
         }
 
         # Small whole-file read (<=300 lines) -> allow (slicing it would cost MORE calls)
@@ -646,11 +646,15 @@ try {
         $env:AGENT_GUARD_LOG = $v4Log
         $v4Conv = "test_v4_$(Get-Random)"
 
-        $rgPayload = "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n Set-SecureUserEnvVar scripts/`"}},`"conversationId`":`"$v4Conv`"}"
+        $rgPayload = "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n Set-SecureUserEnvVar`"}},`"conversationId`":`"$v4Conv`"}"
         $rgDeny = Invoke-GuardHook $rgPayload
         $rgRetry = Invoke-GuardHook $rgPayload
         Assert-Test -Name "Agent Guard v4 graph-gate denies unanchored rg before graph query" -Condition ($rgDeny -match '"decision":\s*"deny"' -and $rgDeny -match 'Graph-First') -Details ($rgDeny.Trim())
         Assert-Test -Name "Agent Guard v4 graph-gate one-strike: rg retry passes" -Condition ($rgRetry -match '"decision":\s*"allow"') -Details ($rgRetry.Trim())
+
+        $scopedConv = "test_v4_scoped_$(Get-Random)"
+        $scopedRg = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"rg -n Set-SecureUserEnvVar scripts/`"}},`"conversationId`":`"$scopedConv`"}"
+        Assert-Test -Name "Agent Guard v5.1 allows scoped rg before graph query" -Condition ($scopedRg -match '"decision":\s*"allow"') -Details ($scopedRg.Trim())
 
         $v4Conv2 = "test_v4_ok_$(Get-Random)"
         $pathOk = Invoke-GuardHook "{`"toolCall`":{`"name`":`"run_command`",`"args`":{`"CommandLine`":`"just path agent_guard.py verify_tools.ps1`"}},`"conversationId`":`"$v4Conv2`"}"
@@ -678,7 +682,7 @@ try {
         $null = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$stopConv`"}"
         $null = Invoke-GuardHook "{`"toolCall`":{`"name`":`"edit`",`"args`":{`"path`":`"scripts/foo.ps1`"}},`"conversationId`":`"$stopConv`"}"
         $stopRes = Invoke-GuardHook "{`"hook_event_name`":`"stop`",`"conversationId`":`"$stopConv`"}"
-        Assert-Test -Name "Agent Guard v4 batch-end warns when edits lack update-graph/audit" -Condition ($stopRes -match 'followup_message' -and $stopRes -match 'just update-graph') -Details ($stopRes.Trim())
+        Assert-Test -Name "Agent Guard v4 batch-end warns when edits lack update-graph" -Condition ($stopRes -match 'followup_message' -and $stopRes -match 'just update-graph') -Details ($stopRes.Trim())
 
         $emptyRoot = Join-Path $tempTestDir "v4_nograph"
         New-Item -Path $emptyRoot -ItemType Directory -Force | Out-Null

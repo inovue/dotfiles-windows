@@ -40,48 +40,48 @@ This skill equips agents with a production-grade, highly resilient browser autom
 ## 3. Practical Agent Recipes & Command Patterns
 
 The runner script is located at:
-`~/.gemini/config/skills/browser-agent/scripts/browser_runner.py` (or within this workspace under `.agents/skills/browser-agent/scripts/browser_runner.py`)
+`~/.cursor/skills/browser-agent/scripts/browser_runner.py`
 
 ### Recipe 1: Inspect Page & Extract a11y Snapshot (Ultra-Fast)
 Inspect any dynamic webpage, outputting page title, clean text, and interactive elements with low token overhead.
 
 ```powershell
-python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" inspect --url "https://news.ycombinator.com" --profile temp --headless
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" inspect --url "https://news.ycombinator.com" --profile temp --headless
 ```
 
 ### Recipe 2: Run Authenticated Task with Persistent Profile
 Access a protected dashboard (e.g. Cloudflare Access or GSC) using a logged-in profile:
 
 ```powershell
-python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" inspect --url "https://one.dash.cloudflare.com/" --profile work --headless
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" inspect --url "https://one.dash.cloudflare.com/" --profile work --headless
 ```
 
 ### Recipe 3: Multi-Step Actions (Click, Fill, Wait, Extract)
 Execute a sequence of deterministic actions and extract structured results:
 
 ```powershell
-python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" act --url "https://github.com/login" --profile temp --actions '[{"type":"fill","selector":"input#login_field","value":"testuser"},{"type":"fill","selector":"input#password","value":"testpass"},{"type":"click","selector":"input[type=\"submit\"]"},{"type":"wait_for_load","state":"domcontentloaded"}]' --headless
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" act --url "https://github.com/login" --profile temp --actions '[{"type":"fill","selector":"input#login_field","value":"testuser"},{"type":"fill","selector":"input#password","value":"testpass"},{"type":"click","selector":"input[type=\"submit\"]"},{"type":"wait_for_load","state":"domcontentloaded"}]' --headless
 ```
 
 ### Recipe 4: Evaluate JavaScript / Extract Data Object
 Run custom JS directly inside the page context and receive JSON stdout:
 
 ```powershell
-python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" eval --url "https://example.com" --script "() => ({ heading: document.querySelector('h1').innerText, links: Array.from(document.querySelectorAll('a')).map(a => a.href) })" --profile temp --headless
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" eval --url "https://example.com" --script "() => ({ heading: document.querySelector('h1').innerText, links: Array.from(document.querySelectorAll('a')).map(a => a.href) })" --profile temp --headless
 ```
 
 ### Recipe 5: Setup or Login to a New Profile (One-Time Human Step)
 Open a visible Chrome window to log into 2FA/Google/SSO and persist credentials:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\setup_profile.ps1" -ProfileName "work"
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\setup_profile.ps1" -ProfileName "work"
 ```
 
 ### Recipe 6: Capture Screenshot
 Capture a high-fidelity screenshot of any page (viewport or full-page):
 
 ```powershell
-python "$env:USERPROFILE\.gemini\config\skills\browser-agent\scripts\browser_runner.py" screenshot --url "https://google.com" --output "screenshot.png" --profile temp --headless
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" screenshot --url "https://google.com" --output "screenshot.png" --profile temp --headless
 ```
 
 ---

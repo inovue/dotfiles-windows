@@ -1,186 +1,169 @@
-# Session Report: Agent Harness Strategy & Cursor Baseline (2026-08-28)
+# SOTA Cursor Agent — Harness Strategy (2026-08-28 → v2)
 
-このドキュメントは 2026-08-28 セッションで議論した方針・分析・未実装提案・実装済み変更を漏れなく記録する。
+Cursor 専用。graphify + rtk に 100% 依存。速度・トークン・コードベース把握・自律グラフ維持を同時に最大化する。
 
----
-
-## 1. セッションの目的と結論
-
-| テーマ | 結論 |
-| :--- | :--- |
-| ガードレール肥大化 | **意図的二重壁 + 現場パッチ積層 (v2→v4.7)** が主因。deny 2.9%・デッドロックなしのため **機能としては適切寄り**。債務は monofile・soft/hard 政策エコー・テストミラー。 |
-| 次の構造改善 | **ACI アダプタ分離** + **soft 側ゲート詳細の hooks 委譲**（`GUARD_POLICY.md` SSOT 化） |
-| Cursor × Windows 最適化 | シェルは **`pwsh -NoProfile -NonInteractive` 維持**。速度は nu より **フック二重起動削減・マルチハーネス同期削除** が効く。 |
-| 今回実装 | **セットアップ時に Cursor/Windows 基盤を固定**し、エージェントは「前提設定済み」として開始する **Harness Baseline** |
+**固定判断 (grill):** Cursor-only / stop 強制ループ / graphifyy 0.9.50・rtk 0.45.0 厳密ピン。
 
 ---
 
-## 2. ガードレール肥大化の分析
+## 1. 目標
 
-### 2.1 レイヤ構造
-
-```text
-[SOFT] prompt / rules                    [HARD] hooks / deterministic
-GLOBAL_RULES.md + graphify.mdc           agent_guard.py v4.7 (~66KB / 1613L)
-+ on-demand skills                       hard-deny + one-strike gates
-        │                                        ▲
-        │ mirrors / sync-rules                   │ PreToolUse / stop
-        v                                        │
-skills (navigator, builder, rtk)         hooks.json → python scripts/agent_guard.py
-```
-
-### 2.2 肥大の5要因
-
-1. **マルチハーネス ACI** — Cursor / Claude / Antigravity の JSON・待ちパラメータ・ツール名差分
-2. **Graph walls + fallback** — graph-gate, edit-gate, query-log 180s, MCP unwrap
-3. **トークン壁** — read cap 300, crawl, rtk, read budget 8 files
-4. **状態レース修正** — atomic save, merge, conv-id fallback (v4.1〜4.3)
-5. **PS5.1 vs pwsh** — `powershell.exe` + `&&` 誤検知修正 (v4.6)
-
-### 2.3 コストシグナル（セッション時点）
-
-| 指標 | 値 |
-| :--- | :--- |
-| `agent_guard.py` | ~66KB / 1613 行、グラフ hub degree 61 |
-| `verify_agent_guard.ps1` | ~57KB（本体と同規模の回帰ミラー） |
-| Session deny 率 | 2.9% (29/1017) |
-| thrash | 0% |
-| crawl ヒット | 11 |
-
-### 2.4 適切性の判定
-
-- **適切**: one-strike + fail-open、破壊コマンドのみ hard-deny、実測バグへのパッチ
-- **債務**: 1613 行 monofile、GLOBAL_RULES がゲート一覧を再記述、graph contact 3 経路、テスト並走肥大
-
----
-
-## 3. 未実装: 構造改善ロードマップ
-
-### 3.1 ACI アダプタ分離
-
-`agent_guard.py` の責務を分割する提案（**今回未着手**）。
-
-```text
-scripts/agent_guard/
-  policy.py          # inspect_* — harness 引数なし
-  state.py           # TTL / merge / strikes
-  discovery.py       # repo root / graph contact
-  adapters/
-    cursor.py        # emit / parse / block_until_ms floor
-    claude.py        # permissionDecision + exit 2
-    antigravity.py   # WaitMs 10000 / stop continue
-```
-
-`inspect_run_command` から `harness` 引数を除去し、`adapter.finite_wait_floor_ms()` 経由にする。
-
-**移行フェーズ**: types → adapters に emit/parse 移動 → policy から harness 除去 → shim 化。
-
-### 3.2 Soft 側ゲート詳細の一本化
-
-| 層 | 役割 |
-| :--- | :--- |
-| `configs/agents/GUARD_POLICY.md` (新規予定) | ゲート表・tunables・recovery hint の唯一の人間可読 SSOT |
-| `GLOBAL_RULES.md` | 文化・手順のみ。「Guarantees live in hooks → GUARD_POLICY」 |
-| `graphify.mdc` | 「Hooks are walls → GUARD_POLICY §graph-gate」1 行 |
-| `agent_guard/policy.py` | 機械実装 |
-
-`gen_guard_policy.py` で doc ↔ 定数の drift 防止も検討。
-
-### 3.3 Cursor-only 同期・最適化（未実装）
-
-- `sync-rules -Profile Cursor` で Antigravity/Claude ターゲット削除
-- hooks matcher を Cursor ネイティブ名のみに絞る
-- `rtk hook cursor` を guard 内統合（Shell あたりプロセス −1）
-- `verify_agent_guard.ps1` のクロスハーネステスト削除
-
----
-
-## 4. 実装済み: Harness Baseline（セットアップ固定）
-
-### 4.1 方針
-
-**セットアップで機械固定 → ルールで「触るな」→ 監査で drift 検知**
-
-エージェントはセッション開始時に以下を**すでに成立している**前提で動く。タスク中に `settings.json`、シェルプロファイル、Windows PATH を変更しない。
-
-### 4.2 固定される内容
-
-| 層 | 内容 | SSOT |
+| 軸 | SOTA の意味 | 実装 |
 | :--- | :--- | :--- |
-| Agent Shell | `pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass` | `configs/cursor/harness-settings.json` |
-| automation env | `PYTHONUTF8`, `GIT_PAGER=cat`, `DOTFILES_HARNESS=cursor-windows-v1`, telemetry off | 同上 |
-| ファイル encoding | `files.encoding: utf8` | 同上 |
-| User PATH | `~/.local/bin` 先頭 | `scripts/setup_cursor_harness.ps1` |
-| User env | 上記と同期（Cursor 外の subprocess にも効く） | 同上 |
-| Hooks / rules | 従来どおり `just sync-rules` | `configs/agents/` |
-| マニフェスト | `~/.cursor/harness-baseline.json` | setup 時に書き込み |
+| 速度 | フック二重起動ゼロ（Project が graph 壁、User は destructive Shell のみ）、pwsh -NoProfile | Cursor 公式: 全ソースが実行される。full guard を二本置くと Read crawl が二重計上される |
+| トークン | 観測圧縮 + ルール短文化 + グラフ検索 | `rtk rewrite` → `updated_input`、always-on <100 行、skills on-demand |
+| 把握 | grep の代わりにグラフ走査 | `just hubs/neighbors/path/affected/explain` + MCP |
+| 自律 | バッチ末尾でグラフが古いまま終わらない | stop `loop_limit` 5 で update-graph / audit / semantic-merge を掬う |
+| 再現 | ツールドリフトで「昨日の agent」に戻らない | `configs/pins.json` + audit deny |
 
-### 4.3 追加・変更ファイル
+参照アーキテクチャ: OpenHands V1（不変 config / イベントソーシング相当の session-log / 圧縮は観測側）、Cursor 公式 hooks（`updated_input` / `followup_message` / `sessionStart.additional_context`）、Graphify-Labs CLI、rtk-ai rewrite hook。
 
-| ファイル | 変更 |
+---
+
+## 2. なぜ前版は SOTA でなかったか
+
+| ギャップ | 実害 |
 | :--- | :--- |
-| `configs/cursor/harness-settings.json` | **新規** — Cursor User settings 断片 SSOT |
-| `configs/cursor/agent-shell.json` | legacy 互換（harness-settings 優先時は未使用） |
-| `scripts/setup_cursor_harness.ps1` | **新規** — env + PATH + merge + manifest |
-| `scripts/merge_cursor_agent_shell.py` | harness-settings 優先、automationProfile.env deep merge |
-| `scripts/04_setup_configs.ps1` | Step 4.4 で setup_cursor_harness 呼び出し |
-| `configs/agents/HARNESS_BASELINE.md` | **新規** — エージェント向け前提一覧 |
-| `configs/agents/GLOBAL_RULES.md` | Harness baseline 不変条件を先頭付近に追加 |
-| `justfile` | `setup-harness` / `check-harness` |
-| `tests/verify_tools.ps1` | baseline / DOTFILES_HARNESS / settings 同期チェック |
-| `AGENTS.md` | コマンド表に setup-harness 追記 |
+| マルチハーネス ACI | `agent_guard` 肥大と sync の系統 diff が主因 |
+| `rtk hook cursor` が独立 preToolUse | Shell あたりプロセス +1。deny-retry はさらに +1 ターン |
+| stop は one-shot リマインド | エージェントが無視するとグラフが腐る |
+| graphify の affected / diagnose / tree / benchmark 未配線 | 「全機能依存」が query/path/god-nodes だけ |
+| graphifyy / rtk が latest 追従 | 再現不能 |
+| GLOBAL_RULES がゲート一覧を再記述 | soft/hard エコー、トークン浪費 |
+| Graphify MCP がこのセッションの dynamic catalog に無い | `just graph` fallback が本線。ルールは MCP 前提のまま |
 
-### 4.4 セットアップフロー
+---
+
+## 3. 層構造 (v2)
 
 ```text
-just install (step 4)
-    │
-    ├─ 04_setup_configs.ps1 … dotfiles deploy
-    ├─ sync_agent_rules.ps1 … hooks, AGENTS.md, skills, settings merge
-    └─ setup_cursor_harness.ps1 (step 4.4)
-           ├─ User 環境変数
-           ├─ User PATH (~/.local/bin)
-           ├─ harness-settings → %APPDATA%/Cursor/User/settings.json
-           └─ ~/.cursor/harness-baseline.json
+SOFT  always-on (<100 lines)          HARD  deterministic
+GLOBAL_RULES.md  文化・手順ポインタ     agent_guard.py v5
+graphify.mdc     1 画面の graph 手順    Cursor hooks.json
+HARNESS_BASELINE セットアップ済み前提    rtk rewrite (in-guard)
+GUARD_POLICY.md  ゲート表 SSOT          pins.json + audit
+        │                                      ▲
+        │ just sync-rules (Cursor only)        │ sessionStart / preToolUse /
+        v                                      │ beforeMCP / afterFileEdit /
+~/.cursor/rules, skills, hooks, AGENTS.md      │ stop (loop_limit 5)
 ```
 
-### 4.5 運用コマンド
+Skills (on-demand): `graphify-navigator`（全 CLI）、`graphify-builder`（semantic）、`rtk-expert`（rewrite/gain/smart）。
 
-```powershell
-just setup-harness    # 再適用（drift 修復）
-just check-harness    # 検査のみ（exit 1 = drift）
-just audit            # verify_tools に baseline チェック含む
+---
+
+## 4. Cursor hook トポロジ
+
+公式: `preToolUse` は `updated_input` 可。`beforeShellExecution` は書換不可 → **書換は preToolUse**。`stop.followup_message` + `loop_limit` 5。`sessionStart` は block 不可。`beforeMCPExecution` は Cloud で欠ける → preToolUse `MCP:` と query-log 180s でカバー。
+
+| Hook | Guard 動作 |
+| :--- | :--- |
+| sessionStart | pins + graph-first を additional_context に注入 |
+| preToolUse | 破壊 deny / グラフ壁 / 読み予算 / **rtk rewrite** |
+| beforeMCPExecution | graphify 接触記録。未知サーバは落とさない（fail-open、グラフ接触のみ） |
+| afterFileEdit | edited フラグのみ |
+| stop | 未検証バッチなら followup。最大 5 周 |
+| sessionEnd | 同じ文面を advisory |
+
+二重壁: プロンプトは「hooks が壁」とだけ言い、詳細は GUARD_POLICY。
+
+---
+
+## 5. Graphify 全機能マップ
+
+エンジン 0.9.50。**使わないもの:** `graphify extract`（第二 LLM）、`graphify … install` の vendor ルール導入（SSOT 破壊）。
+
+| 意図 | コマンド |
+| :--- | :--- |
+| 質問 | `just graph "<q>"` → `graphify query --budget 1200` |
+| ハブ | `just hubs` → `god-nodes` |
+| 近傍 | `just neighbors` → `explain` |
+| 経路 | `just path A B` |
+| 影響範囲 | `just affected X` → `graphify affected` |
+| 診断 | `just diagnose` → `diagnose multigraph` |
+| 木 | `just graph-tree` → `tree` |
+| トークン比較 | `just graph-bench` → `benchmark` |
+| AST 更新 | `just update-graph` (`update --force` + rehydrate) |
+| semantic | builder skill → `just semantic-merge` |
+| 記憶 | `just lessons` / `just remember` |
+| 監視 | `just watch` |
+| MCP | query_graph / get_node / get_neighbors / shortest_path / god_nodes / get_community / graph_stats。必ず `project_path` + `token_budget: 1200` |
+
+---
+
+## 6. RTK 全機能マップ
+
+エンジン 0.45.0。公式 Cursor 統合は `rtk init -g --agent cursor` だが、当ハーネスは **guard 内 `rtk rewrite`** に一本化（プロセス -1）。
+
+| 意図 | コマンド |
+| :--- | :--- |
+| 自動圧縮 | 生 `git status` 等 → hook が `rtk git status` に書換 |
+| 読む | `rtk read` / `rtk read -l aggressive` / `rtk smart` |
+| 探す | `rtk rg` / `rtk find` |
+| テスト | `rtk test` / `rtk pytest` |
+| 分析 | `just rtk-gain` / `rtk gain --history` / `rtk discover` |
+| パイプ | `rtk pipe` |
+| 超圧縮 | `rtk --ultra-compact …`（必要時のみ） |
+
+組み込み Read/Grep は Bash hook を通らない（公式）。巨大ファイルは Shell の `rtk read` を使え。
+
+---
+
+## 7. 環境固定
+
+| 層 | 値 | SSOT |
+| :--- | :--- | :--- |
+| Harness id | `cursor-windows-v2` | `configs/pins.json` + `harness-settings.json` |
+| Agent Shell | `pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass` | harness-settings |
+| graphifyy | `==0.9.50` extras mcp,gemini,openai,anthropic | `03_setup_runtimes.ps1` |
+| rtk | GitHub release `v0.45.0` + SHA pin | 同上 + Assert-PinnedHash |
+| MCP | workspace `.cursor/mcp.json` が repo `graph.json` をピン。global は unpin | sync-rules |
+| PATH | `~/.local/bin` 先頭 | setup_cursor_harness |
+| テレメトリ | off。`RTK_TELEMETRY_DISABLED=1` | harness env |
+
+アップグレードは `configs/pins.json` を先に上げてから `just update-graphify` / `just update-rtk`。latest 追従は禁止。
+
+---
+
+## 8. エージェントループ（毎回）
+
+```text
+sessionStart context
+  → just lessons（人間/エージェントがセッション頭で）
+  → 調査: just audit → hubs → neighbors/affected
+  → 改修: checkpoint → path → scoped rg → edit
+  → バッチ末: just update-graph → (docsなら builder+semantic-merge) → just audit
+  → stop が未了なら followup（最大 5）
 ```
 
-### 4.6 エージェント不変条件（GLOBAL_RULES 要約）
-
-> Harness baseline (pre-configured): `just install` / `just deploy` + `just sync-rules` でプロビジョン済み。Agent Shell・hooks・PATH・UTF-8 は固定。**ユーザー明示指示なしに再設定しない。** 詳細: `configs/agents/HARNESS_BASELINE.md`
+MCP が catalog に無いセッションでは `just graph` を MCP の代替として使う。再試行で MCP を叩かない。
 
 ---
 
-## 5. 次セッション候補（優先度）
+## 9. 破壊的変更 (v1 → v2)
 
-| 順 | 作業 | 効果 |
-| :---: | :--- | :--- |
-| 1 | `GUARD_POLICY.md` 新設 + GLOBAL_RULES のゲート列挙削除 | soft 肥大解消 |
-| 2 | `sync-rules -Profile Cursor` | 同期時間・複雑度削減 |
-| 3 | `adapters/cursor.py` 切り出し | monofile 縮小 |
-| 4 | rtk hook を guard 内統合 | Shell フック 1 プロセス化 |
-
----
-
-## 6. 関連メモリ
-
-`just remember` に保存済み:
-
-- **Q**: agent harness guardrails bloat causes and appropriateness  
-- **A**: 積層 v2-v4.7、二重壁意図的、deny 2.9%、債務は monofile + echo + test mirror
+- `sync-rules` は Cursor ターゲットのみ。MCP テンプレは `configs/agents/cursor/mcp_config.json`。
+- `rtk hook cursor` を hooks.json から削除。
+- stop の batch-end は one-strike ではない（ハードループ）。
+- noisy git は deny-retry ではなく rewrite-allow。
+- `DOTFILES_HARNESS=cursor-windows-v2`。
+- `just update-graphify` / `update-rtk` はピン版を入れる（最新へ上げない）。
 
 ---
 
-## 7. 参照
+## 10. 検証
 
-- 運用 SSOT: `configs/agents/HARNESS_BASELINE.md`
-- グローバルルール: `configs/agents/GLOBAL_RULES.md`
-- ガード実装: `scripts/agent_guard.py`（v4.7 ヘッダ changelog）
-- セッションログ: `just session-report` → `graphify-out/session-log.jsonl`
+| チェック | コマンド |
+| :--- | :--- |
+| ピン | `just check-pins`（graphify 0.9.50 / rtk 0.45.0 / harness v2） |
+| ガード | `tests/verify_agent_guard.ps1` v5（rewrite + hard-loop + sessionStart） |
+| 全体 | `just audit` |
+
+---
+
+## 11. 参照
+
+- Cursor: https://cursor.com/docs/hooks https://cursor.com/docs/cli/overview https://cursor.com/docs/rules
+- Graphify: https://github.com/Graphify-Labs/graphify （CLI `graphify --help`）
+- RTK: https://github.com/RTK-AI/rtk （`rtk rewrite` / `rtk hook cursor`）
+- 運用: `configs/agents/HARNESS_BASELINE.md` `GUARD_POLICY.md` `GLOBAL_RULES.md`

@@ -20,7 +20,7 @@ check-rules:
 deploy:
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/04_setup_configs.ps1
 
-# Run the comprehensive test suite to verify CLI tools, environment variables, and rules
+# Run the comprehensive test suite (CLI tools, env, agent_guard v5, semantic harness)
 test:
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
@@ -92,6 +92,26 @@ neighbors label:
 path source target:
     @graphify path "{{source}}" "{{target}}"
 
+# Files/symbols affected by a node (blast radius)
+affected node:
+    @graphify affected "{{node}}"
+
+# Diagnose graph health (multigraph / duplicate edges)
+diagnose:
+    @graphify diagnose multigraph
+
+# Print the knowledge-graph tree
+graph-tree:
+    @graphify tree
+
+# Benchmark graph.json query performance
+graph-bench:
+    @graphify benchmark graphify-out/graph.json
+
+# Compare installed graphify/rtk/DOTFILES_HARNESS against configs/pins.json
+check-pins:
+    @$p = Get-Content configs/pins.json -Raw | ConvertFrom-Json; $g = graphify --version 2>&1 | Out-String; $r = rtk --version 2>&1 | Out-String; $h = [Environment]::GetEnvironmentVariable('DOTFILES_HARNESS','User'); if ($g -notmatch [regex]::Escape($p.graphifyy)) { throw "graphify pin mismatch: $g expected $($p.graphifyy)" }; if ($r -notmatch [regex]::Escape($p.rtk)) { throw "rtk pin mismatch: $r expected $($p.rtk)" }; if ($h -ne $p.harness) { throw "DOTFILES_HARNESS=$h expected $($p.harness)" }; Write-Host "[OK] pins graphifyy=$($p.graphifyy) rtk=$($p.rtk) harness=$($p.harness)"
+
 # Session start: refresh lessons from work-memory (deterministic) and print them
 lessons:
     @graphify reflect --if-stale
@@ -136,15 +156,15 @@ rtk-history:
 rtk-discover:
     @rtk discover
 
-# Update RTK to the latest release, re-sync agent rules, and run verification
+# Update RTK to the pinned release (configs/pins.json), re-sync agent rules, and verify
 update-rtk:
     @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/03_setup_runtimes.ps1 -OnlyRtk -Force
     @just sync-rules
     @just test
 
-# Update graphify engine, refresh git hooks, re-sync agent rules, and verify
+# Update graphify engine to the pinned extras in configs/pins.json (never latest), refresh git hooks, re-sync, verify
 update-graphify:
-    @uv tool install --upgrade --with watchdog "graphifyy[mcp]"
+    @$pin = (Get-Content configs/pins.json -Raw | ConvertFrom-Json).graphifyy; uv tool install --force ("graphifyy[mcp,gemini,openai,anthropic]=={0}" -f $pin)
     @graphify hook install
     @just sync-rules
     @just test

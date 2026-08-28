@@ -4,12 +4,14 @@ description: >-
   High-speed LLM token optimizer & CLI proxy (rtk). Cuts 60-90% of bash/shell output tokens.
   Use when running git commands, viewing/reading files (rtk read), heuristic summarization
   (rtk smart), test execution (rtk test), diffing (rtk diff), linting, directory discovery,
-  and tracking token savings (rtk gain).
+  piping stdin (rtk pipe), tracking savings (rtk gain), or rewriting raw commands (rtk rewrite).
 ---
 
 # RTK Token Optimizer Expert (rtk-expert)
 
 > **Core Purpose**: `rtk` (Rust Token Killer) is a high-performance, single-binary CLI proxy that intercepts dev commands and filters out noise, whitespace, boilerplate, and duplicate logs before LLM context ingestion.
+
+> **This harness**: `agent_guard` PreToolUse calls `rtk rewrite` and returns Cursor `updated_input`. Still write `rtk …` explicitly when you can; raw `git status` is rewritten to `rtk git status`. Built-in **Read/Grep are preferred** for ordinary files. For files over the 300-line cap use `rtk read` / `rtk rg`. `--ultra-compact` is optional, not default.
 
 ---
 
@@ -33,6 +35,10 @@ description: >-
 | **Lint & Typecheck** | `eslint`, `tsc`, `ruff` | `rtk lint`, `rtk tsc`, `rtk ruff check` | ~80% (grouped error view) |
 | **JSON Preview** | `cat data.json` | `rtk json data.json --keys-only` | ~85% (structural schema only) |
 | **Package Deps** | `pnpm list`, `pip list` | `rtk deps` / `rtk pnpm list` | ~75% (compact dependency tree) |
+| **Hook rewrite (SSOT)** | raw `git status` | `rtk rewrite "git status"` | harness auto via `updated_input` |
+| **Stdin pipe** | `cmd \| more` | `cmd \| rtk pipe` | ~60% (filter stdin) |
+| **Ultra-compact** | default rtk | `rtk --ultra-compact <cmd>` | extra; **not default** |
+| **Savings dashboard** | — | `rtk gain` / `just rtk-gain` | session totals |
 
 ---
 
@@ -40,70 +46,48 @@ description: >-
 
 ### 1. Smart Pinpoint File Inspection
 ```bash
-# Get an instant 2-line technical heuristic summary (0 token overhead)
-rtk smart scripts/agent_guard.py
-
-# Read file with noise and blank lines stripped
-rtk read src/main.rs
-
-# Cap output lines: `rtk read -m <N> <file>`. Do NOT use `-n` — that is
-# `--line-numbers` (a flag); a following number is parsed as a filename.
-rtk read -m 120 README.md
-
-# Read TypeScript/Python signatures only (ideal for caller/callee context)
-rtk read src/service.ts -l aggressive
+rtk smart scripts/agent_guard.py          # 2-line heuristic summary
+rtk read src/main.rs                      # noise/blank lines stripped
+rtk read -m 120 README.md                 # cap lines; do NOT use -n (that's --line-numbers)
+rtk read src/service.ts -l aggressive     # signatures only
 ```
 
 ### 2. Failure-Only Test & Build Runs
 ```bash
-# Runs tests and filters out all passed test noise; outputs only failing assertions
 rtk cargo test
 rtk pytest
 rtk test npm run test:unit
-
-# TypeScript type checking grouped by file
 rtk tsc
 ```
 
 ### 3. Git Operations & Commits
 ```bash
-# Clean status
 rtk git status
-
-# View compact diff before staging
 rtk git diff
-
-# Stage and commit with instant confirmation
 rtk git add -A
 rtk git commit -m "feat: integrate rtk token killer"
 ```
 
-### 4. Zero Re-Run Failure Recovery (Tee Log)
-When a test or build fails, RTK automatically caches the full uncompressed log to `~/.local/share/rtk/tee/` or `%LOCALAPPDATA%\rtk\tee\`:
+### 4. Rewrite, pipe, gain
+```bash
+rtk rewrite "git status"          # SSOT for hooks; prints `rtk git status` (exit 1 = no mapping)
+git diff | rtk pipe               # filter stdin
+rtk gain                          # dashboard; or `just rtk-gain`
+rtk gain --history
+rtk --ultra-compact git status    # optional Level-2; not default
+```
+
+### 5. Zero Re-Run Failure Recovery (Tee Log)
+When a test or build fails, RTK caches the full uncompressed log to `~/.local/share/rtk/tee/` or `%LOCALAPPDATA%\rtk\tee\`:
 ```text
 FAILED: 2/15 tests [full output: ~/.local/share/rtk/tee/1707753600_cargo_test.log]
 ```
-> **Tip**: Agents never need to re-run commands with `--verbose`. Simply inspect the saved failure log using `head -n 30 <log_path>` or `rtk log <log_path>`.
+> **Tip**: Do not re-run with `--verbose`. Inspect the saved log with `rtk log <log_path>` (or `rtk read -m 30 <log_path>`).
 
 ---
 
-## 📊 3. Token Analytics & Gain Tracking
-
-Monitor token savings and optimization efficiency:
-```bash
-# View overall savings summary dashboard
-rtk gain
-
-# View recent command execution history with byte/token savings
-rtk gain --history
-
-# Discover missed token-saving opportunities from past sessions
-rtk discover
-```
-
----
-
-## 🛡️ 4. Invariants & Rules
-1. **Always Prefer RTK Over Raw Shell Commands**: For all standard dev commands (`git`, `cargo`, `pytest`, `npm`, `tsc`, `lint`), prepend `rtk` (or rely on the auto-rewrite hook).
-2. **Combine with Agent Guard**: Agent Guard enforces safety and read budgets, while RTK ensures every shell output is compressed to minimal tokens.
-3. **Telemetry Disabled**: `RTK_TELEMETRY_DISABLED=1` is globally enforced for complete privacy and instant execution.
+## 🛡️ 3. Invariants & Rules
+1. **Prefer explicit `rtk …`**: write it yourself when you can. The harness still rewrites noisy shell via `rtk rewrite` (`updated_input`) if you forget.
+2. **Read/Grep are native first**: built-in Read/Grep do not hit rtk rewrite. For files over 300 lines use `rtk read` / `rtk rg`.
+3. **`--ultra-compact` is opt-in**, not default. Use only when the extra ASCII/inline squeeze is needed.
+4. **Telemetry Disabled**: `RTK_TELEMETRY_DISABLED=1` is globally enforced.

@@ -10,7 +10,8 @@
       "Bypass"
     ],
     "env": {
-      "DOTFILES_HARNESS": "cursor-windows-v1",
+      "DOTFILES_HARNESS": "cursor-windows-v2",
+      "RTK_TELEMETRY_DISABLED": "1",
       "PYTHONUTF8": "1",
       "PYTHONDONTWRITEBYTECODE": "1"
     }

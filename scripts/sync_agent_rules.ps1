@@ -1,14 +1,18 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    configs/agents/ 内の SSOT ルール＆スキルをグローバルエージェント環境へ一括同期します。
+    Cursor-only: configs/agents/ 内の SSOT ルール＆スキルを Cursor 環境へ同期します。
 .DESCRIPTION
-    正本 (configs/agents/GLOBAL_RULES.md ほか) から以下へ同期します:
-    - Antigravity: ~/.gemini/config/*, ~/.agents/rules|workflows|skills, MCP merge
-    - Claude Code: ~/.claude/CLAUDE.md, ~/.claude/skills/..., ~/.claude.json (MCP surgical merge)
-    - Cursor:      %APPDATA%/Cursor/User/AGENTS.md, ~/.cursor/rules/graphify.mdc,
-                   Cursor User settings.json (agent-shell fragment → pwsh)
-    - Workspace:   CLAUDE.md (@AGENTS.md pointer), .agents/mcp_config.json (gitignored)
+    正本 (configs/agents/GLOBAL_RULES.md ほか) から Cursor ターゲットのみへ同期します:
+    - Cursor User: %APPDATA%/Cursor/User/AGENTS.md
+    - Cursor global: ~/.cursor/skills/*, ~/.cursor/hooks.json (destructive Shell only),
+                     ~/.cursor/scripts/agent_guard.py, ~/.cursor/mcp.json (graph unpinned)
+    - Workspace:   .cursor/hooks.json (full graph-first GuardPath = scripts/agent_guard.py),
+                   .cursor/mcp.json (pins repo graph.json)
+    - RTK:         %APPDATA%/rtk/config.toml, ~/.config/rtk/config.toml
+    - Harness:     Cursor User settings.json (harness-settings fragment → pwsh)
+    他プロダクトへは書きません。リポジトリ直下の余分な always-on markdown は
+    stale mirror として除去します。
     アンチ重複: ワークスペースの .cursorrules / .cursor/rules/graphify.mdc は
     常時コンテキストの多重ロード源となるため存在すれば除去します。
     vendor の広義 graphify スキルは除去し、graphify-navigator / graphify-builder を SSOT とします。
@@ -26,7 +30,6 @@ $rootDir = Split-Path -Parent $PSScriptRoot
 $configsDir = Join-Path $rootDir "configs"
 
 $masterRules = Join-Path $configsDir "agents\GLOBAL_RULES.md"
-$masterClaudeProjectPointer = Join-Path $configsDir "agents\claude\CLAUDE.project.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
@@ -34,14 +37,10 @@ $masterGraphifyBuilderDir = Join-Path $configsDir "agents\skills\graphify-builde
 $masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
 $masterTuiWireframeDir = Join-Path $configsDir "agents\skills\tui-wireframe-designer"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
-$masterClaudeSettings = Join-Path $configsDir "agents\claude\settings.json"
-$masterAntigravityDir = Join-Path $configsDir "agents\antigravity"
-$masterCursorRulesDir = Join-Path $configsDir "agents\cursor\rules"
 $masterCursorHooks = Join-Path $configsDir "agents\cursor\hooks.json"
-$masterAgentsDir = Join-Path $configsDir "agents"
-$masterHooks = Join-Path $masterAgentsDir "hooks.json"
+$masterCursorHooksGlobal = Join-Path $configsDir "agents\cursor\hooks.global.json"
 $masterAgentGuard = Join-Path $rootDir "scripts\agent_guard.py"
-$mcpTemplate = Join-Path $masterAntigravityDir "mcp_config.json"
+$mcpTemplate = Join-Path $configsDir "agents\cursor\mcp_config.json"
 
 if (-not (Test-Path $masterRules)) {
     Write-Error "正本ルールファイルが見つかりません: $masterRules"
@@ -97,10 +96,12 @@ function Get-HookContentWithGuardPath {
     # ("python scripts/agent_guard.py"), which only resolves when CWD is this
     # repo root. Deployed copies must point to their co-deployed guard via an
     # absolute path, or every hook invocation fails in other workspaces.
-    param([string]$SrcFile, [string]$GuardPath)
+    param([string]$SrcFile, [string]$GuardPath, [string]$GuardArgs = "")
     $content = [System.IO.File]::ReadAllText($SrcFile, [System.Text.Encoding]::UTF8)
     $guardFwd = $GuardPath.Replace('\', '/')
-    return $content.Replace('python scripts/agent_guard.py', "python $guardFwd")
+    $replacement = "python $guardFwd"
+    if ($GuardArgs) { $replacement = "python $guardFwd $GuardArgs" }
+    return $content.Replace('python scripts/agent_guard.py', $replacement)
 }
 
 function Test-TextContentIdentical {
@@ -282,102 +283,11 @@ function Merge-GraphifyMcpConfig {
     $script:syncedCount++
 }
 
-function Invoke-JaqUtf8 {
-    # Runs jaq and captures stdout as UTF-8 regardless of console codepage (CJK-safe).
-    param([string[]]$JaqArgs)
-    $prevEnc = [Console]::OutputEncoding
-    try {
-        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-        $out = (& jaq @JaqArgs | Out-String)
-    } finally {
-        [Console]::OutputEncoding = $prevEnc
-    }
-    return @{ ExitCode = $LASTEXITCODE; Output = $out }
-}
-
-function Test-ClaudeGraphifyMcpInSync {
-    # ~/.claude.json is Claude Code's live state file: huge, deeply nested, CJK text.
-    # PowerShell 5.1 ConvertFrom-Json has a ~2MB limit and mangles DateTime strings,
-    # so both the check and the merge must go through jaq only (byte-safe).
-    param([string]$TemplatePath, [string]$DestPath)
-    if (-not (Test-Path $TemplatePath)) { return $false }
-    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-    $want = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
-    if (-not $want) { return $true }  # graphify-mcp not installed: nothing to enforce
-    if (-not (Test-Path $DestPath)) { return $false }
-    if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) { return $false }
-
-    $srvTmp = Join-Path $env:TEMP ("graphify_mcp_want_{0}.json" -f ([Guid]::NewGuid().ToString('N')))
-    try {
-        [System.IO.File]::WriteAllText($srvTmp, ($want | ConvertTo-Json -Depth 10 -Compress), [System.Text.UTF8Encoding]::new($false))
-        $res = Invoke-JaqUtf8 -JaqArgs @('--slurpfile', 'w', $srvTmp, '(.mcpServers.graphify // null) == $w[0]', $DestPath)
-        return ($res.ExitCode -eq 0 -and $res.Output.Trim() -eq 'true')
-    } finally {
-        Remove-Item $srvTmp -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function Merge-GraphifyMcpIntoClaudeUserConfig {
-    param([string]$TemplatePath, [string]$DestPath)
-    if (-not (Test-Path $TemplatePath)) {
-        Write-Warning "[SKIP] MCP template missing: $TemplatePath"
-        return
-    }
-    if (Test-ClaudeGraphifyMcpInSync -TemplatePath $TemplatePath -DestPath $DestPath) {
-        Write-Host "  [OK] MCP graphify already in sync -> $DestPath" -ForegroundColor DarkGray
-        $script:skippedCount++
-        return
-    }
-
-    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8).Trim() | ConvertFrom-Json
-    $graphifyServer = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify
-    if (-not $graphifyServer) {
-        Write-Warning "[SKIP] graphify-mcp not found; Claude Code MCP merge skipped. Run scripts/03_setup_runtimes.ps1 then re-run sync-rules."
-        return
-    }
-    if (-not (Get-Command jaq -ErrorAction SilentlyContinue)) {
-        Write-Warning "[SKIP] jaq not found; cannot surgically merge $DestPath."
-        return
-    }
-
-    if (-not (Test-Path $DestPath)) {
-        [System.IO.File]::WriteAllText($DestPath, "{}`n", [System.Text.UTF8Encoding]::new($false))
-    }
-
-    $srvTmp = Join-Path $env:TEMP ("graphify_mcp_server_{0}.json" -f ([Guid]::NewGuid().ToString('N')))
-    $outTmp = "$DestPath.graphify-merge.tmp"
-    try {
-        [System.IO.File]::WriteAllText($srvTmp, ($graphifyServer | ConvertTo-Json -Depth 10 -Compress), [System.Text.UTF8Encoding]::new($false))
-
-        $res = Invoke-JaqUtf8 -JaqArgs @('-c', '--slurpfile', 'g', $srvTmp, '.mcpServers = ((.mcpServers // {}) + {graphify: ($g[0])})', $DestPath)
-        if ($res.ExitCode -ne 0 -or -not $res.Output.Trim()) {
-            Write-Warning "[FAIL] jaq merge failed for $DestPath (exit $($res.ExitCode)); file left untouched."
-            return
-        }
-
-        # Validate merged output with jaq before replacing the live file (never trust a blind write).
-        # NOTE: the filter must not contain double quotes (PS 5.1 native arg passing mangles them).
-        [System.IO.File]::WriteAllText($outTmp, $res.Output.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
-        $check = Invoke-JaqUtf8 -JaqArgs @('-r', '.mcpServers.graphify.command // empty', $outTmp)
-        if ($check.ExitCode -ne 0 -or -not $check.Output.Trim()) {
-            Write-Warning "[FAIL] merged JSON validation failed for $DestPath; file left untouched."
-            return
-        }
-
-        Move-Item -Path $outTmp -Destination $DestPath -Force
-        Write-Host "  [SYNCED] MCP graphify (surgical jaq merge) -> $DestPath" -ForegroundColor Green
-        $script:syncedCount++
-    } finally {
-        Remove-Item $srvTmp -Force -ErrorAction SilentlyContinue
-        if (Test-Path $outTmp) { Remove-Item $outTmp -Force -ErrorAction SilentlyContinue }
-    }
-}
-
 Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host "   AI Agent SSOT Rule & Skill Synchronizer            " -ForegroundColor Cyan
+Write-Host "   Cursor-only SSOT Rule & Skill Synchronizer         " -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host "Master Rules: $masterRules" -ForegroundColor Gray
-Write-Host "Master Agents Dir: $masterAgentsDir`n" -ForegroundColor Gray
+Write-Host "MCP template: $mcpTemplate`n" -ForegroundColor Gray
 
 $hasDiff = $false
 $fatalError = $false
@@ -386,57 +296,19 @@ $skippedCount = 0
 
 Write-Host ">> Synchronizing Global AI Agent Configurations..." -ForegroundColor Cyan
 
-$projectClaudeMd = Join-Path $rootDir "CLAUDE.md"
-
 $allTargets = @(
-    @{ Name = "Antigravity Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "AGENTS.md"; IsDir = $false },
-    @{ Name = "Claude Code Global Rules";            Src = $masterRules; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "CLAUDE.md";        IsDir = $false },
     @{ Name = "Cursor Global Rules";                 Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
-    @{ Name = "Antigravity Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "modern-cli-expert"; IsDir = $true },
-    @{ Name = "Claude Code Global Modern-CLI";       Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Cursor Global Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "modern-cli-expert";        IsDir = $true },
-    @{ Name = "Agents Skills Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "modern-cli-expert";        IsDir = $true },
-    @{ Name = "Antigravity Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "browser-agent"; IsDir = $true },
-    @{ Name = "Claude Code Global Browser-Agent";    Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "browser-agent";        IsDir = $true },
     @{ Name = "Cursor Global Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "browser-agent";        IsDir = $true },
-    @{ Name = "Agents Skills Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "browser-agent";        IsDir = $true },
-    @{ Name = "Antigravity Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-navigator"; IsDir = $true },
-    @{ Name = "Claude Code Global Graphify-Nav";     Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-navigator";        IsDir = $true },
     @{ Name = "Cursor Global Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-navigator";        IsDir = $true },
-    @{ Name = "Agents Skills Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-navigator";        IsDir = $true },
-    @{ Name = "Antigravity Global Graphify-Builder"; Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "graphify-builder"; IsDir = $true },
-    @{ Name = "Claude Code Global Graphify-Builder"; Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "graphify-builder";        IsDir = $true },
     @{ Name = "Cursor Global Graphify-Builder";      Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-builder";        IsDir = $true },
-    @{ Name = "Agents Skills Graphify-Builder";      Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "graphify-builder";        IsDir = $true },
-    @{ Name = "Antigravity Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "rtk-expert";           IsDir = $true },
-    @{ Name = "Claude Code Global RTK-Expert";       Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "Cursor Global RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "rtk-expert";                  IsDir = $true },
-    @{ Name = "Agents Skills RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "rtk-expert";                  IsDir = $true },
-    @{ Name = "Antigravity Global Tui-Wireframe";    Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\skills") "tui-wireframe-designer"; IsDir = $true },
-    @{ Name = "Claude Code Global Tui-Wireframe";    Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "tui-wireframe-designer";        IsDir = $true },
     @{ Name = "Cursor Global Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "tui-wireframe-designer";        IsDir = $true },
-    @{ Name = "Agents Skills Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\skills") "tui-wireframe-designer";        IsDir = $true },
-    @{ Name = "RTK Global Config (AppData)";        Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
+    @{ Name = "RTK Global Config (AppData)";         Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
-    @{ Name = "Claude Code Global Settings";         Src = $masterClaudeSettings; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json";                        IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py" },
-    @{ Name = "Antigravity Global Graphify Rule";    Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md"; IsDir = $false },
-    @{ Name = "Antigravity Global Edit Orchestration"; Src = (Join-Path $masterAntigravityDir "rules\edit-orchestration.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "edit-orchestration.md"; IsDir = $false },
-    @{ Name = "Antigravity Global Graphify Workflow";Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md"; IsDir = $false },
-    @{ Name = "Agents Always-on Graphify Rule";      Src = (Join-Path $masterAntigravityDir "rules\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "graphify.md"; IsDir = $false },
-    @{ Name = "Agents Always-on Edit Orchestration"; Src = (Join-Path $masterAntigravityDir "rules\edit-orchestration.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\rules") "edit-orchestration.md"; IsDir = $false },
-    @{ Name = "Agents Graphify Workflow";            Src = (Join-Path $masterAntigravityDir "workflows\graphify.md"); Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\workflows") "graphify.md"; IsDir = $false },
-    @{ Name = "Cursor Always-on Graphify Rule";      Src = (Join-Path $masterCursorRulesDir "graphify.mdc"); Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc"; IsDir = $false },
-    @{ Name = "Antigravity Global Hooks";            Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py" },
-    @{ Name = "Workspace Agent Hooks";               Src = $masterHooks; Dest = Join-Path (Join-Path $rootDir ".agents") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py" },
-    @{ Name = "Global Agents Hooks";                  Src = $masterHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py" },
-    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooks; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py" },
+    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooksGlobal; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; GuardArgs = "--mode=destructive" },
     @{ Name = "Workspace Cursor Hooks";              Src = $masterCursorHooks; Dest = Join-Path (Join-Path $rootDir ".cursor") "hooks.json"; IsDir = $false; GuardPath = $masterAgentGuard },
-    @{ Name = "Antigravity Global Agent Guard";      Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Global Agents Guard";                 Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Cursor Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Claude Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Workspace Agent Guard";               Src = $masterAgentGuard; Dest = Join-Path (Join-Path $rootDir ".agents\scripts") "agent_guard.py"; IsDir = $false },
-    @{ Name = "Workspace Claude Pointer (CLAUDE.md)"; Src = $masterClaudeProjectPointer; Dest = $projectClaudeMd; IsDir = $false }
+    @{ Name = "Cursor Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; IsDir = $false }
 )
 
 # Broad vendor "graphify" skills conflict with SSOT graphify-navigator.
@@ -464,7 +336,7 @@ foreach ($target in $allTargets) {
 
     $generatedContent = $null
     if ($target.GuardPath) {
-        $generatedContent = Get-HookContentWithGuardPath -SrcFile $target.Src -GuardPath $target.GuardPath
+        $generatedContent = Get-HookContentWithGuardPath -SrcFile $target.Src -GuardPath $target.GuardPath -GuardArgs ($target.GuardArgs)
     }
 
     $isIdentical = $false
@@ -529,15 +401,11 @@ if (-not (Test-Path $mergePy)) {
 }
 
 $mcpTargets = @(
-    (Join-Path $env:USERPROFILE ".gemini\config\mcp_config.json")
-    (Join-Path $env:USERPROFILE ".gemini\antigravity\mcp_config.json")
-    (Join-Path $env:USERPROFILE ".agents\mcp_config.json")
     (Join-Path $env:USERPROFILE ".cursor\mcp.json")
-    (Join-Path $rootDir ".agents\mcp_config.json")
     (Join-Path $rootDir ".cursor\mcp.json")
 )
 
-Write-Host "`n>> Graphify MCP (merge; absolute exe; workspace graph pin / global unpinned)..." -ForegroundColor Cyan
+Write-Host "`n>> Graphify MCP (Cursor; absolute exe; workspace graph pin / global unpinned)..." -ForegroundColor Cyan
 foreach ($mcpDest in $mcpTargets) {
     if ($Check) {
         if (Test-GraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $mcpDest) {
@@ -552,27 +420,20 @@ foreach ($mcpDest in $mcpTargets) {
     }
 }
 
-# Claude Code user scope (~/.claude.json): surgical jaq merge only (never PS JSON round-trip).
-$claudeUserConfig = Join-Path $env:USERPROFILE ".claude.json"
-Write-Host "`n>> Graphify MCP for Claude Code (~/.claude.json; surgical jaq merge)..." -ForegroundColor Cyan
-if ($Check) {
-    if (Test-ClaudeGraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $claudeUserConfig) {
-        Write-Host "  [OK] MCP graphify in sync -> $claudeUserConfig" -ForegroundColor DarkGray
-        $skippedCount++
-    } else {
-        Write-Host "  [DIFF] MCP graphify differs or missing -> $claudeUserConfig" -ForegroundColor Yellow
-        $hasDiff = $true
-    }
-} else {
-    Merge-GraphifyMcpIntoClaudeUserConfig -TemplatePath $mcpTemplate -DestPath $claudeUserConfig
-}
-
 # Duplicated always-on mirrors bloat every agent turn and dilute instruction priority.
-# Cursor reads AGENTS.md natively; the global ~/.cursor/rules/graphify.mdc covers this machine.
+# Graphify protocol lives in this repo's AGENTS.md. A global alwaysApply graphify.mdc
+# would tax every workspace; Cursor already runs user+project hooks together.
 $staleWorkspaceMirrors = @(
     (Join-Path $rootDir ".cursorrules")
     (Join-Path $rootDir ".cursor\rules\graphify.mdc")
+    (Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc")
 )
+$allowedRootMd = @("AGENTS.md", "README.md")
+Get-ChildItem -Path $rootDir -File -Filter "*.md" -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($allowedRootMd -notcontains $_.Name) {
+        $staleWorkspaceMirrors += $_.FullName
+    }
+}
 Write-Host "`n>> Checking for stale duplicated workspace rule mirrors..." -ForegroundColor Cyan
 foreach ($stale in $staleWorkspaceMirrors) {
     if (Test-Path $stale) {

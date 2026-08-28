@@ -187,7 +187,6 @@ function Deploy-WindowsTerminalConfig {
 
 # 1. Windows Terminal 設定のマージ配置
 Deploy-WindowsTerminalConfig -SrcPath (Join-Path $configsDir "windows-terminal\settings.json") -DestPath $wtDest
-# Cursor harness (pwsh automationProfile, env) is fixed in step 4.4 via setup_cursor_harness.ps1.
 
 # 2. その他 CLI / エディタ設定ファイルの配備マッピング
 $deployTargets = @(
@@ -349,9 +348,5 @@ try {
         Write-Warning "[WARN] Could not set CurrentUser ExecutionPolicy: $_"
     }
 }
-
-# 5. Cursor × Windows harness baseline (User env, PATH, settings.json, manifest)
-Write-Host "`n>> Step 4.4: Fixing Cursor harness baseline (env + settings)..." -ForegroundColor Magenta
-& (Join-Path $PSScriptRoot "setup_cursor_harness.ps1")
 
 Write-Host "`n[DONE] Configuration deployment step finished." -ForegroundColor Green

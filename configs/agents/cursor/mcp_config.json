@@ -1,13 +1,3 @@
 {
-  "mcpServers": {
-    "graphify": {
-      "command": "graphify-mcp",
-      "args": [],
-      "env": {
-        "PYTHONUTF8": "1",
-        "PYTHONIOENCODING": "utf-8",
-        "GRAPHIFY_QUERY_LOG_ENABLE": "1"
-      }
-    }
-  }
+  "mcpServers": {}
 }

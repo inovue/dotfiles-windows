@@ -8,12 +8,10 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
 
 - ⚡ **AI エージェント超高速化・安定化 (SSOT)**:
   - 単一正本（`configs/agents/`）から Cursor へルール＆スキルを同期（`just sync-rules`）。配備先は `~/.cursor` と `%APPDATA%/Cursor/User` のみ。
-  - 🛡️ **決定論的サイバネティック・ガバナー (`agent_guard.py` v5 / Cursor `hooks.json`)**: `sessionStart` / `preToolUse` / `beforeMCPExecution` / `afterFileEdit` / `stop` により、破壊的コマンド、低速 PowerShell Cmdlet、トークン浪費（未スライス読み込み、同一ファイル累積スライス、ノイジーな生Git）、明示的な `powershell.exe`（5.1）+ `&&`/`||`、有限ジョブの短待ちバックグラウンド化、グラフ未参照の無差別検索を自動遮断。
-  - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: Git/ビルド/テスト/ファイル閲覧等のコマンド出力をコンテキスト投入前に極限まで圧縮。
+  - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: 公式 `rtk init -g --agent cursor --hook-only` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れ、Shell を透過 rewrite する（fail-open、deny しない）。
   - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`）を直結。一括行探索（Batch Line Discovery）やマルチターゲット検索のバッチ化を徹底。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
-  - 🧠 **Gated Graphify & 自己進化ワークメモリ**: `graphify-out/graph.json` 存在時のみ MCP/知識グラフを有効化し、不要な全リポジトリ走査を防止。`just lessons` による教訓読み込み、`just remember` による回答のグラフノード化、`just watch` による AST 自動追従を実現。
-  - 実ブラウザ自動化（`browser-agent` / Playwright）、ASTリファクタ（`modern-cli-expert`）、知識グラフ探索（`graphify-navigator`）の段階的開示スキル。
+  - 実ブラウザ自動化（`browser-agent` / Playwright）、ASTリファクタ（`modern-cli-expert`）の段階的開示スキル。
 - 🐚 **モダンシェル＆ターミナル体験**:
   - Nushell を既定シェルとし、動的プロファイルフラグメントで Windows Terminal とシームレス統合。
   - Starship による美麗クロスシェルプロンプト、zoxide によるスマートディレクトリ移動。
@@ -40,33 +38,26 @@ dotfiles-windows/
 ├── README.md                       # ユーザー向けドキュメント（本ファイル）
 ├── tests/
 │   ├── verify_tools.ps1            # 環境・モダンCLI・エージェント設定・ベンチマークの網羅的自動テスト
-│   ├── verify_security.ps1         # 🛡️ セキュリティ回帰テスト（URL検証、SHA256ピン、XSS、パストラバーサル）
-│   └── verify_agent_guard.ps1      # 🛡️ Agent Guard v5 回帰テスト（Cursor-only、One-strike、MCPアンラップ、Thrash警告、累積読込、待機フロア、pwsh host / 薄い 5.1 chain、rtk rewrite、stop ハードループ）
+│   └── verify_security.ps1         # 🛡️ セキュリティ回帰テスト（URL検証、SHA256ピン、XSS、パストラバーサル）
 ├── scripts/
 │   ├── 01_winget_packages.ps1      # 1. winget によるツール・アプリ・ランタイム一括導入
 │   ├── 02_install_fonts.ps1        # 2. UDEV Gothic NF (等幅/等倍) 自動取得・登録
-│   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, rustup, jaq, rtk, graphify 等のランタイム・CLIセットアップ
+│   ├── 03_setup_runtimes.ps1       # 3. fnm, uv, rustup, jaq, rtk 等のランタイム・CLIセットアップ
 │   ├── 04_setup_configs.ps1        # 4. Dotfiles（Terminal, Helix, Nushell, Profiles）の配備
 │   ├── Assert-PinnedHash.ps1       # 🔒 バイナリダウンロードの SHA256 ピン & TOFU 整合性検証
-│   ├── agent_guard.py              # 🛡️ 決定論的サイバネティック・ガバナー (Cursor hooks v5)
-│   ├── merge_cursor_agent_shell.py # Cursor User settings.json へ pwsh automationProfile を外科マージ
-│   ├── audit_workspace.ps1         # 🌟 4フェーズ統合監査・クリーンアップスクリプト
-│   ├── graphify_semantic.py        # セッション結束セマンティック prepare/merge/rehydrate
+│   ├── audit_workspace.ps1         # 🌟 統合監査・クリーンアップスクリプト
 │   ├── report_session_log.py       # 📊 セッションログのトークン節約・deny率・Thrash発生状況の集計レポート
-│   ├── setup_api_keys.ps1          # 🔑 AI Agent & Graphify 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
+│   ├── setup_api_keys.ps1          # 🔑 AI Agent 用 API キーの安全な対話型登録 (Windows ユーザー環境変数)
 │   └── sync_agent_rules.ps1        # 🌟 Cursor ルール＆スキルの高速同期 (正本 -> ~/.cursor と %APPDATA%/Cursor/User)
 └── configs/
     ├── agents/                     # 🌟 Cursor 単一マスタールール (SSOT)
     │   ├── GLOBAL_RULES.md         # グローバル共通ルール正本 (CLI置換表, 非対話, UTF-8, ゼロハング)
-    │   ├── cursor/                 # Cursor always-on rules, hooks, MCP テンプレ
-    │   │   ├── hooks.json
-    │   │   ├── mcp_config.json     # Graphify MCP テンプレ（sync-rules が ~/.cursor/mcp.json へ）
-    │   │   └── rules/graphify.mdc
+    │   ├── cursor/                 # Cursor MCP テンプレ
+    │   │   └── mcp_config.json     # Cursor MCP テンプレ（サーバーなし）
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・Playwright・a11y・プロファイル自動化
-    │       ├── graphify-navigator/ # Graphify×Cursor 知識グラフナビゲータ (references/ 付属)
     │       ├── modern-cli-expert/  # ast-grep, sd, jaq, xh, procs, difftastic 高速レシピ
-    │       └── rtk-expert/         # rtk トークン削減プロキシ超高速レシピ
+    │       └── tui-wireframe-designer/
     ├── powershell/                 # PowerShell 5.1 / 7 共通プロファイル (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic NF, Catppuccin, Nushell既定, 動的プロファイル)
@@ -83,8 +74,6 @@ dotfiles-windows/
     │   └── config.yml
     ├── rtk/                        # rtk 設定 (トークン削減・除外設定)
     │   └── config.toml
-    ├── cursor/                     # Cursor エディタ断片 (agent Shell を pwsh へ)
-    │   └── agent-shell.json
     └── herdr/                      # Herdr 設定 (Nushell既定, Catppuccin, IME対策, herdr-sidebar連携)
         └── config.toml
 ```
@@ -97,7 +86,7 @@ dotfiles-windows/
 
 | コマンド | 内容 | 主な実行タイミング |
 | :--- | :--- | :--- |
-| `just audit` | 🌟 4フェーズ統合監査（テスト+SSOT同期+ナレッジグラフ健全性+ゴミファイル検知）を一括実行 | 調査・監査・状況確認の最初の一手 |
+| `just audit` | 🌟 3フェーズ統合監査（テスト+SSOT同期+ゴミファイル検知）を一括実行 | 調査・監査・状況確認の最初の一手 |
 | `just test` | CLIツール、環境変数、SSOTルール、UTF-8、ベンチマークの網羅的自動テストを実行 | セットアップ後・定期動作確認 |
 | `just clean` | 一時ファイル、古いバックアップ（`*.bak`）、ビルド・テストキャッシュを一括消去 | 編集完了後・コミット前 |
 | `just sync-rules` | 🌟 正本（`configs/agents/`）から Cursor（`~/.cursor`, `%APPDATA%/Cursor/User`）へルール/スキルを同期 | `configs/agents/` の編集後 |
@@ -105,26 +94,13 @@ dotfiles-windows/
 | `just deploy` | 全設定ファイル（Dotfiles + Rules）をユーザー環境にデプロイ | `configs/` 内の設定変更後 |
 | `just checkpoint` | エージェントの編集前に安全な Git チェックポイントブランチを作成 | 大規模・破壊的リファクタリング前 |
 | `just rollback` | 直前のチェックポイントブランチへ安全に即時ロールバック | 破壊的編集の取り消し時 |
-| `just graph <q>`| 🧠 高速知識グラフ検索（`just graph "deploy"` 等） | 構造探索・シンボル影響調査 |
-| `just hubs` | コードベース全体の重要アーキテクチャハブ・Godノードを一覧 | 全体構造の俯瞰 |
-| `just neighbors <l>`| 特定ハブ・ファイルの近傍コンポーネントと関係性を展開 | ハブ展開・変更波及範囲確認 |
-| `just path <a> <b>` | 2つのコンポーネント間の最短呼び出し/依存パスを探索 | 依存関係・リファクタ影響調査 |
-| `just lessons` | 🧠 ワークメモリ（`LESSONS.md`）から過去の教訓・リフレクションを表示 | セッション開始時のルーティン |
-| `just remember <q> <a>` | 💾 調査・設計結果をワークメモリに保存（次回グラフ更新時にノード化） | アーキテクチャ質問の回答後 |
-| `just check-semantic` | ドキュメント/画像のセマンティック再抽出保留を検知 | 状態確認・CI検証時 |
-| `just semantic-prepare` | 未キャッシュ docs を列挙（LLM なし） | セッション開始・ドキュメント編集後 |
-| `just semantic-merge` | エージェント JSON + cache を graph.json に結合 | skill `graphify-builder` の後 |
-| `just watch` | 👁️ ファイル変更を監視し AST 更新・セマンティック抽出を自動追従 | バックグラウンド作業時 |
-| `just update-graph`| 高速 AST 解析によりナレッジグラフ（`graphify-out/`）を更新 | 編集バッチ完了時 |
-| `just install-graph-hook`| コミット時に自動で知識グラフを再構築する post-commit フックを登録 | リポジトリ初回クローン時 |
-| `just update-graphify` | 📦 Graphify エンジンの更新、Git フック再登録、ルール同期、テストを一括実行 | Graphify アップデート時 |
 | `just session-report` | 📊 セッションログの deny 率、Thrash、累積スライス (crawl)、短周期待ち誘導 (poll_guide) を集計 | エージェント動作品質・トークン効率検証 |
 | `just rtk-gain` | 📊 rtk のトークン削減統計ダッシュボードを表示 | トークン節約効果の確認 |
 | `just rtk-history` | 直近のコマンド実行履歴とトークン削減率の内訳を表示 | 直近の節約履歴確認 |
 | `just rtk-discover`| 削減可能な見落としコマンドを履歴から自動検出 | エージェント最適化の確認 |
 | `just update-rtk` | rtk を最新リリースに更新し、ルール再同期とテストを実行 | rtk アップデート時 |
 | `just install` | 環境構築（パッケージ、フォント、ランタイム、設定）を一括実行 | 新規マシン構築時 |
-| `just setup-keys` | 🔑 AI Agent & Graphify 用 API キーを Windows ユーザー環境変数に対話型登録 | APIキー初回設定・更新時 |
+| `just setup-keys` | 🔑 AI Agent 用 API キーを Windows ユーザー環境変数に対話型登録 | APIキー初回設定・更新時 |
 | `just setup-fal` | 🎨 fal.ai API キー（`FAL_KEY`）を Windows ユーザー環境変数に対話型登録 | 画像生成機能利用時 |
 
 ---
@@ -156,15 +132,13 @@ just install
 | :--- | :--- |
 | `.\install.ps1 -Step 1` | `winget` によるパッケージの一括インストール (Terminal, CLI, Editors, Runtimes, Apps) |
 | `.\install.ps1 -Step 2` | `UDEV Gothic NF` フォントの自動ダウンロード・Windows 登録 (`-Force` で再取得可) |
-| `.\install.ps1 -Step 3` | ランタイム初期化 (fnm/Node, uv/Python + Playwright, Rustup/jaq, Graphify, hunkdiff, herdr-sidebar, Cursor Agent CLI, 安全環境変数, `~/.local/bin` シム) |
+| `.\install.ps1 -Step 3` | ランタイム初期化 (fnm/Node, uv/Python + Playwright, Rustup/jaq, hunkdiff, herdr-sidebar, Cursor Agent CLI, 安全環境変数, `~/.local/bin` シム) |
 | `.\install.ps1 -Step 4` | 設定ファイル（Dotfiles: Windows Terminal, Helix, Nushell, Profiles）および AI Agent ルールの一括配備 (`just deploy`) |
 | `just sync-rules` | Cursor ルール＆スキルのみを高速同期 (`.\scripts\sync_agent_rules.ps1`) |
-| `just setup-keys` | AI Agent & Graphify 用 API キーの安全な対話型登録 (`.\scripts\setup_api_keys.ps1`) |
-| `just lessons` | 🧠 ワークメモリから過去の教訓・リフレクションを読み込み表示 (`graphify reflect --if-stale`) |
-| `just watch` | ファイル変更を監視し AST グラフをバックグラウンド自動追従 (`graphify watch .`) |
-| `just audit` | 🌟 4フェーズ統合監査（テスト+SSOT同期+グラフ健全性+ゴミ検知）の実行 (`.\scripts\audit_workspace.ps1`) |
+| `just setup-keys` | AI Agent 用 API キーの安全な対話型登録 (`.\scripts\setup_api_keys.ps1`) |
+| `just audit` | 🌟 3フェーズ統合監査（テスト+SSOT同期+ゴミ検知）の実行 (`.\scripts\audit_workspace.ps1`) |
 | `just clean` | 一時ファイル・古いバックアップ（`*.bak`）・キャッシュの一括消去 (`.\scripts\audit_workspace.ps1 -Clean`) |
-| `just test` | 環境全体の整合性・ツール動作確認・セキュリティ回帰・Agent Guard 回帰テスト (`.\tests\verify_tools.ps1` + `verify_security.ps1` + `verify_agent_guard.ps1`) |
+| `just test` | 環境全体の整合性・ツール動作確認・セキュリティ回帰 (`.\tests\verify_tools.ps1` + `verify_security.ps1`) |
 
 ---
 
@@ -179,9 +153,8 @@ just install
 │ 1. 単一正本 (SSOT): configs/agents/ -> just sync-rules で Cursor へ配備        │
 │ 2. ネイティブCLI優先: rg, fd, sd, ast-grep, jaq, xh, procs, difftastic       │
 │ 3. 非対話・ゼロハング: PAGER=cat, BAT_STYLE=plain, -NoProfile, UTF-8 永続化   │
-│ 4. Gated Graphify: graphify-out/graph.json 存在時のみ MCP/知識グラフを起動   │
-│ 5. 段階的開示スキル: browser-agent, modern-cli-expert, graphify-navigator   │
-│ 6. ガバナー抑止: agent_guard.py により危険コマンド・低速Cmdletを物理遮断     │
+│ 4. 段階的開示スキル: browser-agent, modern-cli-expert                      │
+│ 5. rtk: 公式 Cursor hook が Shell を透過 rewrite（deny しない）              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -192,33 +165,11 @@ just install
    - 重い PowerShell Cmdlet（`Get-Content`, `Select-String`, `ConvertFrom-Json`）をバイパスし、Rust/Go 製バイナリを直接実行。
 3. **非対話ハング・文字化けの完全防止**:
    - `PAGER=cat`, `BAT_PAGER=""`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `DELTA_PAGER=cat`, `PYTHONUTF8=1` をユーザー環境変数に永続化し、ページャー待ちや ANSI エスケープ破綻を封殺。
-4. **Gated Graphify & ワークメモリ・自己進化ループ**:
-   - 知識グラフツール（`graphify` / `graphify-mcp`）は、対象プロジェクトに `graphify-out/graph.json` が存在する場合のみ利用（通常プロジェクトでの無駄な全走査やトークン消費を防止）。
-   - **自己進化ワークメモリ**: セッション開始時に `just lessons` で教訓を読み込み、アーキテクチャ回答後に `just remember "<q>" "<a>"` で知見を蓄積して次回グラフ更新時に自動ノード化。
-   - **自動追従**: `just watch`（`graphify watch .`）による AST 自動更新。セマンティック層はセッション中の skill `graphify-builder`（`just semantic-prepare` / `just semantic-merge`）。
-5. **段階的開示スキル (Progressive Disclosure)**:
+4. **段階的開示スキル (Progressive Disclosure)**:
    - `browser-agent`: 実 Google Chrome + Playwright によるログインセッション維持・動的SPAスクレイピング。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
-   - `graphify-navigator`: Graphify × 高速 CLI のハイブリッドコードベース探索（オンデマンド references 付属）。
-   - `rtk-expert`: `rtk` による Git・テスト・ビルド・ファイル閲覧の 60-90% トークン削減プロキシ・スマート要約・失敗ログ復旧レシピ。
-6. **決定論的サイバネティック・ガバナー (`agent_guard.py` v5 — Cursor-only Graph-First + rtk rewrite + stop ハードループ)**:
-   - `PreToolUse` ライフサイクルフックにより、破壊的コマンド（`format` / `Format-Volume`, `diskpart`, ドライブルート・ユーザープロファイル直下の再帰削除, `git push --force`（`--force-with-lease` は許可）, `powershell -enc` エンコード実行, Base64 デコード実行, ダウンロード＆実行のパイプ形式・引数形式）を無条件ハード遮断。
-   - 難読化耐性: バッククォート/キャレット除去後の正規化変体も再スキャンし（`` i`ex `` 対策）、lookahead によりフラグ順序（`rd /q /s` = `rd /s /q`, `-f` = `--force`）に依存しないマッチングを実現。
-   - **Graph-First ゲート**: ナレッジグラフ（`graphify-out/graph.json`）存在時に、グラフ未参照での無差別検索（パス無し / `.` の `rg`/`fd`/Grep）や初回ファイル編集を検知し、グラフ探索（`just hubs`/`query_graph`）へ誘導する One-strike ガイダンス遮断を適用。セッション終了時には `just update-graph` の実行漏れを警告（`just audit` は Done contract であり stop ループではない）。
-   - **v4.3 耐障害性・運用性強化**:
-     - **MCP アンラップ & Dynamic Tool 対応**: Cursor の `CallDynamicTool` と `beforeMCPExecution` 経由での知識グラフ呼び出しを漏れなく検知。
-     - **Query-Log フォールバック**: フック環境に依存せず、`graphify-mcp` のログから安全かつ決定論的にグラフ接触を認識。
-     - **Out-of-Repo 書き込みの除外**: `~/.cursor/plans` など、リポジトリ外ファイルへの書き込みを Edit Gate / Batch-End 契約の対象外として安全に許可。
-     - **Atomic State Write**: 並列フックプロセスによる `session_*.json` の競合破壊を `.tmp` + `os.replace` で完全防止。
-     - **Work-Memory Nudge**: セッション終了時にグラフ探索が行われていた場合、`just remember` による知見蓄積を促すアドバイザリ機能。
-   - **v4.4 トークン効率**: 同一ファイルの累積スライスが 300 行を超えたら unsliced キャップと同じ one-strike。終端する `just audit|test|sync-rules|deploy` 等を明示的な短待ち/バックグラウンドで投げた場合はフォアグラウンド待機（120000ms）へ誘導。短周期 AwaitShell/schedule は deny せず allow+guidance。
-   - **v4.5 シェル安定性**: Cursor Read の `offset=0/1` 無 limit は unsliced とみなす。query-log による graph contact は 180 秒（2時間窓による他チャット汚染を閉鎖）。beforeMCPExecution の session-log 二重記録を抑制。
-   - **v4.6 PowerShell 7 ホスト**: `install.ps1` が `pwsh` を入れる前提で、Cursor `automationProfile` / agent Shell / インストール後の just レシピを `pwsh` に固定。`just install` と just の windows-shell は 5.1 のまま（pwsh 未導入の新規マシンで `just` が起動できるようにする）。ガードは `&&` を一律遮断せず、明示的な `powershell.exe`（Windows PowerShell 5.1）との併用だけを one-strike する。
-   - **Thrash (read-after-edit) 抑止**: 編集直後に同一ファイルを再読み込みするエージェントの無駄なトークン浪費に対して Edit Verification ガイダンスを付与し、セッションログに記録。
-   - **v5 Cursor-native ACI**: Cursor JSON のみ（`permission` / `updated_input` / `followup_message` / `additional_context`）。stop は `loop_limit` 5 のハードループ。
-   - 低速 PowerShell パイプライン（`Select-String`, `Get-ChildItem -Recurse`）、rtk 未使用のノイジーコマンド（生 `git log/status/diff/show`）、300行超の未スライス読み込み、同一ファイル累積スライス >300行、有限ジョブの短待ちバックグラウンド化、読み取り予算超過（8ファイル/セッション）は **one-strike ガイダンス遮断**（具体的な代替コマンドを提示し、同一ターゲットの再試行は必ず通過 — デッドロック/コール浪費ループを構造的に排除）。
-   - セッション状態は TTL 2時間で自動失効・24時間で GC され、古い状態ファイルが新セッションの読み取り予算を枯渇させる事故を防止。パース失敗時はフェイルオープン（allow）だが、生ペイロードに破壊パターンが見える場合はフォールバックスキャンで deny（guarded fail-open）。
-   - `just session-report`（`scripts/report_session_log.py`）により、セッションごとの deny 率、Thrash、累積スライス (crawl)、短周期待ち誘導 (poll_guide) を集計。thrash 0% だけでは効率は証明されない。
+5. **公式 rtk Cursor hook**:
+   - `rtk init -g --agent cursor --hook-only --auto-patch` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れる。fail-open。このリポジトリは hooks.json を上書きしない。
 
 ---
 
@@ -252,7 +203,6 @@ just install
 - **`fzf`** - 汎用ファジーファインダー
 - **`glow`** - ターミナル Markdown リッチレンダラー
 - **`chafa`** - 超高速ターミナル画像 / Sixel レンダラー
-- **`graphify` / `graphify-mcp`** - 知識グラフ生成 CLI / MCP サーバー（Gated Always-on）
 - **`Starship`** - 超高速クロスシェルプロンプト
 - **`zoxide`** - スマートディレクトリジャンプ（`z` コマンド）
 - **`just`** - モダンコマンドランナー（make 代替）

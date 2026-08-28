@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Summarize graphify-out/session-log.jsonl: deny / thrash / crawl / poll-guide rates."""
+"""Summarize .cursor/session-log.jsonl: deny / thrash / crawl / poll-guide rates."""
 import json
 import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "graphify-out" / "session-log.jsonl"
+LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / ".cursor" / "session-log.jsonl"
 
 
 def main() -> int:

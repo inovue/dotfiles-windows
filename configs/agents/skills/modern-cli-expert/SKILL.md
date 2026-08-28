@@ -11,12 +11,6 @@ description: >-
 
 This skill equips agents with precise, high-performance command patterns for complex development tasks using compiled Rust/Go utilities on Windows.
 
-## Cross-skill: architecture first
-
-When `graphify-out/graph.json` exists and the question is architectural ("how does X relate to Y?", impact analysis), use **graphify-navigator** (MCP / `graphify query`) before whole-repo `rg`. Use this skill for pinpoint locate + structural edit after paths are scoped. If the graph is absent, skip graphify and use the recipes below.
-
----
-
 ## 🌳 1. Structural AST Code Refactoring (`ast-grep`)
 
 Use `ast-grep` (`ast-grep` or `sg`) for syntax-tree aware refactoring without regex parsing errors.

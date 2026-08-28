@@ -5,17 +5,13 @@
 .DESCRIPTION
     正本 (configs/agents/GLOBAL_RULES.md ほか) から Cursor ターゲットのみへ同期します:
     - Cursor User: %APPDATA%/Cursor/User/AGENTS.md
-    - Cursor global: ~/.cursor/skills/*, ~/.cursor/hooks.json (destructive Shell only),
-                     ~/.cursor/scripts/agent_guard.py, ~/.cursor/mcp.json (graph unpinned)
-    - Workspace:   .cursor/hooks.json (full graph-first GuardPath = scripts/agent_guard.py),
-                   .cursor/mcp.json (pins repo graph.json)
-    - RTK:         %APPDATA%/rtk/config.toml, ~/.config/rtk/config.toml
-    - Harness:     Cursor User settings.json (harness-settings fragment → pwsh)
+    - Cursor global: ~/.cursor/skills/*, ~/.cursor/mcp.json (graph unpinned)
+    - Workspace:   .cursor/mcp.json
+    - RTK config:  %APPDATA%/rtk/config.toml, ~/.config/rtk/config.toml
+    ~/.cursor/hooks.json は公式 `rtk init -g --agent cursor` の所有。このスクリプトは上書きしない。
     他プロダクトへは書きません。リポジトリ直下の余分な always-on markdown は
     stale mirror として除去します。
-    アンチ重複: ワークスペースの .cursorrules / .cursor/rules/graphify.mdc は
-    常時コンテキストの多重ロード源となるため存在すれば除去します。
-    vendor の広義 graphify スキルは除去し、graphify-navigator / graphify-builder を SSOT とします。
+    leftover graphify / rtk-expert / agent_guard は除去します。
 .PARAMETER Check
     同期せず差分のみ検査（終了コード 0: 一致, 1: 差分あり）。
 #>
@@ -32,14 +28,8 @@ $configsDir = Join-Path $rootDir "configs"
 $masterRules = Join-Path $configsDir "agents\GLOBAL_RULES.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
-$masterGraphifyNavDir = Join-Path $configsDir "agents\skills\graphify-navigator"
-$masterGraphifyBuilderDir = Join-Path $configsDir "agents\skills\graphify-builder"
-$masterRtkExpertDir = Join-Path $configsDir "agents\skills\rtk-expert"
 $masterTuiWireframeDir = Join-Path $configsDir "agents\skills\tui-wireframe-designer"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
-$masterCursorHooks = Join-Path $configsDir "agents\cursor\hooks.json"
-$masterCursorHooksGlobal = Join-Path $configsDir "agents\cursor\hooks.global.json"
-$masterAgentGuard = Join-Path $rootDir "scripts\agent_guard.py"
 $mcpTemplate = Join-Path $configsDir "agents\cursor\mcp_config.json"
 
 if (-not (Test-Path $masterRules)) {
@@ -91,26 +81,12 @@ function Sync-DirectoryMirror {
     Copy-Item -Path (Join-Path $SrcDir '*') -Destination $DestDir -Recurse -Force
 }
 
-function Get-HookContentWithGuardPath {
-    # hooks.json master references the guard via workspace-relative path
-    # ("python scripts/agent_guard.py"), which only resolves when CWD is this
-    # repo root. Deployed copies must point to their co-deployed guard via an
-    # absolute path, or every hook invocation fails in other workspaces.
-    param([string]$SrcFile, [string]$GuardPath, [string]$GuardArgs = "")
-    $content = [System.IO.File]::ReadAllText($SrcFile, [System.Text.Encoding]::UTF8)
-    $guardFwd = $GuardPath.Replace('\', '/')
-    $replacement = "python $guardFwd"
-    if ($GuardArgs) { $replacement = "python $guardFwd $GuardArgs" }
-    return $content.Replace('python scripts/agent_guard.py', $replacement)
-}
-
-function Test-TextContentIdentical {
-    param([string]$Content, [string]$File)
-    if (-not (Test-Path $File)) { return $false }
+function Test-OfficialCursorRtkHook {
+    $hooksPath = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"
+    if (-not (Test-Path $hooksPath)) { return $false }
     try {
-        $t1 = $Content.Replace("`r`n", "`n").TrimEnd()
-        $t2 = [System.IO.File]::ReadAllText($File, [System.Text.Encoding]::UTF8).Replace("`r`n", "`n").TrimEnd()
-        return ($t1 -eq $t2)
+        $raw = [System.IO.File]::ReadAllText($hooksPath)
+        return ($raw -match 'rtk hook cursor') -and ($raw -notmatch 'agent_guard')
     } catch {
         return $false
     }
@@ -127,163 +103,40 @@ function Get-NormalizedJsonText {
     }
 }
 
-function Resolve-GraphifyMcpExe {
-    $cmd = Get-Command graphify-mcp -ErrorAction SilentlyContinue
-    if ($cmd -and $cmd.Source -and (Test-Path $cmd.Source)) { return $cmd.Source }
-    $fallback = Join-Path $env:USERPROFILE ".local\bin\graphify-mcp.exe"
-    if (Test-Path $fallback) { return $fallback }
-    return $null
-}
-
-function Test-GraphifyMcpCommandValid {
-    param([string]$Command)
-    if (-not $Command) { return $false }
-    if ($Command -match '(?i)(^|[\\/])uv(\.exe)?$') { return $false }
-    if ($Command -eq "graphify-mcp" -or $Command -eq "graphify-mcp.exe") { return $false }
-    if ($Command -match '(?i)\.exe$' -or $Command -match '^[A-Za-z]:\\' -or $Command -match '^/') {
-        return (Test-Path $Command)
-    }
-    return $false
-}
-
-function Test-McpDestIsWorkspaceLocal {
-    # User-global MCP (cwd often $HOME) must not pin a graph path.
-    # Workspace-local MCP can pin this repo's graph.json as an absolute path.
+function Test-GraphifyMcpRemoved {
     param([string]$DestPath)
-    if (-not $DestPath -or -not $rootDir) { return $false }
-    try {
-        $destFull = [System.IO.Path]::GetFullPath($DestPath)
-        $rootFull = [System.IO.Path]::GetFullPath($rootDir)
-    } catch {
-        return $false
-    }
-    $cmp = [System.StringComparison]::OrdinalIgnoreCase
-    if ($destFull.Equals($rootFull, $cmp)) { return $true }
-    $prefix = $rootFull.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
-    return $destFull.StartsWith($prefix, $cmp)
-}
-
-function New-MaterializedGraphifyServer {
-    param(
-        [object]$TemplateServer,
-        [switch]$PinWorkspaceGraph
-    )
-    if (-not $TemplateServer) { return $null }
-
-    $exe = Resolve-GraphifyMcpExe
-    if (-not $exe) {
-        # Never materialize bare "graphify-mcp" — PATH-dependent and fails verify_tools.
-        return $null
-    }
-
-    $envObj = [PSCustomObject]@{
-        PYTHONUTF8       = "1"
-        PYTHONIOENCODING = "utf-8"
-    }
-    if ($TemplateServer.env) {
-        foreach ($p in $TemplateServer.env.PSObject.Properties) {
-            $envObj | Add-Member -NotePropertyName $p.Name -NotePropertyValue ([string]$p.Value) -Force
-        }
-    }
-
-    # Template args are ignored on purpose: a relative graphify-out/graph.json
-    # copied into user-global MCP resolves against $HOME (Cursor field report
-    # 2026-08-26). Never pin this repo into global configs either.
-    $server = [PSCustomObject]@{
-        command = $exe
-        env     = $envObj
-    }
-    if ($PinWorkspaceGraph) {
-        $graphJson = [System.IO.Path]::GetFullPath((Join-Path $rootDir "graphify-out\graph.json"))
-        $server | Add-Member -NotePropertyName args -NotePropertyValue ([string[]]@($graphJson))
-    }
-    return $server
-}
-
-function Test-GraphifyMcpInSync {
-    param([string]$TemplatePath, [string]$DestPath)
-    if (-not (Test-Path $TemplatePath)) { return $false }
-
-    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-    $want = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify -PinWorkspaceGraph:(Test-McpDestIsWorkspaceLocal -DestPath $DestPath)
-
-    if (-not $want) {
-        # graphify-mcp not installed: OK if dest missing or has no graphify entry;
-        # OK if dest already has a valid absolute path; DIFF if stale bare/uv config.
-        if (-not (Test-Path $DestPath)) { return $true }
-        try {
-            $dest = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-            if (-not $dest.mcpServers -or -not $dest.mcpServers.graphify) { return $true }
-            $cmd = [string]$dest.mcpServers.graphify.command
-            return (Test-GraphifyMcpCommandValid -Command $cmd)
-        } catch {
-            return $false
-        }
-    }
-
-    if (-not (Test-Path $DestPath)) { return $false }
+    if (-not (Test-Path $DestPath)) { return $true }
     try {
         $dest = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-        $have = $dest.mcpServers.graphify
-        if (-not $have) { return $false }
-        $wantNorm = Get-NormalizedJsonText -JsonText ($want | ConvertTo-Json -Depth 20)
-        $haveNorm = Get-NormalizedJsonText -JsonText ($have | ConvertTo-Json -Depth 20)
-        return ($wantNorm -eq $haveNorm)
+        if (-not $dest.mcpServers) { return $true }
+        return -not ($dest.mcpServers.PSObject.Properties.Name -contains "graphify")
     } catch {
         return $false
     }
 }
 
-function Merge-GraphifyMcpConfig {
-    param([string]$TemplatePath, [string]$DestPath)
-    if (-not (Test-Path $TemplatePath)) {
-        Write-Warning "[SKIP] MCP template missing: $TemplatePath"
+function Remove-GraphifyMcpConfig {
+    param([string]$DestPath)
+    if (-not (Test-Path $DestPath)) { return }
+    try {
+        $dest = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    } catch {
+        Write-Warning "[SKIP] MCP parse failed: $DestPath"
         return
     }
-    if (Test-GraphifyMcpInSync -TemplatePath $TemplatePath -DestPath $DestPath) {
-        Write-Host "  [OK] MCP graphify already in sync -> $DestPath" -ForegroundColor DarkGray
+    if (-not $dest.mcpServers) { return }
+    if (-not ($dest.mcpServers.PSObject.Properties.Name -contains "graphify")) {
+        Write-Host "  [OK] MCP has no graphify entry -> $DestPath" -ForegroundColor DarkGray
         $script:skippedCount++
         return
     }
-
-    $template = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8).Trim() | ConvertFrom-Json
-    $graphifyServer = New-MaterializedGraphifyServer -TemplateServer $template.mcpServers.graphify -PinWorkspaceGraph:(Test-McpDestIsWorkspaceLocal -DestPath $DestPath)
-    if (-not $graphifyServer) {
-        if (-not $template.mcpServers.graphify) {
-            Write-Warning "[SKIP] Template has no mcpServers.graphify"
-        } else {
-            Write-Warning "[SKIP] graphify-mcp not found; MCP merge skipped. Run scripts/03_setup_runtimes.ps1 (or: uv tool install graphifyy[mcp]) then re-run sync-rules."
-        }
-        return
-    }
-
-    $destDir = Split-Path -Parent $DestPath
-    if (-not (Test-Path $destDir)) {
-        New-Item -Path $destDir -ItemType Directory -Force | Out-Null
-    }
-
-    $destObj = $null
-    if (Test-Path $DestPath) {
-        $destRaw = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8).Trim()
-        if ($destRaw) {
-            try { $destObj = $destRaw | ConvertFrom-Json } catch { $destObj = $null }
-        }
-    }
-    if (-not $destObj) {
-        $destObj = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{} }
-    }
-    if (-not $destObj.mcpServers) {
-        $destObj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{}) -Force
-    }
-
-    $destObj.mcpServers | Add-Member -NotePropertyName graphify -NotePropertyValue $graphifyServer -Force
-    $json = $destObj | ConvertTo-Json -Depth 10
+    $dest.mcpServers.PSObject.Properties.Remove("graphify")
+    $json = $dest | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText($DestPath, $json + "`n", [System.Text.UTF8Encoding]::new($false))
-    Write-Host "  [SYNCED] MCP graphify -> $DestPath" -ForegroundColor Green
+    Write-Host "  [REMOVED] MCP graphify -> $DestPath" -ForegroundColor Green
     $script:syncedCount++
 }
 
-Write-Host "`n=======================================================" -ForegroundColor Cyan
 Write-Host "   Cursor-only SSOT Rule & Skill Synchronizer         " -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host "Master Rules: $masterRules" -ForegroundColor Gray
@@ -300,19 +153,15 @@ $allTargets = @(
     @{ Name = "Cursor Global Rules";                 Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
     @{ Name = "Cursor Global Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Cursor Global Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "browser-agent";        IsDir = $true },
-    @{ Name = "Cursor Global Graphify-Nav";          Src = $masterGraphifyNavDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-navigator";        IsDir = $true },
-    @{ Name = "Cursor Global Graphify-Builder";      Src = $masterGraphifyBuilderDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "graphify-builder";        IsDir = $true },
-    @{ Name = "Cursor Global RTK-Expert";            Src = $masterRtkExpertDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "rtk-expert";                  IsDir = $true },
     @{ Name = "Cursor Global Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "tui-wireframe-designer";        IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";         Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
-    @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false },
-    @{ Name = "Cursor Global Hooks";                 Src = $masterCursorHooksGlobal; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"; IsDir = $false; GuardPath = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; GuardArgs = "--mode=destructive" },
-    @{ Name = "Workspace Cursor Hooks";              Src = $masterCursorHooks; Dest = Join-Path (Join-Path $rootDir ".cursor") "hooks.json"; IsDir = $false; GuardPath = $masterAgentGuard },
-    @{ Name = "Cursor Global Agent Guard";           Src = $masterAgentGuard; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py"; IsDir = $false }
+    @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false }
 )
 
-# Broad vendor "graphify" skills conflict with SSOT graphify-navigator.
+# leftover graphify skills (vendor + previously deployed SSOT copies)
 $vendorGraphifySkillDirs = @(
+    (Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator")
+    (Join-Path $env:USERPROFILE ".cursor\skills\graphify-builder")
     (Join-Path $env:USERPROFILE ".agents\skills\graphify")
     (Join-Path $env:USERPROFILE ".claude\skills\graphify")
     (Join-Path $env:USERPROFILE ".cursor\skills\graphify")
@@ -325,6 +174,7 @@ $vendorGraphifySkillDirs = @(
     (Join-Path $rootDir ".agents\skills\graphify")
     (Join-Path $rootDir ".claude\skills\graphify")
     (Join-Path $rootDir ".cursor\skills\graphify")
+    (Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert")
 )
 
 foreach ($target in $allTargets) {
@@ -334,16 +184,9 @@ foreach ($target in $allTargets) {
         continue
     }
 
-    $generatedContent = $null
-    if ($target.GuardPath) {
-        $generatedContent = Get-HookContentWithGuardPath -SrcFile $target.Src -GuardPath $target.GuardPath -GuardArgs ($target.GuardArgs)
-    }
-
     $isIdentical = $false
     if ($target.IsDir) {
         $isIdentical = Test-DirectoriesIdentical -SrcDir $target.Src -DestDir $target.Dest
-    } elseif ($null -ne $generatedContent) {
-        $isIdentical = Test-TextContentIdentical -Content $generatedContent -File $target.Dest
     } else {
         $isIdentical = Test-TextFilesIdentical -File1 $target.Src -File2 $target.Dest
     }
@@ -361,11 +204,7 @@ foreach ($target in $allTargets) {
             } else {
                 $destDir = Split-Path -Parent $target.Dest
                 if (-not (Test-Path $destDir)) { New-Item -Path $destDir -ItemType Directory -Force | Out-Null }
-                if ($null -ne $generatedContent) {
-                    [System.IO.File]::WriteAllText($target.Dest, $generatedContent, [System.Text.UTF8Encoding]::new($false))
-                } else {
-                    Copy-Item -Path $target.Src -Destination $target.Dest -Force
-                }
+                Copy-Item -Path $target.Src -Destination $target.Dest -Force
             }
             Write-Host "  [SYNCED] $($target.Name) -> $($target.Dest)" -ForegroundColor Green
             $syncedCount++
@@ -373,28 +212,33 @@ foreach ($target in $allTargets) {
     }
 }
 
-Write-Host "`n>> Cursor harness baseline (harness-settings → settings.json)..." -ForegroundColor Cyan
-$mergePy = Join-Path $PSScriptRoot "merge_cursor_agent_shell.py"
-if (-not (Test-Path $mergePy)) {
-    Write-Warning "[MISSING] Source missing: $mergePy"
-    $hasDiff = $true
-    $fatalError = $true
+Write-Host "`n>> Official Cursor rtk hook (~/.cursor/hooks.json, not SSOT)..." -ForegroundColor Cyan
+$rtkHookHint = "rtk init -g --agent cursor --hook-only --auto-patch"
+if (Test-OfficialCursorRtkHook) {
+    Write-Host "  [OK] ~/.cursor/hooks.json has rtk hook cursor (no agent_guard)." -ForegroundColor DarkGray
+    $skippedCount++
 } else {
-    & python $mergePy --check
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  [OK] Cursor agent-shell fragment is already in sync." -ForegroundColor DarkGray
-        $skippedCount++
-    } elseif ($Check) {
-        Write-Host "  [DIFF] Cursor agent-shell fragment not applied -> $env:APPDATA\Cursor\User\settings.json" -ForegroundColor Yellow
-        $hasDiff = $true
+    $hasDiff = $true
+    if ($Check) {
+        Write-Host "  [DIFF] Official Cursor rtk hook missing. Run: $rtkHookHint" -ForegroundColor Yellow
     } else {
-        & python $mergePy
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [SYNCED] Cursor agent-shell -> $env:APPDATA\Cursor\User\settings.json" -ForegroundColor Green
-            $syncedCount++
+        $rtkCmd = Get-Command rtk -ErrorAction SilentlyContinue
+        if ($rtkCmd) {
+            $hooksPath = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"
+            if ((Test-Path $hooksPath) -and ((Get-Content -Raw -Path $hooksPath) -match 'agent_guard')) {
+                Remove-Item -Path $hooksPath -Force
+                Write-Host "  [REMOVED] leftover agent_guard from ~/.cursor/hooks.json" -ForegroundColor Green
+            }
+            & rtk init -g --agent cursor --hook-only --auto-patch
+            if ($LASTEXITCODE -eq 0 -and (Test-OfficialCursorRtkHook)) {
+                Write-Host "  [SYNCED] Official Cursor rtk hook via rtk init." -ForegroundColor Green
+                $syncedCount++
+            } else {
+                Write-Warning "rtk init did not install rtk hook cursor. Run: $rtkHookHint"
+                $fatalError = $true
+            }
         } else {
-            Write-Warning "Cursor agent-shell merge failed (python / settings.json)"
-            $hasDiff = $true
+            Write-Warning "rtk not in PATH. Install via 03_setup_runtimes.ps1 then: $rtkHookHint"
             $fatalError = $true
         }
     }
@@ -405,28 +249,29 @@ $mcpTargets = @(
     (Join-Path $rootDir ".cursor\mcp.json")
 )
 
-Write-Host "`n>> Graphify MCP (Cursor; absolute exe; workspace graph pin / global unpinned)..." -ForegroundColor Cyan
+Write-Host "`n>> MCP: ensure graphify server is absent..." -ForegroundColor Cyan
 foreach ($mcpDest in $mcpTargets) {
     if ($Check) {
-        if (Test-GraphifyMcpInSync -TemplatePath $mcpTemplate -DestPath $mcpDest) {
-            Write-Host "  [OK] MCP graphify in sync -> $mcpDest" -ForegroundColor DarkGray
+        if (Test-GraphifyMcpRemoved -DestPath $mcpDest) {
+            Write-Host "  [OK] MCP has no graphify -> $mcpDest" -ForegroundColor DarkGray
             $skippedCount++
         } else {
-            Write-Host "  [DIFF] MCP graphify differs or missing -> $mcpDest" -ForegroundColor Yellow
+            Write-Host "  [DIFF] MCP still has graphify -> $mcpDest" -ForegroundColor Yellow
             $hasDiff = $true
         }
     } else {
-        Merge-GraphifyMcpConfig -TemplatePath $mcpTemplate -DestPath $mcpDest
+        Remove-GraphifyMcpConfig -DestPath $mcpDest
     }
 }
 
 # Duplicated always-on mirrors bloat every agent turn and dilute instruction priority.
-# Graphify protocol lives in this repo's AGENTS.md. A global alwaysApply graphify.mdc
-# would tax every workspace; Cursor already runs user+project hooks together.
+# leftover always-on graphify.mdc would tax every workspace.
 $staleWorkspaceMirrors = @(
     (Join-Path $rootDir ".cursorrules")
     (Join-Path $rootDir ".cursor\rules\graphify.mdc")
     (Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc")
+    (Join-Path $rootDir ".cursor\hooks.json")
+    (Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py")
 )
 $allowedRootMd = @("AGENTS.md", "README.md")
 Get-ChildItem -Path $rootDir -File -Filter "*.md" -ErrorAction SilentlyContinue | ForEach-Object {
@@ -481,7 +326,7 @@ if ($Check) {
     Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan
     Write-Host "Sync Completed: $syncedCount synced, $skippedCount already up to date." -ForegroundColor Green
     if ($fatalError) {
-        Write-Warning "Result: fatal sync error (Cursor agent-shell merge)."
+        Write-Warning "Result: fatal sync error (official Cursor rtk hook)."
         exit 1
     }
 }

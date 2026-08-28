@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    AI Agent, Graphify, および fal.ai 用の API キーを Windows ユーザー環境変数に安全に登録します。
+    AI Agent および fal.ai 用の API キーを Windows ユーザー環境変数に安全に登録します。
 .DESCRIPTION
     リポジトリ内のファイルは一切変更せず、OSのユーザー環境変数 (HKCU\Environment) にのみ保存します。
     パスワードマスク入力により、画面露出やコマンド履歴への記録を防ぎます。

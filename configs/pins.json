@@ -1,5 +1,3 @@
 {
-  "harness": "cursor-windows-v2",
-  "graphifyy": "0.9.50",
   "rtk": "0.45.0"
 }

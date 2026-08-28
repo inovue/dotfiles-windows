@@ -6,5 +6,4 @@
 *.yml text eol=lf
 *.py text eol=lf
 *.ps1 text eol=crlf
-graphify-out/graph.json merge=graphify
 

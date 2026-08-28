@@ -8,7 +8,6 @@
     - rustup の初期設定
     - tealdeer (tldr) のキャッシュ更新
     - Hunk (hunkdiff) & Mermaid-ASCII CLI の導入
-    - Graphify (知識グラフ CLI / AI スキル) の導入
     - Herdr プラグイン (herdr-sidebar) の導入
     - Cursor Agent CLI (agent / cursor-agent) の自動導入
     - AI Agent 安全環境変数 & ~/.local/bin シム構築
@@ -30,7 +29,6 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pinsPath = Join-Path $repoRoot "configs\pins.json"
 $pins = Get-Content -Raw -Path $pinsPath | ConvertFrom-Json
-$graphifyPin = [string]$pins.graphifyy
 $rtkPin = [string]$pins.rtk
 
 Write-Host "==========================================" -ForegroundColor Magenta
@@ -81,43 +79,6 @@ function Install-UvPython {
     }
 }
 
-function Install-GraphifyCli {
-    Write-Host "`n>> [3/10] Setting up Graphify (uv tool, pinned $graphifyPin)..." -ForegroundColor Cyan
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        try {
-            $currentOk = $false
-            if (-not $Force -and (Get-Command graphify -ErrorAction SilentlyContinue)) {
-                $verOut = (& graphify --version 2>&1 | Out-String)
-                $currentOk = ($verOut -match [regex]::Escape($graphifyPin))
-            }
-
-            $extras = "graphifyy[mcp,gemini,openai,anthropic]==$graphifyPin"
-
-            if ($currentOk) {
-                Write-Host "   graphifyy $graphifyPin already installed; skip." -ForegroundColor Gray
-            } else {
-                Write-Host "   Installing $extras via uv tool (CLI: graphify / graphify-mcp)..." -ForegroundColor Gray
-                uv tool install --force $extras 2>&1 | Out-Null
-            }
-
-            $uvToolBin = ""
-            try { $uvToolBin = (uv tool dir --bin 2>$null).Trim() } catch { }
-            if (-not $uvToolBin) { $uvToolBin = Join-Path $env:USERPROFILE ".local\bin" }
-            if ($env:Path -notlike "*$uvToolBin*") { $env:Path = "$uvToolBin;$env:Path" }
-
-            if ((Get-Command graphify -ErrorAction SilentlyContinue) -and (Get-Command graphify-mcp -ErrorAction SilentlyContinue)) {
-                Write-Host "[OK] graphify + graphify-mcp installed (pin $graphifyPin)." -ForegroundColor Green
-            } else {
-                Write-Warning "[WARN] graphify binary not found after uv tool install. Restart terminal or check PATH ($uvToolBin)."
-            }
-        } catch {
-            Write-Warning "[WARN] Failed to install/configure graphify: $_"
-        }
-    } else {
-        Write-Host "[SKIP] uv is not in PATH yet (required for graphify)." -ForegroundColor Yellow
-    }
-}
-
 function Install-RustupJaq {
     Write-Host "`n>> [4/11] Checking Rustup & Cargo Tools..." -ForegroundColor Cyan
     if (Get-Command rustup -ErrorAction SilentlyContinue) {
@@ -138,6 +99,29 @@ function Install-RustupJaq {
         }
     } else {
         Write-Host "[SKIP] rustup is not in PATH yet." -ForegroundColor Yellow
+    }
+}
+
+function Install-CursorRtkHook {
+    $rtkExe = Join-Path (Join-Path $env:USERPROFILE ".local\bin") "rtk.exe"
+    if (-not (Test-Path $rtkExe)) {
+        $cmd = Get-Command rtk -ErrorAction SilentlyContinue
+        if (-not $cmd) {
+            Write-Warning "[WARN] rtk not found; skip Cursor hook init."
+            return
+        }
+        $rtkExe = $cmd.Source
+    }
+    Write-Host "   Installing official Cursor rtk hook (rtk init -g --agent cursor --hook-only)..." -ForegroundColor Gray
+    $hooksPath = Join-Path (Join-Path $env:USERPROFILE ".cursor") "hooks.json"
+    if ((Test-Path $hooksPath) -and ((Get-Content -Raw -Path $hooksPath) -match 'agent_guard')) {
+        Remove-Item -Path $hooksPath -Force
+    }
+    & $rtkExe init -g --agent cursor --hook-only --auto-patch
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Cursor rtk hook installed." -ForegroundColor Green
+    } else {
+        Write-Warning "[WARN] rtk init failed (exit $LASTEXITCODE)."
     }
 }
 
@@ -165,6 +149,7 @@ function Install-RtkCli {
 
     if ($currentVersion -eq $rtkPin -and -not $Force) {
         Write-Host "[OK] RTK is at pin v$rtkPin." -ForegroundColor Green
+        Install-CursorRtkHook
         return
     }
 
@@ -218,6 +203,8 @@ function Install-RtkCli {
             Write-Warning "[WARN] Failed to build RTK via cargo: $_"
         }
     }
+
+    Install-CursorRtkHook
 }
 
 function Update-TealdeerCache {
@@ -494,7 +481,6 @@ if ($OnlyRtk) {
 # --- 順次実行 ---
 Install-FnmNode
 Install-UvPython
-Install-GraphifyCli
 Install-RustupJaq
 Install-RtkCli -Force:$Force
 Update-TealdeerCache

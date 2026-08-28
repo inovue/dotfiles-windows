@@ -212,6 +212,7 @@ Assert-Test -Name "Master does not ship scripts/graphify_semantic.py" -Condition
 Assert-Test -Name "Master does not ship tests/verify_semantic_harness.ps1" -Condition (-not (Test-Path (Join-Path $rootDir "tests\verify_semantic_harness.ps1")))
 Assert-Test -Name "Master does not ship graphify-navigator skill" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\skills\graphify-navigator")))
 Assert-Test -Name "Master does not ship graphify-builder skill" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\skills\graphify-builder")))
+Assert-Test -Name "Master does not ship impeccable-agile skill" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\skills\impeccable-agile")))
 Assert-Test -Name "graphify CLI is not on PATH" -Condition ($null -eq (Get-Command graphify -ErrorAction SilentlyContinue))
 Assert-Test -Name "graphify-mcp CLI is not on PATH" -Condition ($null -eq (Get-Command graphify-mcp -ErrorAction SilentlyContinue))
 Assert-Test -Name "Workspace .cursor/hooks.json is absent" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\hooks.json")))

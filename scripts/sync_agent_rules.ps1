@@ -11,7 +11,7 @@
     ~/.cursor/hooks.json は公式 `rtk init -g --agent cursor` の所有。このスクリプトは上書きしない。
     他プロダクトへは書きません。リポジトリ直下の余分な always-on markdown は
     stale mirror として除去します。
-    leftover graphify / rtk-expert / agent_guard は除去します。
+    leftover graphify / rtk-expert / impeccable-agile / agent_guard は除去します。
 .PARAMETER Check
     同期せず差分のみ検査（終了コード 0: 一致, 1: 差分あり）。
 #>
@@ -175,6 +175,7 @@ $vendorGraphifySkillDirs = @(
     (Join-Path $rootDir ".claude\skills\graphify")
     (Join-Path $rootDir ".cursor\skills\graphify")
     (Join-Path $env:USERPROFILE ".cursor\skills\rtk-expert")
+    (Join-Path $env:USERPROFILE ".cursor\skills\impeccable-agile")
 )
 
 foreach ($target in $allTargets) {

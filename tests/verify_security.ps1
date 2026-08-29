@@ -196,16 +196,21 @@ Assert-Test -Name "XSS payload is JSON-quoted (cannot break out of diagramCode)"
 # --- 5. browser_runner.py profile sanitization ---
 Write-Host "`n[5/5] browser_runner.py profile path sanitization..." -ForegroundColor White
 $pyText = [System.IO.File]::ReadAllText($runnerPy, [System.Text.Encoding]::UTF8)
-Assert-Test -Name "browser_runner.py sanitizes args.profile" -Condition ($pyText -match "safe_profile" -and $pyText -match "re\.sub")
+Assert-Test -Name "browser_runner.py defines sanitize_profile_name" -Condition ($pyText -match "sanitize_profile_name")
+Assert-Test -Name "browser_runner.py supports actions-file" -Condition ($pyText -match "actions-file" -or $pyText -match "actions_file")
+
+$setupProfilePs1 = Join-Path $rootDir "configs\agents\skills\browser-agent\scripts\setup_profile.ps1"
+$setupProfileText = [System.IO.File]::ReadAllText($setupProfilePs1, [System.Text.Encoding]::UTF8)
+Assert-Test -Name "setup_profile.ps1 sanitizes profile name" -Condition ($setupProfileText -match "SafeProfile")
 
 $py = @"
-import re, pathlib
-text = pathlib.Path(r'$($runnerPy.Replace('\','/'))').read_text(encoding='utf-8')
-m = re.search(r"re\.sub\(r'([^']+)',\s*'_',\s*args\.profile\)", text)
-assert m, 'regex not found'
-pat = m.group(1)
+import re, pathlib, importlib.util
+path = pathlib.Path(r'$($runnerPy.Replace('\','/'))')
+spec = importlib.util.spec_from_file_location('br', path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
 samples = ['../etc/passwd', r'..\\..\\Windows', 'foo/../../bar', 'ok_profile-1']
-out = {s: re.sub(pat, '_', s) for s in samples}
+out = {s: mod.sanitize_profile_name(s) for s in samples}
 bad = [s for s, v in out.items() if s != 'ok_profile-1' and (('/' in v) or ('\\' in v) or ('..' in v))]
 print('OK' if not bad else 'LEAK:' + ','.join(bad))
 print(out)

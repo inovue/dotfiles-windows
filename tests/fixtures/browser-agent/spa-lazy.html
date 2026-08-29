@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SPA Lazy Fixture</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; }
+    .hero { height: 120vh; background: linear-gradient(#dbeafe, #eff6ff); }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    #ready-marker { display: none; }
+    #ready-marker.ready { display: block; }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <h1 class="pulse" id="title">SPA Loading</h1>
+  </section>
+  <section id="lazy-zone" style="min-height: 100vh;">
+    <p id="lazy-status">pending</p>
+  </section>
+  <div id="ready-marker">hydrated</div>
+  <script>
+    setTimeout(() => {
+      document.getElementById("title").textContent = "SPA Ready";
+      document.getElementById("ready-marker").classList.add("ready");
+    }, 800);
+
+    let loaded = false;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && !loaded) {
+          loaded = true;
+          document.getElementById("lazy-status").textContent = "lazy-loaded";
+        }
+      });
+    }, { rootMargin: "0px" });
+    observer.observe(document.getElementById("lazy-zone"));
+  </script>
+</body>
+</html>

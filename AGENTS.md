@@ -18,7 +18,7 @@ configs/           SSOT for all configs
   agents/          GLOBAL_RULES.md, cursor/, skills/
   helix/ herdr/ lazygit/ nushell/ powershell/ starship/ windows-terminal/ rtk/
 scripts/           01_winget_packages.ps1, 02_install_fonts.ps1, 03_setup_runtimes.ps1, 04_setup_configs.ps1, Assert-PinnedHash.ps1, audit_workspace.ps1, report_session_log.py, setup_api_keys.ps1, sync_agent_rules.ps1
-tests/             verify_tools.ps1, verify_security.ps1
+tests/             verify_tools.ps1, verify_security.ps1, verify_browser_agent.ps1, verify_ascii_chat_diagrams.ps1
 install.ps1        master installer (-All / -Step N / -UseSymlinks)
 justfile           task runner — all common operations
 ```
@@ -28,7 +28,8 @@ justfile           task runner — all common operations
 | Command | Purpose |
 | :--- | :--- |
 | `just audit` | 3-phase ground-truth audit (tests + SSOT sync + junk scan). Done contract / regression. |
-| `just test` | environment suite + security regression |
+| `just test` | environment suite + security regression + browser-agent smoke (108) |
+| `just test-browser-sso` / `just test-browser-sso-run` | optional manual SSO capture (skipped in CI; requires `work` profile) |
 | `just deploy` | deploy `configs/` to user & app directories |
 | `just sync-rules` / `just check-rules` | propagate (or verify) agent rules & skills |
 | `just check-pins` | rtk version vs `configs/pins.json` |
@@ -45,4 +46,6 @@ justfile           task runner — all common operations
 | Human setup guide | `README.md` |
 | Global agent rules master | `configs/agents/GLOBAL_RULES.md` |
 | Modern CLI recipes | skill `modern-cli-expert` |
+| Browser automation (dev capture + SSO assist) | skill `browser-agent` |
+| ASCII chat diagrams (wireframes, charts, flows) | skill `ascii-chat-diagrams` |
 | Cursor × rtk strategy | `docs/session-2026-08-28-harness-strategy.md` |

@@ -80,6 +80,8 @@ $toolsToCheck = @(
     @{ Cmd = "glow";         Name = "glow (Markdown)";    Args = "--version" }
     @{ Cmd = "chafa";        Name = "chafa (Sixel/Image)";Args = "--version" }
     @{ Cmd = "herdr";        Name = "Herdr (AI TUI)";     Args = "--version" }
+    @{ Cmd = "hx";           Name = "Helix (hx)";         Args = "--version" }
+    @{ Cmd = "hunk";         Name = "Hunk (hunkdiff)";    Args = "--version" }
     @{ Cmd = "cursor-agent"; Name = "Cursor Agent CLI";   Args = "--version" }
     @{ Cmd = "agent";        Name = "Cursor Agent Alias"; Args = "--version" }
     @{ Cmd = "fnm";          Name = "fnm (Node Manager)"; Args = "--version" }
@@ -151,7 +153,7 @@ $configFiles = @(
     @{ Name = "Master SSOT Rules (configs/agents/GLOBAL_RULES.md)"; Path = Join-Path $rootDir "configs\agents\GLOBAL_RULES.md" }
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
-    @{ Name = "Master tui-wireframe-designer Skill";         Path = Join-Path $rootDir "configs\agents\skills\tui-wireframe-designer\SKILL.md" }
+    @{ Name = "Master ascii-chat-diagrams Skill";         Path = Join-Path $rootDir "configs\agents\skills\ascii-chat-diagrams\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
     @{ Name = "Master Cursor MCP template";                  Path = Join-Path $rootDir "configs\agents\cursor\mcp_config.json" }
     @{ Name = "Master pins.json";                            Path = Join-Path $rootDir "configs\pins.json" }
@@ -160,7 +162,7 @@ $configFiles = @(
     @{ Name = "Cursor Global Rules";                         Path = Join-Path $env:APPDATA "Cursor\User\AGENTS.md" }
     @{ Name = "Cursor Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\browser-agent\SKILL.md" }
-    @{ Name = "Cursor Global Skill (tui-wireframe)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\tui-wireframe-designer\SKILL.md" }
+    @{ Name = "Cursor Global Skill (ascii-chat-diagrams)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\ascii-chat-diagrams\SKILL.md" }
     @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
@@ -215,6 +217,12 @@ Assert-Test -Name "Master does not ship graphify-builder skill" -Condition (-not
 Assert-Test -Name "Master does not ship impeccable-agile skill" -Condition (-not (Test-Path (Join-Path $rootDir "configs\agents\skills\impeccable-agile")))
 Assert-Test -Name "graphify CLI is not on PATH" -Condition ($null -eq (Get-Command graphify -ErrorAction SilentlyContinue))
 Assert-Test -Name "graphify-mcp CLI is not on PATH" -Condition ($null -eq (Get-Command graphify-mcp -ErrorAction SilentlyContinue))
+$graphifyOutDir = Join-Path $rootDir "graphify-out"
+if (Test-Path $graphifyOutDir) {
+    Remove-Item -Path $graphifyOutDir -Recurse -Force
+}
+Assert-Test -Name "Workspace has no graphify-out directory" -Condition (-not (Test-Path $graphifyOutDir)) -Details "Remove it: just sync-rules"
+Assert-Test -Name "Workspace has no .agents harness directory" -Condition (-not (Test-Path (Join-Path $rootDir ".agents"))) -Details "Remove it: just sync-rules"
 Assert-Test -Name "Workspace .cursor/hooks.json is absent" -Condition (-not (Test-Path (Join-Path $rootDir ".cursor\hooks.json")))
 $userHooks = Join-Path $env:USERPROFILE ".cursor\hooks.json"
 if (Test-Path $userHooks) {
@@ -240,6 +248,8 @@ $justfileText = Get-Content -Raw -Path (Join-Path $rootDir "justfile")
 Assert-Test -Name "justfile windows-shell is powershell.exe (5.1 bootstrap trampoline)" -Condition ($justfileText -match 'windows-shell := \["powershell\.exe"') -Details "just install must run before pwsh exists"
 Assert-Test -Name "justfile install recipe uses powershell.exe" -Condition ($justfileText -match '(?m)^install:\r?\n\s+@powershell\.exe') -Details "just install is the 5.1 bootstrap"
 Assert-Test -Name "justfile test/audit recipes use pwsh.exe" -Condition ($justfileText -match '(?m)^test:\r?\n\s+@pwsh\.exe' -and $justfileText -match '(?m)^audit:\r?\n\s+@pwsh\.exe') -Details "post-install recipes host PowerShell 7"
+Assert-Test -Name "justfile test includes verify_browser_agent.ps1" -Condition ($justfileText -match 'verify_browser_agent\.ps1') -Details "browser-agent smoke must stay in just test"
+Assert-Test -Name "justfile has manual SSO smoke recipes" -Condition ($justfileText -match 'test-browser-sso-run:' -and $justfileText -match 'verify_browser_agent_sso\.ps1') -Details "optional SSO smoke for local work profile"
 
 $allowedRootMd = @("AGENTS.md", "README.md")
 $extraRootMd = @(Get-ChildItem -Path $rootDir -File -Filter "*.md" | Where-Object { $allowedRootMd -notcontains $_.Name } | ForEach-Object { $_.Name })
@@ -389,6 +399,9 @@ try {
     Assert-Test -Name "Mermaid ASCII diagram rendering" -Condition $mmdOk -Details ($mmdResult.Trim())
 
     # Test 4.7: AI Agent SSOT Rule Synchronization
+    if (Test-Path $graphifyOutDir) {
+        Remove-Item -Path $graphifyOutDir -Recurse -Force
+    }
     $syncCheckProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $rootDir "scripts\sync_agent_rules.ps1"), "-Check" -NoNewWindow -Wait -PassThru
     Assert-Test -Name "AI Agent SSOT Rule Synchronization (Master vs Targets)" -Condition ($syncCheckProc.ExitCode -eq 0) -Details "ExitCode: $($syncCheckProc.ExitCode)"
 
@@ -406,6 +419,16 @@ try {
 
 } finally {
     Remove-Item -Path $tempTestDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# --- 4b. ascii-chat-diagrams (delegates to dedicated verify script) ---
+Write-Host "`n[4b] ascii-chat-diagrams verification..." -ForegroundColor White
+$asciiVerify = Join-Path $rootDir "tests\verify_ascii_chat_diagrams.ps1"
+if (-not (Test-Path $asciiVerify)) {
+    Assert-Test -Name "ascii-chat-diagrams verify script exists" -Condition $false -Details $asciiVerify
+} else {
+    & pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $asciiVerify
+    Assert-Test -Name "ascii-chat-diagrams verify script exit 0" -Condition ($LASTEXITCODE -eq 0) -Details "exit=$LASTEXITCODE"
 }
 
 # --- 5. Performance Benchmark (rg vs Select-String across files) ---

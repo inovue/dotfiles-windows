@@ -1,9 +1,15 @@
 ﻿param (
-    [string]$ProfileName = "default"
+    [string]$ProfileName = "work"
 )
 
+# Match browser_runner.py sanitization
+$SafeProfile = [regex]::Replace($ProfileName, '[^a-zA-Z0-9_-]', '_')
+if ($SafeProfile -ne $ProfileName) {
+    Write-Host "[!] Profile name sanitized: '$ProfileName' -> '$SafeProfile'" -ForegroundColor Yellow
+}
+
 $baseDir = Join-Path $HOME ".chrome-profiles"
-$profilePath = Join-Path $baseDir $ProfileName
+$profilePath = Join-Path $baseDir $SafeProfile
 
 if (-not (Test-Path $profilePath)) {
     New-Item -ItemType Directory -Force -Path $profilePath | Out-Null
@@ -26,7 +32,7 @@ if (-not $chromeExe) {
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Launching Real Google Chrome with Profile: $ProfileName" -ForegroundColor Cyan
+Write-Host " Launching Real Google Chrome with Profile: $SafeProfile" -ForegroundColor Cyan
 Write-Host " Path: $profilePath" -ForegroundColor DarkGray
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "1. Log into your required services (Google, Cloudflare, etc.)" -ForegroundColor Yellow

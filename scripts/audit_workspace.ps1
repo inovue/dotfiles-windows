@@ -88,6 +88,10 @@ if (Test-Path $secScript) {
 
 # --- Phase 2: AI Agent SSOT Rule Synchronization ---
 Write-Host "`n[Audit Phase 2/3] Checking AI Agent SSOT Synchronization..." -ForegroundColor White
+$graphifyOutDir = Join-Path $rootDir "graphify-out"
+if (Test-Path $graphifyOutDir) {
+    Remove-Item -Path $graphifyOutDir -Recurse -Force
+}
 $syncProc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $syncScript, "-Check" -NoNewWindow -Wait -PassThru
 if ($syncProc.ExitCode -ne 0) {
     Write-Warning "[FAIL] SSOT rules or skills are out of sync with master."

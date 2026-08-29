@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Broken Lazy Images</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; min-height: 200vh; }
+    img { display: block; margin: 2rem 0; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Broken lazy images fixture</h1>
+  <p>Images below use invalid hosts and stay pending (naturalWidth=0) after prime.</p>
+  <img loading="lazy" src="https://invalid.example.test/broken-a.png" width="240" height="120" alt="broken-a">
+  <img loading="lazy" src="https://invalid.example.test/broken-b.png" width="240" height="120" alt="broken-b">
+</body>
+</html>

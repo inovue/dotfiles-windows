@@ -28,7 +28,7 @@ $configsDir = Join-Path $rootDir "configs"
 $masterRules = Join-Path $configsDir "agents\GLOBAL_RULES.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
-$masterTuiWireframeDir = Join-Path $configsDir "agents\skills\tui-wireframe-designer"
+$masterAsciiDiagramsDir = Join-Path $configsDir "agents\skills\ascii-chat-diagrams"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
 $mcpTemplate = Join-Path $configsDir "agents\cursor\mcp_config.json"
 
@@ -153,7 +153,7 @@ $allTargets = @(
     @{ Name = "Cursor Global Rules";                 Src = $masterRules; Dest = Join-Path (Join-Path $env:APPDATA "Cursor\User") "AGENTS.md";       IsDir = $false },
     @{ Name = "Cursor Global Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Cursor Global Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "browser-agent";        IsDir = $true },
-    @{ Name = "Cursor Global Tui-Wireframe";         Src = $masterTuiWireframeDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "tui-wireframe-designer";        IsDir = $true },
+    @{ Name = "Cursor Global Ascii-Chat-Diagrams";   Src = $masterAsciiDiagramsDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "ascii-chat-diagrams";        IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";         Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false }
 )
@@ -162,10 +162,16 @@ $allTargets = @(
 $vendorGraphifySkillDirs = @(
     (Join-Path $env:USERPROFILE ".cursor\skills\graphify-navigator")
     (Join-Path $env:USERPROFILE ".cursor\skills\graphify-builder")
+    (Join-Path $env:USERPROFILE ".agents\skills\graphify-navigator")
+    (Join-Path $env:USERPROFILE ".agents\skills\graphify-builder")
     (Join-Path $env:USERPROFILE ".agents\skills\graphify")
+    (Join-Path $env:USERPROFILE ".claude\skills\graphify-navigator")
+    (Join-Path $env:USERPROFILE ".claude\skills\graphify-builder")
     (Join-Path $env:USERPROFILE ".claude\skills\graphify")
     (Join-Path $env:USERPROFILE ".cursor\skills\graphify")
     (Join-Path $env:USERPROFILE ".gemini\config\skills\graphify")
+    (Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-builder")
+    (Join-Path $env:USERPROFILE ".gemini\config\skills\graphify-navigator")
     (Join-Path $env:USERPROFILE ".codex\skills\graphify")
     (Join-Path $env:USERPROFILE ".config\opencode\skills\graphify")
     (Join-Path $env:USERPROFILE ".copilot\skills\graphify")
@@ -272,7 +278,22 @@ $staleWorkspaceMirrors = @(
     (Join-Path $rootDir ".cursor\rules\graphify.mdc")
     (Join-Path (Join-Path $env:USERPROFILE ".cursor\rules") "graphify.mdc")
     (Join-Path $rootDir ".cursor\hooks.json")
+    (Join-Path $rootDir ".agents")
     (Join-Path (Join-Path $env:USERPROFILE ".cursor\scripts") "agent_guard.py")
+    (Join-Path (Join-Path $env:USERPROFILE ".claude\scripts") "agent_guard.py")
+    (Join-Path (Join-Path $env:USERPROFILE ".agents\scripts") "agent_guard.py")
+    (Join-Path (Join-Path $env:USERPROFILE ".gemini\config\scripts") "agent_guard.py")
+    (Join-Path $rootDir "graphify-out")
+    (Join-Path (Join-Path $env:USERPROFILE ".agents") "rules\graphify.md")
+    (Join-Path (Join-Path $env:USERPROFILE ".agents") "workflows\graphify.md")
+    (Join-Path (Join-Path $env:USERPROFILE ".gemini\config\rules") "graphify.md")
+    (Join-Path (Join-Path $env:USERPROFILE ".gemini\config\workflows") "graphify.md")
+    (Join-Path (Join-Path $env:USERPROFILE ".gemini\antigravity-cli\mcp") "graphify")
+    (Join-Path $env:USERPROFILE ".cache\graphify-queries.log")
+    (Join-Path $env:USERPROFILE ".cache\graphify-rebuild.log")
+    (Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "tui-wireframe-designer")
+    (Join-Path (Join-Path $env:USERPROFILE ".claude\skills") "tui-wireframe-designer")
+    (Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "ascii-chat-diagrams\scripts\tui_box_helper.py")
 )
 $allowedRootMd = @("AGENTS.md", "README.md")
 Get-ChildItem -Path $rootDir -File -Filter "*.md" -ErrorAction SilentlyContinue | ForEach-Object {
@@ -287,7 +308,11 @@ foreach ($stale in $staleWorkspaceMirrors) {
         if ($Check) {
             Write-Host "  [DIFF] Stale duplicated mirror present: $stale" -ForegroundColor Yellow
         } else {
-            Remove-Item -Path $stale -Force
+            if (Test-Path $stale -PathType Container) {
+                Remove-Item -Path $stale -Recurse -Force
+            } else {
+                Remove-Item -Path $stale -Force
+            }
             Write-Host "  [REMOVED] Stale duplicated mirror: $stale" -ForegroundColor Green
             $syncedCount++
         }

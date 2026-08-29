@@ -24,6 +24,15 @@ deploy:
 test:
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_tools.ps1
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_browser_agent.ps1
+
+# Manual SSO smoke (skipped unless BROWSER_AGENT_SSO_TEST=1)
+test-browser-sso:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_browser_agent_sso.ps1
+
+# Force manual SSO smoke (requires ~/.chrome-profiles/work + network)
+test-browser-sso-run:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_browser_agent_sso.ps1 -Run
 
 # Run the 3-phase unified workspace audit (Tests, SSOT sync, Junk scan)
 audit:

@@ -69,6 +69,7 @@ ENV/
 env/
 
 # --- 5. Browser Automation & Profile Caches (browser-agent) ---
+.browser-agent/
 chrome-profile/
 .browser-profile/
 Default/

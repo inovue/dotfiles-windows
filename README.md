@@ -11,7 +11,7 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
   - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: 公式 `rtk init -g --agent cursor --hook-only` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れ、Shell を透過 rewrite する（fail-open、deny しない）。
   - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`）を直結。一括行探索（Batch Line Discovery）やマルチターゲット検索のバッチ化を徹底。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
-  - 実ブラウザ自動化（`browser-agent` / Playwright）、ASTリファクタ（`modern-cli-expert`）の段階的開示スキル。
+  - 実ブラウザ自動化（`browser-agent` / Playwright）、チャット内 ASCII 図（`ascii-chat-diagrams`）、ASTリファクタ（`modern-cli-expert`）の段階的開示スキル。
 - 🐚 **モダンシェル＆ターミナル体験**:
   - Nushell を既定シェルとし、動的プロファイルフラグメントで Windows Terminal とシームレス統合。
   - Starship による美麗クロスシェルプロンプト、zoxide によるスマートディレクトリ移動。
@@ -55,9 +55,9 @@ dotfiles-windows/
     │   ├── cursor/                 # Cursor MCP テンプレ
     │   │   └── mcp_config.json     # Cursor MCP テンプレ（サーバーなし）
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
-    │       ├── browser-agent/      # 実Chrome・Playwright・a11y・プロファイル自動化
+    │       ├── browser-agent/      # 実Chrome・Playwright・persistent profile・dev/SSO capture
     │       ├── modern-cli-expert/  # ast-grep, sd, jaq, xh, procs, difftastic 高速レシピ
-    │       └── tui-wireframe-designer/
+    │       └── ascii-chat-diagrams/  # チャット内 ASCII/Unicode 図（wireframe, chart, table, flow）
     ├── powershell/                 # PowerShell 5.1 / 7 共通プロファイル (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic NF, Catppuccin, Nushell既定, 動的プロファイル)
@@ -153,7 +153,7 @@ just install
 │ 1. 単一正本 (SSOT): configs/agents/ -> just sync-rules で Cursor へ配備        │
 │ 2. ネイティブCLI優先: rg, fd, sd, ast-grep, jaq, xh, procs, difftastic       │
 │ 3. 非対話・ゼロハング: PAGER=cat, BAT_STYLE=plain, -NoProfile, UTF-8 永続化   │
-│ 4. 段階的開示スキル: browser-agent, modern-cli-expert                      │
+│ 4. 段階的開示スキル: browser-agent, ascii-chat-diagrams, modern-cli-expert │
 │ 5. rtk: 公式 Cursor hook が Shell を透過 rewrite（deny しない）              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -166,10 +166,58 @@ just install
 3. **非対話ハング・文字化けの完全防止**:
    - `PAGER=cat`, `BAT_PAGER=""`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `DELTA_PAGER=cat`, `PYTHONUTF8=1` をユーザー環境変数に永続化し、ページャー待ちや ANSI エスケープ破綻を封殺。
 4. **段階的開示スキル (Progressive Disclosure)**:
-   - `browser-agent`: 実 Google Chrome + Playwright によるログインセッション維持・動的SPAスクレイピング。
+   - `browser-agent`: 実 Google Chrome + Playwright。localhost capture（`temp`）と、`setup_profile` 後のダッシュボード確認（`work` / screenshot 必須）。無人 SSO 自動化は非対象。
+   - `ascii-chat-diagrams`: チャット内 ASCII/Unicode 図（wireframe、比較表、棒グラフ、フロー）。`just sync-rules` で `~/.cursor/skills/ascii-chat-diagrams/` に配備。**Cursor のみ**（Claude Code 非対象）。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
 5. **公式 rtk Cursor hook**:
    - `rtk init -g --agent cursor --hook-only --auto-patch` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れる。fail-open。このリポジトリは hooks.json を上書きしない。
+
+### browser-agent クイックスタート
+
+dev サーバ capture と、人手 login 済み profile でのダッシュボード確認用スキル。SSOT: `configs/agents/skills/browser-agent/` → `just sync-rules` で `~/.cursor/skills/browser-agent/` に配備。
+
+```powershell
+# 初回: プロファイル作成 & 人手ログイン（SSO ダッシュボード用）
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\setup_profile.ps1" -ProfileName work
+
+# ページ確認（auth_state はヒントのみ — screenshot で目視確認）
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" inspect --url "https://example.com" --profile work
+
+# dev サーバ screenshot / scroll video（--profile temp が既定）
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" screenshot --url "localhost:5173" --profile temp --headless --output .\cap.png --full-page
+python "$env:USERPROFILE\.cursor\skills\browser-agent\scripts\browser_runner.py" record --url "localhost:5173" --profile temp --output .\scroll.webm
+
+# Windows: act は必ず --actions-file を使う（JSON 直書き不可）
+
+# 任意: SSO 実機 smoke（work profile + ネットワーク必要）
+just test-browser-sso-run
+```
+
+詳細レシピはスキル `browser-agent`（`SKILL.md`）を参照。自動テスト: `just test`（108 件 smoke + SSO manual は skip）。
+
+### ascii-chat-diagrams クイックスタート
+
+対話中の UI/フロー/数値の認識合わせ用。SSOT: `configs/agents/skills/ascii-chat-diagrams/` → `just sync-rules` で `~/.cursor/skills/ascii-chat-diagrams/` に配備（**Windows + Cursor のみ**）。
+
+```powershell
+# 配備（install Step 4 / just deploy / just sync-rules のいずれかで実行済みなら不要）
+just sync-rules
+
+$ascii = "$env:USERPROFILE\.cursor\skills\ascii-chat-diagrams\scripts\ascii_diagram_helper.py"
+
+# ラフ下書き → 幅固定（UTF-8 no BOM で draft.txt に保存）
+python $ascii autofit --mode pc --file .\draft.txt
+
+# チャート / 比較表（generator 直呼び）
+python $ascii barchart --labels "A,B,C" --values "40,65,25" --width 60
+python $ascii table --headers "Plan,Price" --rows "Free,0|Pro,980" --width 56
+python $ascii sparkline --values "1,3,2,5,4,6" --mode inline
+
+# 検証（CJK / 多列レイアウト時）
+python $ascii validate --mode pc --file .\diagram.txt
+```
+
+Cursor チャットでは `@ascii-chat-diagrams` または「ASCII で図示して」。チャット向け模範: スキル内 `examples/ascii-*.md`（Nerd Font 不要）。自動テスト: `just test` 内の `verify_ascii_chat_diagrams.ps1`（20 件）。
 
 ---
 
@@ -232,6 +280,7 @@ just install
 - **`Biome`** - 超高速 JS/TS リンター & フォーマッター
 - **`Taplo`** - TOML LSP & フォーマッター
 - **`Playwright`** - ブラウザ自動化ライブラリ（`browser-agent` スキル用）
+- **`Python 3`** - `ascii_diagram_helper.py` 実行用（`uv` / winget 経由。追加パッケージ不要）
 
 ### 🧰 Desktop Utilities & Apps
 - **`FFmpeg` / `libvips`** - 動画・画像高速処理ライブラリ

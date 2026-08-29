@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Browser Agent Fixture</title>
+</head>
+<body>
+  <h1>Host Page</h1>
+  <iframe
+    id="inner"
+    title="inner"
+    srcdoc="<!DOCTYPE html><html><body><button id='go'>Go</button><p id='msg'>idle</p></body></html>"
+  ></iframe>
+  <div id="shadow-host"></div>
+  <script>
+    const host = document.getElementById("shadow-host");
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = "<button id='shadow-btn'>Shadow OK</button>";
+  </script>
+</body>
+</html>

@@ -1,6 +1,30 @@
-# TUI Box-Drawing Component Patterns & Layout Guide
+# ASCII Chat Diagram — Component Patterns
 
-This reference provides standard Unicode Box-Drawing construction recipes, component semantics grammar, responsive grid patterns, and flow diagram notations.
+Box-drawing recipes, control notation, responsive layouts, and flow arrows for chat diagrams.
+
+---
+
+## 0. ASCII-First Recipes (Cursor chat — no Nerd Font)
+
+Use these in Cursor chat. Validate with `python $ascii validate --mode sp --file diagram.txt`.
+
+### SP header (W=32)
+```text
+┌──────────────────────────────┐
+│ [#] App       { 2 }  [Menu]  │
+├──────────────────────────────┤
+```
+
+### Controls (ASCII-safe)
+| Control | Syntax | Example |
+| :--- | :--- | :--- |
+| Primary button | `[ Label ]` | `[ Save ]` |
+| Ghost button | `( Label )` | `( Cancel )` |
+| Text input | `< label... >` | `< Search... >` |
+| Status chip | `{ text }` | `{ OK }` / `{ ERR }` |
+| Flow arrow | `--->` | `Step A ---> Step B` |
+
+Full chat-safe SP example: [examples/ascii-sp-dashboard.md](../examples/ascii-sp-dashboard.md)
 
 ---
 
@@ -23,7 +47,7 @@ This reference provides standard Unicode Box-Drawing construction recipes, compo
 
 ---
 
-## 2. Component Semantics Grammar
+## 2. Component Semantics Grammar (Nerd Font — terminal only)
 
 | UI Component | Syntax Pattern | Visual Example | Meaning |
 | :--- | :--- | :--- | :--- |

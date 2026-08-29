@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Google Search Console",
+    "command": "inspect",
+    "url": "https://search.google.com/search-console"
+  },
+  {
+    "name": "Google Search Console",
+    "command": "screenshot",
+    "url": "https://search.google.com/search-console",
+    "output": "PLACEHOLDER_GSC"
+  },
+  {
+    "name": "Cloudflare Dashboard",
+    "command": "inspect",
+    "url": "https://one.dash.cloudflare.com/"
+  },
+  {
+    "name": "Cloudflare Dashboard",
+    "command": "screenshot",
+    "url": "https://one.dash.cloudflare.com/",
+    "output": "PLACEHOLDER_CF"
+  }
+]

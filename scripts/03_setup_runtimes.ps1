@@ -71,6 +71,15 @@ function Install-UvPython {
                 pip install playwright 2>&1 | Out-Null
             }
             Write-Host "[OK] Playwright installed for browser-agent." -ForegroundColor Green
+            $chromePaths = @(
+                "C:\Program Files\Google\Chrome\Application\chrome.exe",
+                (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
+            ) | Where-Object { Test-Path $_ }
+            if ($chromePaths) {
+                Write-Host "[OK] Google Chrome found for browser-agent (channel=chrome)." -ForegroundColor Green
+            } else {
+                Write-Warning "[WARN] Google Chrome not found. browser-agent falls back to bundled Chromium (SSO may fail)."
+            }
         } catch {
             Write-Warning "[WARN] Failed to configure uv: $_"
         }
@@ -221,12 +230,31 @@ function Update-TealdeerCache {
     }
 }
 
+function Add-UserPathEntries {
+    param([string[]]$Dirs)
+
+    $currentUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $newPaths = @()
+    foreach ($dir in $Dirs) {
+        if ($dir -and (Test-Path $dir) -and $currentUserPath -notlike "*$dir*") {
+            $newPaths += $dir
+        }
+    }
+    if ($newPaths.Count -eq 0) { return }
+
+    [System.Environment]::SetEnvironmentVariable("Path", ($newPaths -join ";") + ";" + $currentUserPath, "User")
+    foreach ($dir in $newPaths) {
+        if ($env:Path -notlike "*$dir*") { $env:Path = "$dir;$env:Path" }
+    }
+}
+
 function Install-HunkMermaid {
     Write-Host "`n>> [6/10] Installing Hunk (hunkdiff) & Mermaid-ASCII..." -ForegroundColor Cyan
     try {
         if (Get-Command bun -ErrorAction SilentlyContinue) {
             Write-Host "   Installing hunkdiff and mermaid-ascii via bun..." -ForegroundColor Gray
             bun add -g hunkdiff mermaid-ascii 2>&1 | Out-Null
+            Add-UserPathEntries -Dirs @(Join-Path $env:USERPROFILE ".bun\bin")
             Write-Host "[OK] hunkdiff and mermaid-ascii installed via bun." -ForegroundColor Green
         } elseif (Get-Command pnpm -ErrorAction SilentlyContinue) {
             $pnpmHome = [System.Environment]::GetEnvironmentVariable("PNPM_HOME", "User")
@@ -255,6 +283,7 @@ function Install-HunkMermaid {
         } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
             Write-Host "   Installing hunkdiff & mermaid-ascii via npm..." -ForegroundColor Gray
             npm install -g hunkdiff mermaid-ascii
+            Add-UserPathEntries -Dirs @(Join-Path $env:APPDATA "npm")
             Write-Host "[OK] hunkdiff and mermaid-ascii installed via npm." -ForegroundColor Green
         } else {
             Write-Host "[SKIP] Node/Bun package manager not in PATH yet." -ForegroundColor Yellow
@@ -440,12 +469,14 @@ function Build-LocalBinShims {
     $shimSourceDirs = @(
         "C:\Program Files\coreutils\bin",
         "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
-        "$env:USERPROFILE\.cargo\bin"
+        "$env:USERPROFILE\.cargo\bin",
+        (Join-Path $env:USERPROFILE ".bun\bin"),
+        (Join-Path $env:APPDATA "npm")
     )
 
     $wingetPkgDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
     if (Test-Path $wingetPkgDir) {
-        $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe", "Chafa.exe", "chafa.exe", "glow.exe" -ErrorAction SilentlyContinue
+        $foundExes = Get-ChildItem -Path $wingetPkgDir -Recurse -Include "ast-grep.exe", "sg.exe", "sd.exe", "difft.exe", "xh.exe", "procs.exe", "hexyl.exe", "Chafa.exe", "chafa.exe", "glow.exe", "hx.exe", "hunk.exe", "hunkdiff.exe", "mermaid-ascii.exe" -ErrorAction SilentlyContinue
         foreach ($f in $foundExes) {
             $shimPath = Join-Path $localBinDir $f.Name
             if (-not (Test-Path $shimPath)) {

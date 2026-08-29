@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Many Buttons</title></head>
+<body>
+  <h1>Interactive cap test</h1>
+  <div id="buttons"></div>
+  <script>
+    const root = document.getElementById("buttons");
+    for (let i = 0; i < 95; i++) {
+      const btn = document.createElement("button");
+      btn.id = "btn-" + i;
+      btn.textContent = "Button " + i;
+      root.appendChild(btn);
+    }
+  </script>
+</body>
+</html>

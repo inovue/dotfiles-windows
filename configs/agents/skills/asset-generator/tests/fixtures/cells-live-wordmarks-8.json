@@ -1,0 +1,10 @@
+[
+  { "id": "ff_primary", "prompt": "Cell A: horizontal FINANCIAL FANTASY wordmark, bold white sans-serif, indigo gradient bar, full text legible" },
+  { "id": "ff_cyan", "prompt": "Cell B: two-line FINANCIAL / FANTASY, white and cyan glow, dark background, landscape lockup" },
+  { "id": "ff_minimal", "prompt": "Cell C: minimal FINANCIAL FANTASY logotype single line, charcoal on light gray" },
+  { "id": "ff_badge", "prompt": "Cell D: circular badge FF monogram with FINANCIAL FANTASY text ribbon below" },
+  { "id": "ff_outline", "prompt": "Cell E: outlined FINANCIAL FANTASY wordmark, neon cyan stroke, black fill" },
+  { "id": "ff_stacked", "prompt": "Cell F: stacked FINANCIAL over FANTASY, geometric sans, centered landscape" },
+  { "id": "ff_mono", "prompt": "Cell G: monochrome FINANCIAL FANTASY wordmark, high contrast black on white" },
+  { "id": "ff_glass", "prompt": "Cell H: glassmorphism FINANCIAL FANTASY wordmark on frosted panel, landscape" }
+]

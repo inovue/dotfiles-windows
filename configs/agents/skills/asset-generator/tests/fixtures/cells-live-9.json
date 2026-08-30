@@ -1,0 +1,11 @@
+[
+  { "id": "cloud", "prompt": "Cell 1: flat blue cloud sync icon, centered" },
+  { "id": "lock", "prompt": "Cell 2: golden padlock security icon, centered" },
+  { "id": "chart", "prompt": "Cell 3: green bar chart analytics icon, centered" },
+  { "id": "bolt", "prompt": "Cell 4: purple lightning speed icon, centered" },
+  { "id": "users", "prompt": "Cell 5: teal team collaboration icon, centered" },
+  { "id": "gear", "prompt": "Cell 6: gray settings gear icon, centered" },
+  { "id": "bell", "prompt": "Cell 7: orange notification bell icon, centered" },
+  { "id": "search", "prompt": "Cell 8: indigo magnifying glass search icon, centered" },
+  { "id": "wallet", "prompt": "Cell 9: emerald wallet payments icon, centered" }
+]

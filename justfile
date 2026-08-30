@@ -26,6 +26,14 @@ test:
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_security.ps1
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_browser_agent.ps1
 
+# asset-generator unit tests (no API; runs in SSOT skill dir)
+test-asset-generator:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$env:CI='true'; Set-Location configs/agents/skills/asset-generator; pnpm install *> $$null; pnpm test"
+
+# Optional live fal.ai smoke (costs credits; requires FAL_KEY)
+test-asset-generator-live:
+    @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_asset_generator_live.ps1 -Run
+
 # Manual SSO smoke (skipped unless BROWSER_AGENT_SSO_TEST=1)
 test-browser-sso:
     @pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/verify_browser_agent_sso.ps1

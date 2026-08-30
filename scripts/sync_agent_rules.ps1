@@ -29,6 +29,7 @@ $masterRules = Join-Path $configsDir "agents\GLOBAL_RULES.md"
 $masterBrowserAgentDir = Join-Path $configsDir "agents\skills\browser-agent"
 $masterModernCliDir = Join-Path $configsDir "agents\skills\modern-cli-expert"
 $masterAsciiDiagramsDir = Join-Path $configsDir "agents\skills\ascii-chat-diagrams"
+$masterAssetGeneratorDir = Join-Path $configsDir "agents\skills\asset-generator"
 $masterRtkConfig = Join-Path $configsDir "rtk\config.toml"
 $mcpTemplate = Join-Path $configsDir "agents\cursor\mcp_config.json"
 
@@ -49,16 +50,43 @@ function Test-TextFilesIdentical {
     }
 }
 
+function Test-PathGitIgnored {
+    param ([string]$RelativePath, [string[]]$IgnorePatterns)
+    $rel = $RelativePath.Replace('\', '/').TrimStart('/')
+    foreach ($pat in $IgnorePatterns) {
+        $raw = $pat.Trim()
+        if (-not $raw -or $raw.StartsWith('#')) { continue }
+        $raw = $raw.Replace('\', '/')
+        $isDirPattern = $raw.EndsWith('/')
+        $p = $raw.TrimEnd('/')
+        if ($isDirPattern) {
+            if ($rel -eq $p -or $rel.StartsWith("$p/")) { return $true }
+        } elseif ($rel -eq $p -or $rel -like $p) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-SyncableRelativeFiles {
+    param ([string]$Dir)
+    $ignores = @()
+    $gitignore = Join-Path $Dir '.gitignore'
+    if (Test-Path $gitignore) {
+        $ignores = @(Get-Content -Path $gitignore -Encoding UTF8 | Where-Object { $_ -and ($_ -notmatch '^\s*#') })
+    }
+    @(Get-ChildItem -Path $Dir -Recurse -File | ForEach-Object {
+        $rel = $_.FullName.Substring($Dir.Length).TrimStart('\', '/').Replace('\', '/')
+        if (-not (Test-PathGitIgnored -RelativePath $rel -IgnorePatterns $ignores)) { $rel }
+    } | Sort-Object)
+}
+
 function Test-DirectoriesIdentical {
     param ([string]$SrcDir, [string]$DestDir)
     if (-not (Test-Path $SrcDir) -or -not (Test-Path $DestDir)) { return $false }
     try {
-        $srcFiles = @(Get-ChildItem -Path $SrcDir -Recurse -File | ForEach-Object {
-            $_.FullName.Substring($SrcDir.Length).TrimStart('\', '/').Replace('\', '/')
-        } | Sort-Object)
-        $destFiles = @(Get-ChildItem -Path $DestDir -Recurse -File | ForEach-Object {
-            $_.FullName.Substring($DestDir.Length).TrimStart('\', '/').Replace('\', '/')
-        } | Sort-Object)
+        $srcFiles = @(Get-SyncableRelativeFiles -Dir $SrcDir)
+        $destFiles = @(Get-SyncableRelativeFiles -Dir $DestDir)
         if ($srcFiles.Count -ne $destFiles.Count) { return $false }
         for ($i = 0; $i -lt $srcFiles.Count; $i++) {
             if ($srcFiles[$i] -ne $destFiles[$i]) { return $false }
@@ -154,6 +182,7 @@ $allTargets = @(
     @{ Name = "Cursor Global Modern-CLI";            Src = $masterModernCliDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "modern-cli-expert";        IsDir = $true },
     @{ Name = "Cursor Global Browser-Agent";         Src = $masterBrowserAgentDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "browser-agent";        IsDir = $true },
     @{ Name = "Cursor Global Ascii-Chat-Diagrams";   Src = $masterAsciiDiagramsDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "ascii-chat-diagrams";        IsDir = $true },
+    @{ Name = "Cursor Global Asset-Generator";      Src = $masterAssetGeneratorDir; Dest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "asset-generator";          IsDir = $true },
     @{ Name = "RTK Global Config (AppData)";         Src = $masterRtkConfig; Dest = Join-Path (Join-Path $env:APPDATA "rtk") "config.toml";                                     IsDir = $false },
     @{ Name = "RTK User Config (.config)";           Src = $masterRtkConfig; Dest = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "rtk") "config.toml";            IsDir = $false }
 )
@@ -338,6 +367,37 @@ foreach ($vendorDir in $vendorGraphifySkillDirs) {
         $skippedCount++
     }
 }
+
+function Install-AssetGeneratorDeps {
+    param([string]$SkillDir)
+    if ($Check) { return }
+    if (-not (Test-Path $SkillDir)) { return }
+
+    $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+    if (-not $pnpm) {
+        Write-Warning "pnpm not in PATH; run 'pnpm install' in $SkillDir manually."
+        return
+    }
+
+    Write-Host "`n>> asset-generator: ensuring pnpm deps (tsx, sharp)..." -ForegroundColor Cyan
+    Push-Location $SkillDir
+    try {
+        $prevCi = $env:CI
+        $env:CI = 'true'
+        & pnpm install 2>&1 | Out-Null
+        $env:CI = $prevCi
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] asset-generator dependencies ready." -ForegroundColor DarkGray
+        } else {
+            Write-Warning "pnpm install failed in $SkillDir — run: pnpm install; pnpm approve-builds esbuild sharp"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+$assetGeneratorDest = Join-Path (Join-Path $env:USERPROFILE ".cursor\skills") "asset-generator"
+Install-AssetGeneratorDeps -SkillDir $assetGeneratorDest
 
 if ($Check) {
     Write-Host "`n-------------------------------------------------------" -ForegroundColor Cyan

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "charcoal_wordmark",
+    "prompt": "Cell A: two-line wordmark FINANCIAL over FANTASY in bold charcoal #1a1a1a sans-serif on light gray background, full words spelled out, no icons"
+  },
+  {
+    "id": "cyan_glow",
+    "prompt": "Cell B: FINANCIAL FANTASY wordmark white top line cyan #38bdf8 glow bottom line, dark navy background, complete words not cropped"
+  },
+  {
+    "id": "indigo_wordmark",
+    "prompt": "Cell C: horizontal two-line wordmark FINANCIAL over FANTASY in bold white sans-serif, indigo #4f46e5 badge background, full text legible, centered with 15% margin"
+  },
+  {
+    "id": "glass_badge",
+    "prompt": "Cell D: glassmorphism circular badge with FF monogram and FINANCIAL FANTASY text below, frosted glass, centered"
+  }
+]

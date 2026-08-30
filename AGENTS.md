@@ -29,6 +29,7 @@ justfile           task runner — all common operations
 | :--- | :--- |
 | `just audit` | 3-phase ground-truth audit (tests + SSOT sync + junk scan). Done contract / regression. |
 | `just test` | environment suite + security regression + browser-agent smoke (108) |
+| `just test-asset-generator` / `just test-asset-generator-live` | asset-generator unit tests / optional fal.ai live smoke (FAL_KEY) |
 | `just test-browser-sso` / `just test-browser-sso-run` | optional manual SSO capture (skipped in CI; requires `work` profile) |
 | `just deploy` | deploy `configs/` to user & app directories |
 | `just sync-rules` / `just check-rules` | propagate (or verify) agent rules & skills |
@@ -48,4 +49,5 @@ justfile           task runner — all common operations
 | Modern CLI recipes | skill `modern-cli-expert` |
 | Browser automation (dev capture + SSO assist) | skill `browser-agent` |
 | ASCII chat diagrams (wireframes, charts, flows) | skill `ascii-chat-diagrams` |
+| LP / web asset batch (grid split, fal.ai) | skill `asset-generator` — `cells.json` + `just sync-rules`; `--print-prompt` then `--confirm <token>`; never inline JSON on Windows |
 | Cursor × rtk strategy | `docs/session-2026-08-28-harness-strategy.md` |

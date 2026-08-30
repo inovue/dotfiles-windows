@@ -1,0 +1,6 @@
+[
+  { "id": "cloud", "prompt": "Cell A: simple flat blue cloud icon, bold shapes, centered with padding" },
+  { "id": "lock", "prompt": "Cell B: simple flat golden padlock security icon, centered" },
+  { "id": "chart", "prompt": "Cell C: simple flat green ascending bar chart icon, centered" },
+  { "id": "bolt", "prompt": "Cell D: simple flat purple lightning bolt speed icon, centered" }
+]

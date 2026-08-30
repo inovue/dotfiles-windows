@@ -11,7 +11,7 @@ Nushell、Helix、Windows Terminal、および Rust/Go 製の高速モダン CLI
   - ⚡ **LLMトークン消費 60-90% 削減プロキシ (`rtk`)**: 公式 `rtk init -g --agent cursor --hook-only` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れ、Shell を透過 rewrite する（fail-open、deny しない）。
   - 遅い PowerShell Cmdlet をバイパスし、Rust/Go 製ネイティブ CLI（`rg`, `fd`, `sd`, `ast-grep`, `jaq`, `xh`, `procs`, `difft`, `rtk`）を直結。一括行探索（Batch Line Discovery）やマルチターゲット検索のバッチ化を徹底。
   - 非対話ハング完全防止（`PAGER=cat`, `BAT_STYLE=plain`, `GIT_PAGER=cat`, `PYTHONUTF8=1` 等の環境変数永続化）。
-  - 実ブラウザ自動化（`browser-agent` / Playwright）、チャット内 ASCII 図（`ascii-chat-diagrams`）、ASTリファクタ（`modern-cli-expert`）の段階的開示スキル。
+  - 実ブラウザ自動化（`browser-agent` / Playwright）、チャット内 ASCII 図（`ascii-chat-diagrams`）、LP アセット生成（`asset-generator` / fal.ai）、ASTリファクタ（`modern-cli-expert`）の段階的開示スキル。
 - 🐚 **モダンシェル＆ターミナル体験**:
   - Nushell を既定シェルとし、動的プロファイルフラグメントで Windows Terminal とシームレス統合。
   - Starship による美麗クロスシェルプロンプト、zoxide によるスマートディレクトリ移動。
@@ -57,7 +57,8 @@ dotfiles-windows/
     │   └── skills/                 # 段階的開示スキル (Progressive Disclosure)
     │       ├── browser-agent/      # 実Chrome・Playwright・persistent profile・dev/SSO capture
     │       ├── modern-cli-expert/  # ast-grep, sd, jaq, xh, procs, difftastic 高速レシピ
-    │       └── ascii-chat-diagrams/  # チャット内 ASCII/Unicode 図（wireframe, chart, table, flow）
+    │       ├── ascii-chat-diagrams/  # チャット内 ASCII/Unicode 図（wireframe, chart, table, flow）
+    │       └── asset-generator/    # LP/Web アセット一括生成（grid split, fal rembg, WebP pack）
     ├── powershell/                 # PowerShell 5.1 / 7 共通プロファイル (非対話高速化, エイリアス解除, UTF-8)
     │   └── Microsoft.PowerShell_profile.ps1
     ├── windows-terminal/           # Windows Terminal 設定 (UDEV Gothic NF, Catppuccin, Nushell既定, 動的プロファイル)
@@ -153,7 +154,7 @@ just install
 │ 1. 単一正本 (SSOT): configs/agents/ -> just sync-rules で Cursor へ配備        │
 │ 2. ネイティブCLI優先: rg, fd, sd, ast-grep, jaq, xh, procs, difftastic       │
 │ 3. 非対話・ゼロハング: PAGER=cat, BAT_STYLE=plain, -NoProfile, UTF-8 永続化   │
-│ 4. 段階的開示スキル: browser-agent, ascii-chat-diagrams, modern-cli-expert │
+│ 4. 段階的開示スキル: browser-agent, ascii-chat-diagrams, asset-generator, modern-cli-expert │
 │ 5. rtk: 公式 Cursor hook が Shell を透過 rewrite（deny しない）              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -168,6 +169,7 @@ just install
 4. **段階的開示スキル (Progressive Disclosure)**:
    - `browser-agent`: 実 Google Chrome + Playwright。localhost capture（`temp`）と、`setup_profile` 後のダッシュボード確認（`work` / screenshot 必須）。無人 SSO 自動化は非対象。
    - `ascii-chat-diagrams`: チャット内 ASCII/Unicode 図（wireframe、比較表、棒グラフ、フロー）。`just sync-rules` で `~/.cursor/skills/ascii-chat-diagrams/` に配備。**Cursor のみ**（Claude Code 非対象）。
+   - `asset-generator`: LP / Web アプリ向けアイコン・ヒーロー画像の一括生成（2x2/3x3/4x4 grid split、fal.ai rembg、WebP pack）。SSOT: `configs/agents/skills/asset-generator/` → `just sync-rules` で `~/.cursor/skills/asset-generator/` に配備。初回のみ `pnpm install` が必要（`just setup-fal` で `FAL_KEY` 設定）。
    - `modern-cli-expert`: `ast-grep`, `sd`, `jaq`, `xh`, `procs`, `difftastic`, `hyperfine` の実践的活用レシピ。
 5. **公式 rtk Cursor hook**:
    - `rtk init -g --agent cursor --hook-only --auto-patch` が `~/.cursor/hooks.json` に `rtk hook cursor` を入れる。fail-open。このリポジトリは hooks.json を上書きしない。

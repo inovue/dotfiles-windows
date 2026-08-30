@@ -1,0 +1,6 @@
+[
+  { "id": "smoke_a", "prompt": "Smoke test cell A: blue circle icon" },
+  { "id": "smoke_b", "prompt": "Smoke test cell B: green square icon" },
+  { "id": "smoke_c", "prompt": "Smoke test cell C: amber shield icon" },
+  { "id": "smoke_d", "prompt": "Smoke test cell D: purple chart icon" }
+]

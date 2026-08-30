@@ -154,6 +154,7 @@ $configFiles = @(
     @{ Name = "Master modern-cli Skill";                     Path = Join-Path $rootDir "configs\agents\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Master browser-agent Skill";                  Path = Join-Path $rootDir "configs\agents\skills\browser-agent\SKILL.md" }
     @{ Name = "Master ascii-chat-diagrams Skill";         Path = Join-Path $rootDir "configs\agents\skills\ascii-chat-diagrams\SKILL.md" }
+    @{ Name = "Master asset-generator Skill";             Path = Join-Path $rootDir "configs\agents\skills\asset-generator\SKILL.md" }
     @{ Name = "Master RTK config";                           Path = Join-Path $rootDir "configs\rtk\config.toml" }
     @{ Name = "Master Cursor MCP template";                  Path = Join-Path $rootDir "configs\agents\cursor\mcp_config.json" }
     @{ Name = "Master pins.json";                            Path = Join-Path $rootDir "configs\pins.json" }
@@ -163,6 +164,7 @@ $configFiles = @(
     @{ Name = "Cursor Global Skill (modern-cli)";            Path = Join-Path $env:USERPROFILE ".cursor\skills\modern-cli-expert\SKILL.md" }
     @{ Name = "Cursor Global Skill (browser-agent)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\browser-agent\SKILL.md" }
     @{ Name = "Cursor Global Skill (ascii-chat-diagrams)";         Path = Join-Path $env:USERPROFILE ".cursor\skills\ascii-chat-diagrams\SKILL.md" }
+    @{ Name = "Cursor Global Skill (asset-generator)";             Path = Join-Path $env:USERPROFILE ".cursor\skills\asset-generator\SKILL.md" }
     @{ Name = "RTK AppData config";                          Path = Join-Path $env:APPDATA "rtk\config.toml" }
     @{ Name = "Nushell config.nu";                           Path = Join-Path $env:APPDATA "nushell\config.nu" }
     @{ Name = "Nushell env.nu";                              Path = Join-Path $env:APPDATA "nushell\env.nu" }
@@ -465,6 +467,74 @@ try {
     Assert-Test -Name "Modern CLI search completed successfully ($($rgMatches.Count) matches)" -Condition ($rgMatches.Count -eq 50)
 } finally {
     Remove-Item -Path $benchDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# --- asset-generator skill smoke (SSOT CLI, no API) ---
+Write-Host "`n--- asset-generator skill smoke ---" -ForegroundColor Cyan
+$agDir = Join-Path $rootDir "configs\agents\skills\asset-generator"
+$agRun = Join-Path $agDir "run.ps1"
+$agCells = Join-Path $agDir "tests\fixtures\cells-smoke.json"
+$agTsx = Join-Path $agDir "node_modules\tsx\dist\cli.mjs"
+$agEntry = Join-Path $agDir "src\cli.ts"
+
+Assert-Test -Name "asset-generator run.ps1 exists" -Condition (Test-Path $agRun) -Details $agRun
+Assert-Test -Name "asset-generator cells-smoke.json exists" -Condition (Test-Path $agCells) -Details $agCells
+
+if (-not (Test-Path $agTsx)) {
+    Write-Host "  -> Installing asset-generator deps for smoke test..." -ForegroundColor Gray
+    Push-Location $agDir
+    & pnpm install 2>&1 | Out-Null
+    Pop-Location
+}
+
+if (Test-Path $agTsx) {
+    Push-Location $agDir
+    $agOut = & node $agTsx $agEntry --print-prompt -g 4 "verify smoke" --items tests/fixtures/cells-smoke.json 2>&1 | Out-String
+    $agExit = $LASTEXITCODE
+    Pop-Location
+    Assert-Test -Name "asset-generator --print-prompt exits 0" -Condition ($agExit -eq 0) -Details "exit=$agExit"
+    Assert-Test -Name "asset-generator dry-run emits CONFIRM TOKEN" -Condition ($agOut -match 'CONFIRM TOKEN') -Details $agOut
+    Assert-Test -Name "asset-generator dry-run emits GRILL_ACK" -Condition ($agOut -match 'GRILL_ACK') -Details $agOut
+    Assert-Test -Name "asset-generator dry-run lists grid cells" -Condition ($agOut -match '\[Row 1, Col 1\]') -Details $agOut
+
+    Push-Location $agDir
+    $agRunOut = & pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $agRun --print-prompt -g 4 "run.ps1 smoke" --items tests/fixtures/cells-smoke.json --out tests/fixtures/out/smoke-token 2>&1 | Out-String
+    $agRunExit = $LASTEXITCODE
+    Pop-Location
+    Assert-Test -Name "asset-generator run.ps1 --out exits 0" -Condition ($agRunExit -eq 0) -Details "exit=$agRunExit"
+    Assert-Test -Name "asset-generator run.ps1 --out emits CONFIRM TOKEN" -Condition ($agRunOut -match 'CONFIRM TOKEN') -Details $agRunOut
+
+    Push-Location $agDir
+    $agRunO = & pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $agRun --help 2>&1 | Out-String
+    $agRunOExit = $LASTEXITCODE
+    Pop-Location
+    Assert-Test -Name "asset-generator run.ps1 --help exits 0" -Condition ($agRunOExit -eq 0) -Details "exit=$agRunOExit"
+    Assert-Test -Name "asset-generator run.ps1 --help lists --out" -Condition ($agRunO -match '--out') -Details $agRunO
+
+    Push-Location $agDir
+    $agRunShortO = & pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $agRun --print-prompt -g 4 "run.ps1 -o smoke" --items tests/fixtures/cells-smoke.json -o tests/fixtures/out/smoke-o 2>&1 | Out-String
+    $agRunShortOExit = $LASTEXITCODE
+    Pop-Location
+    Assert-Test -Name "asset-generator run.ps1 -o exits 0" -Condition ($agRunShortOExit -eq 0) -Details "exit=$agRunShortOExit"
+    Assert-Test -Name "asset-generator run.ps1 -o emits CONFIRM TOKEN" -Condition ($agRunShortO -match 'CONFIRM TOKEN') -Details $agRunShortO
+
+    Push-Location $agDir
+    & pnpm test *> $null
+    $agTestExit = $LASTEXITCODE
+    Pop-Location
+    Assert-Test -Name "asset-generator pnpm test passes" -Condition ($agTestExit -eq 0) -Details "exit=$agTestExit"
+
+    $agInspectDir = Join-Path $agDir "tests\fixtures\out\inspect-good"
+    if (Test-Path $agInspectDir) {
+        Push-Location $agDir
+        $agInspectOut = & node $agTsx $agEntry --inspect $agInspectDir 2>&1 | Out-String
+        $agInspectExit = $LASTEXITCODE
+        Pop-Location
+        Assert-Test -Name "asset-generator --inspect exits 0 on good fixture" -Condition ($agInspectExit -eq 0) -Details "exit=$agInspectExit"
+        Assert-Test -Name "asset-generator --inspect reports quality score" -Condition ($agInspectOut -match 'Quality Score: \d+/100') -Details $agInspectOut
+    }
+} else {
+    Assert-Test -Name "asset-generator tsx installed" -Condition $false -Details "Run: pnpm install in $agDir"
 }
 
 # --- Final Summary ---

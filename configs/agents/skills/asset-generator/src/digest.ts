@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { CellSpec, GeneratorOptions } from './types.js';
+import { DEFAULT_MODEL_QUALITY } from './types.js';
 
 /** Stable 12-char token binding theme + cells + key render flags. */
 export function computeBatchDigest(
@@ -16,7 +17,7 @@ export function computeBatchDigest(
     aspect: options.aspect ?? '1:1',
     composition: options.composition ?? null,
     preset: options.preset ?? null,
-    mq: options.modelQuality ?? 'low',
+    mq: options.modelQuality ?? DEFAULT_MODEL_QUALITY,
     tight: !!options.tight,
     rembg: options.rembg !== false,
     refs: (options.refImages ?? []).map((p) => p.replace(/\\/g, '/')),

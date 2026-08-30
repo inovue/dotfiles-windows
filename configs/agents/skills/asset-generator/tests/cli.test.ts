@@ -7,9 +7,14 @@ import { parseArgs } from '../src/cli.js';
 import { buildPrompt } from '../src/prompt.js';
 
 describe('cli parser (with reference images and model quality)', () => {
-  test('defaults modelQuality to low', () => {
+  test('defaults modelQuality to medium (md)', () => {
     const opts = parseArgs(['-g', '4', 'Mascot Icons']);
-    assert.strictEqual(opts.modelQuality, 'low');
+    assert.strictEqual(opts.modelQuality, 'medium');
+  });
+
+  test('parses --mq md alias as medium', () => {
+    const opts = parseArgs(['-g', '4', 'Icons', '--mq', 'md']);
+    assert.strictEqual(opts.modelQuality, 'medium');
   });
 
   test('parses --mq and --model-quality flags', () => {

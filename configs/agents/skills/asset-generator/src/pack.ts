@@ -5,6 +5,7 @@ import { applyChromaKeyInPlace, getLargestOpaqueBBox } from './chroma.js';
 import { encodeCellImage, extensionForFormat, DEFAULT_ENCODING_QUALITY, JPEG_FLATTEN_BACKGROUND } from './format.js';
 import { validateCellAlphaCoverage, validateCellDimensions } from './validate.js';
 import type { AssetManifest, AssetManifestItem, CellSpec, GeneratorOptions, GridMeta } from './types.js';
+import { DEFAULT_MODEL_QUALITY } from './types.js';
 
 export const SEAM_CLEAR_HALF = 5;
 
@@ -393,7 +394,7 @@ export async function extractAndSaveAssets(
     themePrompt: options.prompt,
     itemsList,
     cellSpecs,
-    modelQuality: options.modelQuality || 'low',
+    modelQuality: options.modelQuality || DEFAULT_MODEL_QUALITY,
     preset: options.preset,
     refImages: options.refImages,
     refMode: options.refMode,

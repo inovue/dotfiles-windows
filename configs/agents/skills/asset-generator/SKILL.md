@@ -1,7 +1,7 @@
 ---
 name: asset-generator
 description: LP/web batch asset generator with grid-splitting, quality gates, and Windows-safe cells.json workflow. Square icons (2x2/3x3) and horizontal wordmarks (-g 4x2 --preset wordmark).
-version: 2.0.3
+version: 2.0.4
 license: MIT
 allowed-tools:
   - Bash(powershell -File <skill-dir>/run.ps1 *)
@@ -126,6 +126,8 @@ Set-Location $skill
 | `--out <path>` | **Required for stable tokens** — output dir (grid) or file (single hero). Use on dry-run **and** generate. |
 | `-f png` / `-f jpeg` | Cell output: `webp` (default), `png`, `jpeg`/`jpg`. Token binds format+quality+`--out`. JPEG blocked for logo/wordmark unless `--allow-jpeg-logos`. |
 | `--inspect <dir>` | Validate existing batch (score /100); no API call |
+| `--mq md` / `--mq medium` | gpt-image-2 render quality (default **md**). Aliases: `low`, `high`. Logo/wordmark preset forces `high`. |
+| `-k` / `--2k` | 2K sheet (2048px). Default is **1K** (`square_hd` / 1024px presets). |
 | `--preset wordmark` | `--mq high --tight` + landscape wordmark prompt hints; use with `-g 4x2` |
 | `--allow-weak-seams` | Override magenta seam quality gate (risky) |
 | `--tight` | Chroma-key + largest-subject crop |

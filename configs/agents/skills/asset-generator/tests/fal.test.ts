@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   buildFalImageInput,
+  aspectToFalSize,
   GPT_IMAGE_EDIT_MODEL,
   GPT_IMAGE_GENERATE_MODEL,
 } from '../src/fal.js';
@@ -19,6 +20,23 @@ function writeMiniPng(dir: string, name: string): string {
 }
 
 describe('buildFalImageInput', () => {
+  test('defaults → medium quality and 1K square_hd', () => {
+    const { input, tier } = buildFalImageInput('test prompt', {});
+    assert.strictEqual(tier, '1k');
+    assert.strictEqual(input.quality, 'medium');
+    assert.strictEqual(input.image_size, 'square_hd');
+  });
+
+  test('2K tier → 2048 square for 1:1', () => {
+    const { input, tier } = buildFalImageInput('test prompt', { is2k: true });
+    assert.strictEqual(tier, '2k');
+    assert.deepStrictEqual(input.image_size, { width: 2048, height: 2048 });
+  });
+
+  test('aspectToFalSize maps 16:9 at 1K to landscape preset', () => {
+    assert.strictEqual(aspectToFalSize('16:9', '1k'), 'landscape_16_9');
+  });
+
   test('no refs → generate model, no image_urls', () => {
     const { modelId, input, refCount } = buildFalImageInput('test prompt', {});
     assert.strictEqual(modelId, GPT_IMAGE_GENERATE_MODEL);

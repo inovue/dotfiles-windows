@@ -15,6 +15,25 @@ export interface CellSpec {
 
 export type ModelQuality = 'low' | 'medium' | 'high';
 
+/** gpt-image-2 API render tier (1K ≈ 1024px long edge; 2K via -k). */
+export type ResolutionTier = '1k' | '2k';
+
+export const DEFAULT_MODEL_QUALITY: ModelQuality = 'medium';
+export const DEFAULT_RESOLUTION_TIER: ResolutionTier = '1k';
+
+/** CLI alias: md → medium (sent to fal as `medium`). */
+export function normalizeModelQuality(raw?: string): ModelQuality | undefined {
+  if (!raw) return undefined;
+  const q = raw.toLowerCase();
+  if (q === 'md') return 'medium';
+  if (q === 'low' || q === 'medium' || q === 'high') return q;
+  return undefined;
+}
+
+export function resolveResolutionTier(is2k?: boolean): ResolutionTier {
+  return is2k ? '2k' : DEFAULT_RESOLUTION_TIER;
+}
+
 export interface StylePreset {
   id: string;
   name: string;
@@ -123,7 +142,7 @@ export interface GeneratorOptions {
   style?: string;
   aspect?: AspectRatio;
   composition?: CompositionLayout;
-  modelQuality?: ModelQuality; // 'low' | 'medium' | 'high' (default: 'low')
+  modelQuality?: ModelQuality; // low | medium/md (default) | high
   outDir?: string;
   /** Resolved -o directory included in confirm token when user passes -o */
   outDirResolved?: string;

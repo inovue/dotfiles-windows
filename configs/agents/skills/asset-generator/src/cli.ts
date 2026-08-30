@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { STYLE_PRESETS } from './presets.js';
-import type { AspectRatio, CompositionLayout, GeneratorOptions, ModelQuality, ReferenceMode } from './types.js';
+import type { AspectRatio, CompositionLayout, GeneratorOptions, ReferenceMode } from './types.js';
+import { DEFAULT_MODEL_QUALITY, normalizeModelQuality } from './types.js';
 import { runAssetGenerator } from './engine.js';
 import { ItemsParseError } from './items.js';
 import { inspectBatch, formatInspectReport } from './inspect.js';
@@ -38,11 +39,11 @@ function printHelp(): void {
   -p, --pad <0-50>            Transparent padding % inside square canvas (default: 10)
   -r, --ref <path...>         Reference image(s) for character/style anchoring (max 3)
   -m, --ref-mode <mode>       Reference interpretation mode: character | style | auto (default: auto)
-  --mq, --model-quality <q>   gpt-image-2 render quality: low (default) | medium | high
+  --mq, --model-quality <q>   gpt-image-2 render quality: md/medium (default) | low | high
   -o, --out <path>            Output directory or specific image file path
   -f, --format <fmt>          Cell output format: webp (default) | png | jpeg | jpg
   -q, --quality <1-100>       Encoding quality for webp/png/jpeg (default: 80)
-  -k, --2k                    Generate at 2048x2048 high resolution
+  -k, --2k                    Generate at 2K (2048px; default is 1K / square_hd)
   -j, --json                  Output machine-readable manifest JSON to stdout
   --size <px>                 Target output square size (e.g. 512, 256)
   --items <@file|json>        Cell specs: cells.json file (required for grids)
@@ -76,7 +77,7 @@ export function parseArgs(args: string[]): GeneratorOptions {
     prompt: '',
     rembg: true,
     refImages: [],
-    modelQuality: 'low', // Default: 'low'
+    modelQuality: DEFAULT_MODEL_QUALITY,
   };
 
   const positional: string[] = [];
@@ -196,9 +197,9 @@ export function parseArgs(args: string[]): GeneratorOptions {
       continue;
     }
     if (arg === '--mq' || arg === '--model-quality') {
-      const q = args[++i]?.toLowerCase() as ModelQuality;
-      if (q === 'high' || q === 'medium' || q === 'low') {
-        options.modelQuality = q;
+      const parsed = normalizeModelQuality(args[++i]);
+      if (parsed) {
+        options.modelQuality = parsed;
       }
       continue;
     }

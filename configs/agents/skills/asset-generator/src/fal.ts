@@ -3,7 +3,12 @@ import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import type { AspectRatio, GeneratorOptions } from './types.js';
+import type { AspectRatio, GeneratorOptions, ResolutionTier } from './types.js';
+import {
+  DEFAULT_MODEL_QUALITY,
+  DEFAULT_RESOLUTION_TIER,
+  resolveResolutionTier,
+} from './types.js';
 
 export const GPT_IMAGE_GENERATE_MODEL = 'openai/gpt-image-2';
 export const GPT_IMAGE_EDIT_MODEL = 'openai/gpt-image-2/edit';
@@ -59,8 +64,12 @@ export async function withRetry<T>(
   throw new Error(`${operationName} failed`);
 }
 
-export function aspectToFalSize(aspect?: AspectRatio, is2k?: boolean): any {
-  if (is2k) {
+/** Map aspect + resolution tier to fal.ai image_size (1K presets or 2K custom). */
+export function aspectToFalSize(
+  aspect?: AspectRatio,
+  tier: ResolutionTier = DEFAULT_RESOLUTION_TIER,
+): string | { width: number; height: number } {
+  if (tier === '2k') {
     if (!aspect || aspect === '1:1') {
       return { width: 2048, height: 2048 };
     }
@@ -72,7 +81,7 @@ export function aspectToFalSize(aspect?: AspectRatio, is2k?: boolean): any {
     case '3:4': return 'portrait_4_3';
     case '1:1':
     default:
-      return is2k ? { width: 2048, height: 2048 } : 'square_hd';
+      return tier === '2k' ? { width: 2048, height: 2048 } : 'square_hd';
   }
 }
 
@@ -96,13 +105,14 @@ function fileToDataUrl(filePath: string): string {
 export function buildFalImageInput(
   prompt: string,
   options: GeneratorOptions,
-): { modelId: string; input: Record<string, unknown>; refCount: number } {
-  const imageSize = aspectToFalSize(options.aspect, options.is2k);
+): { modelId: string; input: Record<string, unknown>; refCount: number; tier: ResolutionTier } {
+  const tier = resolveResolutionTier(options.is2k);
+  const imageSize = aspectToFalSize(options.aspect, tier);
   const refImages = (options.refImages || []).filter((p) => fs.existsSync(p)).slice(0, MAX_REFERENCE_IMAGES);
   const hasRefs = refImages.length > 0;
 
   const modelId = hasRefs ? GPT_IMAGE_EDIT_MODEL : GPT_IMAGE_GENERATE_MODEL;
-  const quality = options.modelQuality || 'low';
+  const quality = options.modelQuality || DEFAULT_MODEL_QUALITY;
 
   const input: Record<string, unknown> = {
     prompt,
@@ -119,7 +129,7 @@ export function buildFalImageInput(
     input.image_url = urls[0];
   }
 
-  return { modelId, input, refCount: refImages.length };
+  return { modelId, input, refCount: refImages.length, tier };
 }
 
 export async function generateFalImage(
@@ -130,14 +140,14 @@ export async function generateFalImage(
   const key = requireFalKey();
   fal.config({ credentials: key });
 
-  const { modelId, input, refCount } = buildFalImageInput(prompt, options);
-  const quality = (input.quality as string) || 'low';
+  const { modelId, input, refCount, tier } = buildFalImageInput(prompt, options);
+  const quality = (input.quality as string) || DEFAULT_MODEL_QUALITY;
 
   if (refCount > 0) {
     console.log(`\x1b[36m📎 Attached ${refCount} reference image(s) (Mode: ${options.refMode || 'auto'})\x1b[0m`);
   }
 
-  console.log(`\x1b[36m⚡ Calling fal.ai (${modelId}, quality: ${quality})...\x1b[0m`);
+  console.log(`\x1b[36m⚡ Calling fal.ai (${modelId}, ${tier.toUpperCase()}, quality: ${quality})...\x1b[0m`);
 
   await withRetry(async () => {
     const result = await fal.subscribe(modelId, {

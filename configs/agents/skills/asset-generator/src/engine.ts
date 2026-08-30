@@ -4,6 +4,7 @@ import type { AssetManifest, GeneratorOptions } from './types.js';
 import { buildPrompt } from './prompt.js';
 import { ensureDirSync, generateBatchId, parseOutPath, resolveDigestOutDir } from './paths.js';
 import { generateFalImage } from './fal.js';
+import { DEFAULT_MODEL_QUALITY } from './types.js';
 import { detectGridSeams } from './grid-detect.js';
 import { removeBackground } from './rembg.js';
 import { clearSeamCorridors, extractAndSaveAssets } from './pack.js';
@@ -82,7 +83,7 @@ export async function runAssetGenerator(options: GeneratorOptions): Promise<Asse
     else process.stderr.write(`[WARN] ${msg}\n`);
   };
 
-  if (options.tight && (options.modelQuality || 'low') === 'low' && options.preset !== 'logo' && options.preset !== 'wordmark') {
+  if (options.tight && (options.modelQuality || DEFAULT_MODEL_QUALITY) === 'low' && options.preset !== 'logo' && options.preset !== 'wordmark') {
     warn('--tight with modelQuality=low — use --preset logo or --mq high for logos.');
   }
 
@@ -96,7 +97,8 @@ export async function runAssetGenerator(options: GeneratorOptions): Promise<Asse
   if (options.style) log(`✨ Style: ${options.style}`);
   if (options.preset) log(`📋 Preset: ${options.preset}`);
   log(`📁 Output format: ${options.format} (quality ${options.quality})`);
-  if (options.is2k) log(`🔍 Resolution: 2048x2048 (2K Mode)`);
+  if (options.is2k) log(`🔍 Resolution: 2K (2048×2048)`);
+  else log(`🔍 gpt-image-2: 1K tier (1024px presets)`);
   if (gridInfo.total > 1) {
     const pad = options.pad ?? 10;
     if (options.tight) log(`📐 Framing: Tight chroma-key trim`);

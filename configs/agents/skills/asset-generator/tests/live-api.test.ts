@@ -91,6 +91,31 @@ describe('live fal.ai grid pipeline (optional)', { skip: !LIVE }, () => {
     console.log('[LOGO LIVE] Manual: 128px width — FINANCIAL/FANTASY full text, no CIAL fragments');
   });
 
+  test('2x2 with single ref: gpt-image-2/edit (image_urls, no 422)', { timeout: 300_000, skip: !shouldRun('ref-edit') }, async () => {
+    requireFalKey();
+
+    const refPath = path.resolve(process.cwd(), 'tests/fixtures/ref-mini.png');
+    const { inspection } = await runLiveBatch({
+      countOrGrid: '4',
+      prompt: 'SaaS Feature Icons Style Anchor',
+      style: 'flat',
+      preset: 'icon',
+      itemsRaw: 'tests/fixtures/cells-live.json',
+      refImages: [refPath],
+      refMode: 'style',
+      format: 'webp',
+      quality: 80,
+      outDir: path.resolve(process.cwd(), 'tests/fixtures/out/live-ref-edit'),
+    });
+
+    assert.strictEqual(inspection.manifest?.items.length, 4);
+    assert.strictEqual(inspection.manifest?.refImages?.length, 1);
+    assert.ok(inspection.ok, inspection.findings.filter((f) => f.level === 'error').map((f) => f.message).join('; '));
+    assert.ok(inspection.breakdown.technicalScore >= MIN_TECHNICAL);
+    assert.ok(inspection.breakdown.total >= MIN_TOTAL);
+    console.log(`[REF EDIT LIVE] technical=${inspection.breakdown.technicalScore}/90 total=${inspection.breakdown.total}/100`);
+  });
+
   test('2x2 logos: png output format smoke', { timeout: 300_000, skip: !shouldRun('png-logos') }, async () => {
     requireFalKey();
 
